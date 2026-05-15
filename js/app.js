@@ -476,7 +476,7 @@ function setupSectionCarousels() {
   }
 
   const cleanupFns = [];
-  const desktopQuery = window.matchMedia("(min-width: 1024px)");
+  const navigationQuery = window.matchMedia("(min-width: 720px)");
 
   shells.forEach((shell) => {
     const viewport = shell.querySelector("[data-carousel-viewport]");
@@ -489,7 +489,7 @@ function setupSectionCarousels() {
 
     const updateButtons = () => {
       const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-      const canScroll = desktopQuery.matches && maxScrollLeft > 6;
+      const canScroll = navigationQuery.matches && maxScrollLeft > 6;
       const atStart = scroller.scrollLeft <= 6;
       const atEnd = scroller.scrollLeft >= maxScrollLeft - 6;
 
@@ -517,13 +517,17 @@ function setupSectionCarousels() {
     if ("ResizeObserver" in window) {
       resizeObserver = new ResizeObserver(() => updateButtons());
       resizeObserver.observe(scroller);
+      if (rail !== scroller) {
+        resizeObserver.observe(rail);
+      }
     }
 
-    if (typeof desktopQuery.addEventListener === "function") {
-      desktopQuery.addEventListener("change", updateButtons);
+    if (typeof navigationQuery.addEventListener === "function") {
+      navigationQuery.addEventListener("change", updateButtons);
     }
 
     window.requestAnimationFrame(updateButtons);
+    window.setTimeout(updateButtons, 120);
 
     cleanupFns.push(() => {
       prevButton.removeEventListener("click", handlePrev);
@@ -531,8 +535,8 @@ function setupSectionCarousels() {
       scroller.removeEventListener("scroll", updateButtons);
       window.removeEventListener("resize", updateButtons);
       resizeObserver?.disconnect();
-      if (typeof desktopQuery.removeEventListener === "function") {
-        desktopQuery.removeEventListener("change", updateButtons);
+      if (typeof navigationQuery.removeEventListener === "function") {
+        navigationQuery.removeEventListener("change", updateButtons);
       }
     });
   });
