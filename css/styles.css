@@ -894,9 +894,9 @@ body.theme-dark .chip.is-active {
 }
 
 body.theme-dark .product-badge {
-  background: rgba(245, 245, 240, 0.1);
+  background: rgba(145, 145, 145, 0.5);
   color: #f5f5f0;
-  border-color: rgba(245, 245, 240, 0.12);
+  border-color: rgba(245, 245, 240, 0.4);
 }
 
 body.theme-dark .product-badge--sale {
@@ -907,9 +907,9 @@ body.theme-dark .product-badge--sale {
 
 body.theme-dark .product-badge--new,
 body.theme-dark .product-badge--warning {
-  background: rgba(245, 245, 240, 0.08);
+  background: rgba(145, 145, 145, 0.5);
   color: #f5f5f0;
-  border-color: rgba(245, 245, 240, 0.12);
+  border-color: rgba(245, 245, 240, 0.4);
 }
 
 .favorite-button {
