@@ -511,7 +511,10 @@ a {
 .product-modal,
 .filter-sheet {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  border-left: 0;
+  border-right: 0;
   box-shadow: var(--shadow-card);
 }
 
@@ -799,18 +802,6 @@ body.theme-dark .chip.is-active {
   background: color-mix(in srgb, var(--color-surface-strong) 92%, transparent);
   box-shadow: 0 8px 22px rgba(17, 17, 17, 0.035);
   border-color: color-mix(in srgb, var(--color-border) 74%, var(--color-premium-gold) 26%);
-}
-
-.product-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 14px;
-  right: 14px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--color-premium-gold-border), transparent 78%);
-  pointer-events: none;
-  z-index: 1;
 }
 
 .product-card--compact {
