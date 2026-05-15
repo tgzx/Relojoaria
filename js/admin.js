@@ -1716,7 +1716,12 @@ function openProductEditor(productId = null) {
 
 function renderProductEditor() {
   const draft = adminState.editingProduct || createEmptyProductDraft();
-  const root = qs("#admin-modal-root");
+  let root = qs("#admin-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-modal-root";
+    document.body.appendChild(root);
+  }
   const currentImage = getPrimaryImage(draft);
 
   root.innerHTML = `

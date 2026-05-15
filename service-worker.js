@@ -1,5 +1,5 @@
-const STATIC_CACHE = "vitrinezap-static-v3";
-const HTML_CACHE = "vitrinezap-html-v3";
+const STATIC_CACHE = "vitrinezap-static-v4";
+const HTML_CACHE = "vitrinezap-html-v4";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [
@@ -57,6 +57,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.pathname.endsWith("/css/styles.css") || url.pathname.endsWith("css/styles.css")) {
+    event.respondWith(networkFirstStatic(request));
+    return;
+  }
+
   if (request.mode === "navigate") {
     event.respondWith(networkFirstHtml(request));
     return;
@@ -69,6 +74,19 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(cacheFirstAsset(request));
 });
+
+async function networkFirstStatic(request) {
+  const cache = await caches.open(STATIC_CACHE);
+
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    return cached || new Response("Offline", { status: 503, statusText: "Offline" });
+  }
+}
 
 async function networkFirstHtml(request) {
   const cache = await caches.open(HTML_CACHE);

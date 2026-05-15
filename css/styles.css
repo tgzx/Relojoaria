@@ -106,9 +106,9 @@ a {
 .brand-logo-shell {
   width: 60px;
   height: 60px;
-  border-radius: 20px;
+  border-radius: 0;
   background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(49, 56, 77, 0.92));
-  padding: 10px;
+  overflow: hidden;
   box-shadow: var(--shadow-card);
   flex-shrink: 0;
 }
@@ -116,7 +116,9 @@ a {
 .brand-logo {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
 }
 
 .brand-copy {
@@ -1138,9 +1140,17 @@ a {
   width: 92px;
   height: 92px;
   margin: 0 auto;
-  border-radius: 28px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.1);
-  padding: 18px;
+  overflow: hidden;
+}
+
+.intro-logo-shell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
 }
 
 .intro-title {

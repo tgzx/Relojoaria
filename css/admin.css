@@ -490,7 +490,7 @@ th {
 }
 
 .inline-grid--2 {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .editor-backdrop {
@@ -834,6 +834,10 @@ th {
   .manager-grid,
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-grid--2 {
+    grid-template-columns: 1fr 1fr;
   }
 
   .toolbar-filters {
