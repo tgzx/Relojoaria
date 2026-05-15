@@ -1,0 +1,23 @@
+{
+  "name": "VitrineZap PWA",
+  "short_name": "VitrineZap",
+  "description": "Vitrine digital instalável integrada ao WhatsApp para pequenos negócios.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6efe5",
+  "theme_color": "#111827",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "./assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111827" />
+    <title>Offline | VitrineZap</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe6;
+        --surface: rgba(255, 255, 255, 0.9);
+        --text: #1f2937;
+        --muted: #6b7280;
+        --accent: #e56b2f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(229, 107, 47, 0.18), transparent 32%),
+          linear-gradient(180deg, #fffaf5 0%, var(--bg) 100%);
+        font-family: "Outfit", system-ui, sans-serif;
+        color: var(--text);
+      }
+
+      main {
+        width: min(100%, 460px);
+        padding: 32px;
+        border-radius: 28px;
+        background: var(--surface);
+        border: 1px solid rgba(31, 41, 55, 0.08);
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        font-family: "Fraunces", serif;
+      }
+
+      p {
+        margin: 0 0 14px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sem conexão agora</h1>
+      <p>
+        A vitrine precisa de internet para buscar os dados mais recentes. Se você já abriu o site
+        antes, volte para a página inicial para tentar carregar o cache local.
+      </p>
+      <p>
+        Assim que a conexão voltar, <a href="./index.html">recarregue a vitrine</a> para atualizar
+        os produtos.
+      </p>
+    </main>
+  </body>
+</html>

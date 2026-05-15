@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Vitrine digital PWA integrada ao WhatsApp para lojas locais e vendedores."
+    />
+    <meta name="theme-color" content="#111827" />
+    <title>VitrineZap PWA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body>
+    <div id="intro-overlay" class="intro-overlay is-hidden" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="header-shell container">
+        <a href="#top" class="brand-block" aria-label="Voltar ao topo">
+          <div class="brand-logo-shell">
+            <img id="store-logo" class="brand-logo" alt="Logo da loja" />
+          </div>
+          <div class="brand-copy">
+            <span class="brand-eyebrow">Vitrine digital</span>
+            <strong id="store-name">VitrineZap</strong>
+            <small id="store-slogan">Carregando vitrine...</small>
+          </div>
+        </a>
+
+        <div class="header-actions">
+          <div id="store-status" class="status-pill status-pill--muted">Atendimento</div>
+          <button id="whatsapp-cta" class="btn btn-primary" type="button">
+            Falar no WhatsApp
+          </button>
+          <button id="install-app-button" class="btn btn-secondary is-hidden" type="button">
+            Instalar app
+          </button>
+          <button id="push-button" class="btn btn-ghost is-hidden" type="button">
+            Receber novidades
+          </button>
+        </div>
+      </div>
+
+      <div class="header-search container">
+        <label class="search-field" for="global-search">
+          <span class="sr-only">Buscar produtos</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M10.5 4a6.5 6.5 0 1 0 4.04 11.6l4.43 4.42 1.41-1.41-4.42-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"
+            />
+          </svg>
+          <input
+            id="global-search"
+            type="search"
+            inputmode="search"
+            autocomplete="off"
+            placeholder="Buscar por nome, marca, categoria ou descrição"
+          />
+        </label>
+
+        <button id="open-filters-button" class="btn btn-filter" type="button">
+          Filtros
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section id="hero-section" class="hero-section container">
+        <div class="hero-skeleton">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-copy"></div>
+          <div class="skeleton skeleton-copy short"></div>
+        </div>
+      </section>
+
+      <nav id="section-nav" class="section-nav">
+        <div id="section-nav-track" class="section-nav-track container"></div>
+      </nav>
+
+      <div id="offline-banner" class="offline-banner is-hidden" role="status">
+        Você está offline. Mostrando os últimos dados disponíveis no dispositivo.
+      </div>
+
+      <section id="favorites-section" class="container page-section is-hidden" data-section-anchor="favorites">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">Seus salvos</span>
+            <h2>Favoritos</h2>
+          </div>
+          <button id="clear-favorites-button" class="text-button" type="button">
+            Limpar favoritos
+          </button>
+        </div>
+        <div id="favorites-grid" class="products-grid"></div>
+      </section>
+
+      <section id="dynamic-sections" class="dynamic-sections"></section>
+
+      <section id="all-products-section" class="container page-section" data-section-anchor="all-products">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">Catálogo completo</span>
+            <h2>Todos os produtos</h2>
+            <p id="products-summary" class="section-description">
+              Explore os produtos disponíveis nesta vitrine.
+            </p>
+          </div>
+          <button id="reset-filters-button" class="text-button is-hidden" type="button">
+            Limpar filtros
+          </button>
+        </div>
+
+        <div id="products-grid" class="products-grid products-grid--catalog">
+          <div class="product-skeleton-grid">
+            <article class="product-card-skeleton">
+              <div class="skeleton skeleton-thumb"></div>
+              <div class="skeleton skeleton-chip"></div>
+              <div class="skeleton skeleton-title"></div>
+              <div class="skeleton skeleton-copy"></div>
+            </article>
+            <article class="product-card-skeleton">
+              <div class="skeleton skeleton-thumb"></div>
+              <div class="skeleton skeleton-chip"></div>
+              <div class="skeleton skeleton-title"></div>
+              <div class="skeleton skeleton-copy"></div>
+            </article>
+            <article class="product-card-skeleton">
+              <div class="skeleton skeleton-thumb"></div>
+              <div class="skeleton skeleton-chip"></div>
+              <div class="skeleton skeleton-title"></div>
+              <div class="skeleton skeleton-copy"></div>
+            </article>
+          </div>
+        </div>
+
+        <div id="empty-products-state" class="empty-state is-hidden"></div>
+
+        <div class="load-more-shell">
+          <button id="load-more-button" class="btn btn-secondary is-hidden" type="button">
+            Carregar mais
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-shell">
+        <div>
+          <strong id="footer-store-name">VitrineZap</strong>
+          <p id="footer-store-description">
+            Seu catálogo digital rápido, instalável e integrado ao WhatsApp.
+          </p>
+        </div>
+        <div class="footer-actions">
+          <a id="footer-instagram" class="text-link is-hidden" target="_blank" rel="noreferrer">
+            Instagram
+          </a>
+          <a id="footer-whatsapp" class="text-link" target="_blank" rel="noreferrer">
+            Atendimento via WhatsApp
+          </a>
+        </div>
+      </div>
+    </footer>
+
+    <div id="product-modal" class="modal-shell is-hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <section
+        class="product-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-modal-title"
+      >
+        <button id="close-product-modal" class="modal-close" type="button" aria-label="Fechar detalhes">
+          ×
+        </button>
+        <div id="product-modal-content"></div>
+      </section>
+    </div>
+
+    <div id="filters-sheet" class="sheet-shell is-hidden" aria-hidden="true">
+      <div class="sheet-backdrop" data-close-sheet="true"></div>
+      <section class="filter-sheet" role="dialog" aria-modal="true" aria-labelledby="filters-title">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-header">
+          <div>
+            <span class="section-kicker">Refinar vitrine</span>
+            <h2 id="filters-title">Filtros e ordenação</h2>
+          </div>
+          <button id="close-filters-button" class="modal-close" type="button" aria-label="Fechar filtros">
+            ×
+          </button>
+        </div>
+
+        <form id="filters-form" class="filters-form">
+          <label class="field">
+            <span>Categoria</span>
+            <select name="categoryId" id="filter-category">
+              <option value="">Todas</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Marca</span>
+            <select name="brandId" id="filter-brand">
+              <option value="">Todas</option>
+            </select>
+          </label>
+
+          <label class="field field-switch">
+            <span>Somente promoções</span>
+            <input type="checkbox" name="promotionOnly" />
+          </label>
+
+          <label class="field field-switch">
+            <span>Somente novidades</span>
+            <input type="checkbox" name="newOnly" />
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Preço mínimo</span>
+              <input type="number" min="0" step="0.01" name="priceMin" placeholder="0,00" />
+            </label>
+
+            <label class="field">
+              <span>Preço máximo</span>
+              <input type="number" min="0" step="0.01" name="priceMax" placeholder="999,00" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Ordenar por</span>
+            <select name="sort">
+              <option value="featured">Em destaque</option>
+              <option value="recent">Mais recentes</option>
+              <option value="price_asc">Menor preço</option>
+              <option value="price_desc">Maior preço</option>
+              <option value="best_seller">Mais vendidos</option>
+              <option value="az">A-Z</option>
+            </select>
+          </label>
+
+          <div class="sheet-actions">
+            <button id="reset-sheet-filters-button" class="btn btn-ghost" type="button">
+              Limpar
+            </button>
+            <button class="btn btn-primary" type="submit">Aplicar filtros</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

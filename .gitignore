@@ -1,0 +1,23 @@
+# Logs
+*.log
+# Local app config / secrets
+js/config.js
+.env
+.env.*
+!.env.example
+*.local
+# Supabase local/CLI state
+supabase/.temp/
+supabase/.branches/
+supabase/functions/.env*
+supabase/edge-functions/.env*
+# Deploy/platform local folders
+.vercel/
+.netlify/
+# Secret files / credentials
+*.pem
+*.p12
+*.pfx
+*.key
+service-account*.json
+credentials*.json

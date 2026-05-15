@@ -1,0 +1,24 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="40" x2="580" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF3E8"/>
+      <stop offset="1" stop-color="#F4E8D8"/>
+    </linearGradient>
+    <linearGradient id="card" x1="180" y1="130" x2="454" y2="490" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F3EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="640" rx="56" fill="url(#bg)"/>
+  <circle cx="526" cy="122" r="68" fill="#E56B2F" fill-opacity="0.12"/>
+  <circle cx="98" cy="558" r="82" fill="#1F2937" fill-opacity="0.07"/>
+  <rect x="154" y="116" width="332" height="404" rx="44" fill="url(#card)" stroke="#E5DDD3" stroke-width="4"/>
+  <path d="M248 218C248 178.235 280.235 146 320 146C359.765 146 392 178.235 392 218V252H248V218Z" fill="#E56B2F" fill-opacity="0.16"/>
+  <path d="M216 252H424V350C424 415.17 371.17 468 306 468H334C268.83 468 216 415.17 216 350V252Z" fill="#111827" fill-opacity="0.06"/>
+  <rect x="238" y="294" width="164" height="24" rx="12" fill="#E56B2F" fill-opacity="0.2"/>
+  <rect x="238" y="340" width="122" height="18" rx="9" fill="#111827" fill-opacity="0.12"/>
+  <rect x="238" y="376" width="92" height="18" rx="9" fill="#111827" fill-opacity="0.08"/>
+  <text x="320" y="558" text-anchor="middle" fill="#6B7280" font-family="Outfit, Arial, sans-serif" font-size="28" font-weight="600">
+    Imagem do produto
+  </text>
+</svg>
