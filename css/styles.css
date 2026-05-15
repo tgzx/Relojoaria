@@ -1215,6 +1215,7 @@ a {
   z-index: 75;
   display: grid;
   justify-content: center;
+  pointer-events: none;
 }
 
 .install-prompt__card {
@@ -1223,8 +1224,50 @@ a {
   padding: 22px;
   border-radius: 28px;
   border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--shadow-soft);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-strong) 86%, var(--color-surface-tint) 14%),
+      color-mix(in srgb, var(--color-surface) 92%, var(--color-bg-bottom) 8%)
+    );
+  color: var(--color-text);
+  box-shadow:
+    0 24px 54px rgba(15, 23, 42, 0.24),
+    0 0 0 1px color-mix(in srgb, var(--color-border) 82%, transparent);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.install-prompt__card::before,
+.install-prompt__card::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.install-prompt__card::before {
+  width: 180px;
+  height: 180px;
+  right: -64px;
+  top: -88px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-secondary) 44%, transparent), transparent 68%);
+  opacity: 0.58;
+}
+
+.install-prompt__card::after {
+  width: 140px;
+  height: 140px;
+  left: -52px;
+  bottom: -68px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 72%);
+  opacity: 0.46;
+}
+
+.install-prompt__card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .install-prompt__card h2 {
@@ -1243,6 +1286,7 @@ a {
   position: absolute;
   top: 14px;
   right: 14px;
+  color: var(--color-text-soft);
 }
 
 .install-prompt__steps {
@@ -1258,6 +1302,15 @@ a {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
+}
+
+.install-prompt__actions .btn {
+  flex: 1 1 160px;
+}
+
+.install-prompt__actions .btn-ghost {
+  background: color-mix(in srgb, var(--color-muted-bg) 82%, transparent);
+  color: var(--color-text);
 }
 
 .intro-overlay {

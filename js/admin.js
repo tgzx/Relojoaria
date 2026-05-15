@@ -113,7 +113,9 @@ const adminState = {
     brandId: "",
     sectionId: ""
   },
-  isLoadingAdminData: false
+  isLoadingAdminData: false,
+  isSavingProduct: false,
+  productSaveMode: null
 };
 
 let globalDebugHandlersRegistered = false;
@@ -1727,6 +1729,9 @@ function openProductEditor(productId = null) {
 
 function renderProductEditor() {
   const draft = adminState.editingProduct || createEmptyProductDraft();
+  const isSavingProduct = adminState.isSavingProduct;
+  const isSavingDraft = isSavingProduct && adminState.productSaveMode === "draft";
+  const isPublishingProduct = isSavingProduct && adminState.productSaveMode === "publish";
   let root = qs("#admin-modal-root");
   if (!root) {
     root = document.createElement("div");
@@ -1737,13 +1742,13 @@ function renderProductEditor() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="editor-backdrop"></div>
-    <section class="editor-shell" role="dialog" aria-modal="true" aria-labelledby="product-editor-title">
+    <section class="editor-shell ${isSavingProduct ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isSavingProduct ? "true" : "false"}">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Cadastro em etapas</span>
           <h2 id="product-editor-title">${draft.id ? "Editar produto" : "Novo produto"}</h2>
         </div>
-        <button class="btn btn-ghost" type="button" id="close-editor-button">Fechar</button>
+        <button class="btn btn-ghost" type="button" id="close-editor-button" ${isSavingProduct ? "disabled" : ""}>Fechar</button>
       </header>
       <div class="editor-body">
         <div class="editor-progress">
@@ -1753,7 +1758,7 @@ function renderProductEditor() {
           ${[1, 2, 3, 4, 5]
             .map(
               (step) => `
-                <button class="${adminState.productEditorStep === step ? "is-active" : ""}" type="button" data-editor-step="${step}">
+                <button class="${adminState.productEditorStep === step ? "is-active" : ""}" type="button" data-editor-step="${step}" ${isSavingProduct ? "disabled" : ""}>
                   Etapa ${step}
                 </button>
               `
@@ -1861,7 +1866,7 @@ function renderProductEditor() {
             <div class="editor-step ${adminState.productEditorStep === 4 ? "is-active" : ""}" data-step="4">
               <label class="admin-field">
                 <span>Novas imagens</span>
-                <input type="file" id="product-images-input" multiple accept=".jpg,.jpeg,.png,.webp" />
+                <input type="file" id="product-images-input" multiple accept=".jpg,.jpeg,.png,.webp" ${isSavingProduct ? "disabled" : ""} />
               </label>
               ${
                 adminState.pendingProductFiles.length
@@ -1887,6 +1892,7 @@ function renderProductEditor() {
                                   class="btn btn-danger"
                                   type="button"
                                   data-remove-pending-image="${escapeHtml(getPendingProductFileKey(file))}"
+                                  ${isSavingProduct ? "disabled" : ""}
                                 >
                                   Remover da fila
                                 </button>
@@ -1912,8 +1918,8 @@ function renderProductEditor() {
                           </div>
                         </div>
                         <div class="list-item-footer">
-                          <button class="btn btn-secondary" type="button" data-primary-image="${escapeHtml(image.id)}">Definir principal</button>
-                          <button class="btn btn-danger" type="button" data-delete-image="${escapeHtml(image.id)}">Remover</button>
+                          <button class="btn btn-secondary" type="button" data-primary-image="${escapeHtml(image.id)}" ${isSavingProduct ? "disabled" : ""}>Definir principal</button>
+                          <button class="btn btn-danger" type="button" data-delete-image="${escapeHtml(image.id)}" ${isSavingProduct ? "disabled" : ""}>Remover</button>
                         </div>
                       </article>
                     `
@@ -1966,11 +1972,23 @@ function renderProductEditor() {
       </div>
       <footer class="editor-footer">
         <div class="editor-footer-actions">
-          <button class="btn btn-ghost" type="button" id="editor-cancel-button">Cancelar</button>
-          <button class="btn btn-secondary" type="button" id="editor-prev-button" ${adminState.productEditorStep === 1 ? "disabled" : ""}>Voltar</button>
-          <button class="btn btn-secondary" type="button" id="editor-next-button" ${adminState.productEditorStep === 5 ? "disabled" : ""}>Próximo</button>
-          <button class="btn btn-secondary" type="button" id="save-draft-product">Salvar rascunho</button>
-          <button class="btn btn-primary" type="button" id="save-publish-product">Salvar e publicar</button>
+          <button class="btn btn-ghost" type="button" id="editor-cancel-button" ${isSavingProduct ? "disabled" : ""}>Cancelar</button>
+          <button class="btn btn-secondary" type="button" id="editor-prev-button" ${adminState.productEditorStep === 1 || isSavingProduct ? "disabled" : ""}>Voltar</button>
+          <button class="btn btn-secondary" type="button" id="editor-next-button" ${adminState.productEditorStep === 5 || isSavingProduct ? "disabled" : ""}>Próximo</button>
+          <button class="btn btn-secondary ${isSavingDraft ? "is-loading" : ""}" type="button" id="save-draft-product" ${isSavingProduct ? "disabled" : ""}>
+            ${
+              isSavingDraft
+                ? `<span class="btn__content"><span class="btn-spinner" aria-hidden="true"></span><span>Salvando...</span></span>`
+                : "Salvar rascunho"
+            }
+          </button>
+          <button class="btn btn-primary ${isPublishingProduct ? "is-loading" : ""}" type="button" id="save-publish-product" ${isSavingProduct ? "disabled" : ""}>
+            ${
+              isPublishingProduct
+                ? `<span class="btn__content"><span class="btn-spinner" aria-hidden="true"></span><span>Publicando...</span></span>`
+                : "Salvar e publicar"
+            }
+          </button>
         </div>
       </footer>
     </section>
@@ -2107,18 +2125,23 @@ function persistEditorDraftFromDom() {
 }
 
 function changeProductEditorStep(delta) {
+  if (adminState.isSavingProduct) return;
   persistEditorDraftFromDom();
   adminState.productEditorStep = Math.max(1, Math.min(5, adminState.productEditorStep + delta));
   renderProductEditor();
 }
 
-function closeProductEditor() {
+function closeProductEditor(force = false) {
+  if (adminState.isSavingProduct && !force) return;
   adminState.editingProduct = null;
   adminState.pendingProductFiles = [];
+  adminState.isSavingProduct = false;
+  adminState.productSaveMode = null;
   qs("#admin-modal-root").innerHTML = "";
 }
 
 async function saveProduct(publish) {
+  if (adminState.isSavingProduct) return;
   persistEditorDraftFromDom();
   const draft = adminState.editingProduct;
   let savedProduct = null;
@@ -2148,6 +2171,10 @@ async function saveProduct(publish) {
     is_archived: false
   };
 
+  adminState.isSavingProduct = true;
+  adminState.productSaveMode = publish ? "publish" : "draft";
+  renderProductEditor();
+
   try {
     savedProduct = draft.id
       ? await adminUpdateProduct(draft.id, payload)
@@ -2175,7 +2202,7 @@ async function saveProduct(publish) {
     }).catch(() => {});
 
     showToast(publish ? "Produto salvo e publicado." : "Produto salvo como rascunho.", "success");
-    closeProductEditor();
+    closeProductEditor(true);
     await refreshAllData();
   } catch (error) {
     console.error(error);
@@ -2185,6 +2212,8 @@ async function saveProduct(publish) {
         ...savedProduct,
         images: adminState.editingProduct?.images || savedProduct.images || []
       };
+      adminState.isSavingProduct = false;
+      adminState.productSaveMode = null;
       renderProductEditor();
       showToast(
         error.message || "Produto salvo, mas houve um problema ao enviar ou vincular a imagem.",
@@ -2192,6 +2221,8 @@ async function saveProduct(publish) {
       );
       return;
     }
+    adminState.isSavingProduct = false;
+    adminState.productSaveMode = null;
     showToast(error.message || "Não foi possível salvar o produto.", "danger");
   }
 }
@@ -2254,13 +2285,11 @@ async function setPrimaryProductImage(imageId) {
 async function removeExistingProductImage(imageId) {
   const proceed = window.confirm("Remover esta imagem do produto?");
   if (!proceed) return;
-  const currentImages = adminState.editingProduct.images || [];
+  const currentImages = [...(adminState.editingProduct.images || [])];
   const removedImage = currentImages.find((image) => image.id === imageId);
-  await adminDeleteProductImage(imageId);
   let remainingImages = currentImages.filter((image) => image.id !== imageId);
 
   if (removedImage?.is_primary && remainingImages.length) {
-    await adminUpdateProductImage(remainingImages[0].id, { is_primary: true });
     remainingImages = remainingImages.map((image, index) => ({
       ...image,
       is_primary: index === 0
@@ -2268,8 +2297,22 @@ async function removeExistingProductImage(imageId) {
   }
 
   adminState.editingProduct.images = remainingImages;
-  showToast("Imagem removida.", "warning");
   renderProductEditor();
+
+  try {
+    await adminDeleteProductImage(imageId);
+
+    if (removedImage?.is_primary && remainingImages.length) {
+      await adminUpdateProductImage(remainingImages[0].id, { is_primary: true });
+    }
+
+    showToast("Imagem removida.", "warning");
+  } catch (error) {
+    console.error(error);
+    adminState.editingProduct.images = currentImages;
+    renderProductEditor();
+    showToast(error.message || "NÃ£o foi possÃ­vel remover a imagem.", "danger");
+  }
 }
 
 async function duplicateProduct(productId) {
