@@ -33,6 +33,11 @@ import {
   toggleFavorite
 } from "./utils.js";
 
+function detectEmbeddedPreview() {
+  const params = new URLSearchParams(window.location.search);
+  return window.self !== window.top || params.has("embedded_preview");
+}
+
 const appState = {
   store: null,
   settings: null,
@@ -57,10 +62,12 @@ const appState = {
     offset: 0,
     hasMore: false
   },
+  isEmbeddedPreview: detectEmbeddedPreview(),
   isOffline: !navigator.onLine,
   usingCachedData: false,
-  observer: null,
-  currentModalProduct: null
+  currentModalProduct: null,
+  sectionNavCleanup: null,
+  activeSectionAnchor: ""
 };
 
 async function initApp() {
@@ -181,9 +188,12 @@ function hydrateHomeState(home, usingCachedData) {
   renderFilterOptions();
   renderFavoritesSection();
   maybeShowIntro();
-  registerPushButton(appState.store.id, {
-    enabled: Boolean(appState.settings?.enable_notifications)
-  }).catch(() => {});
+
+  if (!appState.isEmbeddedPreview) {
+    registerPushButton(appState.store.id, {
+      enabled: Boolean(appState.settings?.enable_notifications)
+    }).catch(() => {});
+  }
 }
 
 function renderStoreFrame() {
@@ -200,6 +210,11 @@ function renderStoreFrame() {
   const statusElement = qs("#store-status");
   statusElement.textContent = status.label;
   statusElement.className = status.className;
+
+  if (appState.isEmbeddedPreview) {
+    qs("#install-app-button")?.classList.add("is-hidden");
+    qs("#push-button")?.classList.add("is-hidden");
+  }
 
   const defaultWhatsApp = buildWhatsAppLink({
     storeSettings: appState.settings,
@@ -229,6 +244,8 @@ function renderHero() {
   const settings = appState.settings || {};
   const heroMode = settings.hero_mode || "banner";
   const banner = appState.banners[0];
+  const heroTheme = normalizeHeroThemeKey(banner?.theme_preset);
+  const heroPanelStyle = buildHeroPanelStyle(banner);
   const promoProducts = getFeaturedProducts((product) => product.is_promotion).slice(0, 6);
   const featuredBrands = appState.brands.filter((brand) => brand.is_featured).slice(0, 6);
   const categories = appState.categories.slice(0, 8);
@@ -306,7 +323,9 @@ function renderHero() {
   }
 
   heroSection.innerHTML = `
-    <div class="hero-panel">
+    <div class="hero-panel hero-panel--${escapeHtml(heroTheme)}" style="${heroPanelStyle}">
+      <div class="hero-panel__media" aria-hidden="true"></div>
+      <div class="hero-panel__veil" aria-hidden="true"></div>
       <div class="hero-grid">
         <div class="hero-copy">
           <span class="section-kicker">Vitrine em destaque</span>
@@ -353,6 +372,8 @@ function renderDynamicSections() {
 }
 
 function renderSectionNavigation() {
+  appState.sectionNavCleanup?.();
+
   const track = qs("#section-nav-track");
   const chips = [];
 
@@ -379,57 +400,123 @@ function renderSectionNavigation() {
     )
     .join("");
 
-  setupSectionObserver();
+  setupSectionNavigation();
 }
 
-function setupSectionObserver() {
-  appState.observer?.disconnect();
-
+function setupSectionNavigation() {
   const sections = qsa("[data-section-anchor]");
+  const chips = qsa("#section-nav-track .chip");
+  const track = qs("#section-nav-track");
+
+  if (!sections.length || !chips.length || !track) return;
+
   const chipMap = new Map(
-    qsa("#section-nav-track .chip").map((chip) => [
-      decodeURIComponent(chip.getAttribute("href").replace("#section-", "").replace("#", "").replace("-section", "")),
-      chip
-    ])
+    chips.map((chip) => {
+      const href = chip.getAttribute("href");
+      const anchor =
+        href === "#favorites-section"
+          ? "favorites"
+          : href === "#all-products-section"
+            ? "all-products"
+            : href.replace("#section-", "");
+      return [anchor, chip];
+    })
   );
 
-  if (!sections.length) return;
+  const setActiveAnchor = (anchor) => {
+    if (!anchor || appState.activeSectionAnchor === anchor) return;
 
-  const visibleSections = new Map();
+    appState.activeSectionAnchor = anchor;
+    chips.forEach((chip) => chip.classList.remove("is-active"));
 
-  appState.observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        const anchor = entry.target.dataset.sectionAnchor;
-        if (entry.isIntersecting) {
-          visibleSections.set(anchor, entry.boundingClientRect.top);
-        } else {
-          visibleSections.delete(anchor);
-        }
+    const activeChip = chipMap.get(anchor);
+    activeChip?.classList.add("is-active");
+
+    if (activeChip) {
+      const trackRect = track.getBoundingClientRect();
+      const chipRect = activeChip.getBoundingClientRect();
+      const delta = chipRect.left - trackRect.left - trackRect.width / 2 + chipRect.width / 2;
+      track.scrollBy({
+        left: delta,
+        behavior: supportsReducedMotion() ? "auto" : "smooth"
       });
-
-      if (!visibleSections.size) return;
-
-      const activeAnchor = [...visibleSections.entries()].sort((left, right) => right[1] - left[1])[0][0];
-
-      qsa("#section-nav-track .chip").forEach((chip) => chip.classList.remove("is-active"));
-
-      const href =
-        activeAnchor === "favorites"
-          ? "#favorites-section"
-          : activeAnchor === "all-products"
-            ? "#all-products-section"
-            : `#section-${activeAnchor}`;
-      const activeChip = qsa("#section-nav-track .chip").find((chip) => chip.getAttribute("href") === href);
-      activeChip?.classList.add("is-active");
-    },
-    {
-      threshold: 0.25,
-      rootMargin: "-10% 0px -50% 0px"
     }
-  );
+  };
 
-  sections.forEach((section) => appState.observer.observe(section));
+  const updateActiveAnchor = () => {
+    if (!sections.length) return;
+
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 16) {
+      setActiveAnchor(sections[sections.length - 1].dataset.sectionAnchor);
+      return;
+    }
+
+    const headerHeight = qs(".site-header")?.offsetHeight || 0;
+    const navHeight = qs("#section-nav")?.offsetHeight || 0;
+    const topBoundary = headerHeight + navHeight + 10;
+    const focusLine = Math.min(window.innerHeight - 60, topBoundary + Math.max(160, (window.innerHeight - topBoundary) * 0.56));
+    const visibleSections = sections
+      .map((section) => ({
+        section,
+        rect: section.getBoundingClientRect()
+      }))
+      .filter(({ rect }) => rect.bottom > topBoundary && rect.top < window.innerHeight - 24);
+
+    if (!visibleSections.length) return;
+
+    const preferred =
+      visibleSections
+        .filter(({ rect }) => rect.top <= focusLine)
+        .sort((left, right) => right.rect.top - left.rect.top)[0] || visibleSections[visibleSections.length - 1];
+
+    setActiveAnchor(preferred.section.dataset.sectionAnchor);
+  };
+
+  const handleChipClick = (event) => {
+    event.preventDefault();
+
+    const href = event.currentTarget.getAttribute("href");
+    const anchor =
+      href === "#favorites-section"
+        ? "favorites"
+        : href === "#all-products-section"
+          ? "all-products"
+          : href.replace("#section-", "");
+    const target = sections.find((section) => section.dataset.sectionAnchor === anchor);
+    if (!target) return;
+
+    const headerHeight = qs(".site-header")?.offsetHeight || 0;
+    const navHeight = qs("#section-nav")?.offsetHeight || 0;
+    const targetTop = window.scrollY + target.getBoundingClientRect().top - headerHeight - navHeight - 16;
+
+    setActiveAnchor(anchor);
+    window.history.replaceState(null, "", href);
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: supportsReducedMotion() ? "auto" : "smooth"
+    });
+  };
+
+  let frameId = 0;
+  const requestUpdate = () => {
+    if (frameId) return;
+    frameId = window.requestAnimationFrame(() => {
+      frameId = 0;
+      updateActiveAnchor();
+    });
+  };
+
+  chips.forEach((chip) => chip.addEventListener("click", handleChipClick));
+  window.addEventListener("scroll", requestUpdate, { passive: true });
+  window.addEventListener("resize", requestUpdate);
+  requestUpdate();
+
+  appState.sectionNavCleanup = () => {
+    chips.forEach((chip) => chip.removeEventListener("click", handleChipClick));
+    window.removeEventListener("scroll", requestUpdate);
+    window.removeEventListener("resize", requestUpdate);
+    if (frameId) window.cancelAnimationFrame(frameId);
+  };
 }
 
 function renderFilterOptions() {
@@ -903,7 +990,16 @@ function handleConnectivityChange() {
 
 function updateHeaderOffset() {
   const headerHeight = qs(".site-header")?.offsetHeight || 146;
-  document.documentElement.style.setProperty("--header-offset", `${headerHeight + 12}px`);
+  document.documentElement.style.setProperty("--header-height", `${headerHeight}px`);
+  document.documentElement.style.setProperty("--header-offset", `${headerHeight + 76}px`);
+  window.requestAnimationFrame(() => {
+    if (appState.sectionNavCleanup) {
+      const activeChip = qsa("#section-nav-track .chip.is-active")[0];
+      if (!activeChip) return;
+      activeChip.classList.remove("is-active");
+      appState.activeSectionAnchor = "";
+    }
+  });
 }
 
 async function handleBodyClick(event) {
@@ -985,7 +1081,7 @@ function humanizeStock(product) {
 function maybeShowIntro() {
   const overlay = qs("#intro-overlay");
   const introMode = appState.settings?.intro_mode || "logo";
-  if (introMode === "disabled") {
+  if (introMode === "disabled" || appState.isEmbeddedPreview) {
     overlay.classList.add("is-hidden");
     return;
   }
@@ -1038,6 +1134,49 @@ function maybeShowIntro() {
 
 function getFeaturedProducts(predicate) {
   return appState.sections.flatMap((section) => section.products || []).filter(predicate);
+}
+
+function normalizeHeroThemeKey(theme) {
+  const allowed = new Set(["classic-night", "sunset-amber", "ocean-steel", "forest-luxe", "soft-ivory"]);
+  return allowed.has(theme) ? theme : "classic-night";
+}
+
+function clampHeroValue(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function escapeCssUrl(url) {
+  return String(url || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\)/g, "\\)");
+}
+
+function buildHeroPanelStyle(banner) {
+  const imageUrl = banner?.image_url ? `url("${escapeCssUrl(banner.image_url)}")` : "none";
+  const allowedPositions = new Set([
+    "center center",
+    "top center",
+    "bottom center",
+    "center left",
+    "center right"
+  ]);
+  const imagePosition = allowedPositions.has(banner?.image_position) ? banner.image_position : "center center";
+  const imageFit = banner?.image_fit === "contain" ? "contain" : "cover";
+  const brightness = clampHeroValue(banner?.image_brightness, 0.92, 0.4, 1.6);
+  const contrast = clampHeroValue(banner?.image_contrast, 1.05, 0.6, 1.8);
+  const overlayStrength = clampHeroValue(banner?.overlay_strength, 0.56, 0.08, 0.92);
+
+  return [
+    `--hero-bg-image: ${imageUrl}`,
+    `--hero-image-position: ${imagePosition}`,
+    `--hero-image-fit: ${imageFit}`,
+    `--hero-image-brightness: ${brightness}`,
+    `--hero-image-contrast: ${contrast}`,
+    `--hero-overlay-strength: ${overlayStrength}`
+  ].join("; ");
 }
 
 function renderSetupRequired() {

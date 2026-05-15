@@ -605,6 +605,123 @@ th {
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
 }
 
+.editor-preview-card--hero {
+  --hero-bg-image: none;
+  --hero-image-position: center center;
+  --hero-image-fit: cover;
+  --hero-image-brightness: 0.92;
+  --hero-image-contrast: 1.05;
+  --hero-overlay-strength: 0.56;
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(41, 49, 72, 0.88)),
+    linear-gradient(135deg, rgba(229, 107, 47, 0.22), transparent);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(9, 14, 27, 0.92), rgba(25, 33, 51, 0.42));
+  position: relative;
+  min-height: 240px;
+  overflow: hidden;
+  align-content: end;
+  background: var(--hero-theme-base);
+  color: #fff;
+  isolation: isolate;
+}
+
+.editor-preview-hero-media,
+.editor-preview-hero-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.editor-preview-hero-media {
+  background-image: var(--hero-bg-image);
+  background-position: var(--hero-image-position);
+  background-repeat: no-repeat;
+  background-size: var(--hero-image-fit);
+  filter: brightness(var(--hero-image-brightness)) contrast(var(--hero-image-contrast));
+  transform: scale(1.04);
+  opacity: 0.84;
+}
+
+.editor-preview-hero-veil {
+  background: var(--hero-theme-overlay);
+  opacity: var(--hero-overlay-strength);
+}
+
+.editor-preview-hero-copy,
+.editor-preview-card--hero > strong,
+.editor-preview-card--hero > p {
+  position: relative;
+  z-index: 1;
+}
+
+.editor-preview-hero-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-preview-hero-copy img {
+  display: none;
+}
+
+.editor-preview-card--hero > strong {
+  font-family: "Fraunces", serif;
+  font-size: 1.45rem;
+}
+
+.editor-preview-card--hero > p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 42ch;
+  line-height: 1.5;
+}
+
+.hero-theme-preview--classic-night {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(38, 46, 70, 0.92)),
+    radial-gradient(circle at top right, rgba(229, 107, 47, 0.22), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(9, 14, 27, 0.94), rgba(25, 33, 51, 0.5));
+}
+
+.hero-theme-preview--sunset-amber {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(94, 43, 12, 0.94), rgba(197, 89, 28, 0.84)),
+    radial-gradient(circle at top right, rgba(255, 214, 168, 0.24), transparent 38%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(69, 24, 4, 0.86), rgba(138, 64, 18, 0.34));
+}
+
+.hero-theme-preview--ocean-steel {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(19, 53, 76, 0.96), rgba(34, 93, 110, 0.86)),
+    radial-gradient(circle at top left, rgba(170, 225, 255, 0.16), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(12, 35, 48, 0.9), rgba(19, 58, 71, 0.32));
+}
+
+.hero-theme-preview--forest-luxe {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(24, 49, 37, 0.97), rgba(52, 95, 71, 0.86)),
+    radial-gradient(circle at top right, rgba(240, 196, 115, 0.12), transparent 40%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(12, 29, 21, 0.88), rgba(27, 50, 38, 0.32));
+}
+
+.hero-theme-preview--soft-ivory {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(243, 233, 221, 0.98), rgba(231, 216, 198, 0.94)),
+    radial-gradient(circle at top right, rgba(229, 107, 47, 0.18), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(230, 214, 196, 0.12));
+  color: #132033;
+}
+
+.hero-theme-preview--soft-ivory .section-kicker,
+.hero-theme-preview--soft-ivory > p {
+  color: rgba(19, 32, 51, 0.74);
+}
+
 .editor-preview-media {
   aspect-ratio: 1 / 1;
   border-radius: 18px;

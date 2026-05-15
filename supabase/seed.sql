@@ -273,4 +273,34 @@ on conflict (id) do update set
   starts_at = excluded.starts_at,
   ends_at = excluded.ends_at;
 
+update public.banners
+set
+  theme_preset = 'classic-night',
+  image_position = 'center center',
+  image_fit = 'cover',
+  image_brightness = 0.92,
+  image_contrast = 1.05,
+  overlay_strength = 0.56
+where id = '90000000-0000-0000-0000-000000000001';
+
+update public.banners
+set
+  theme_preset = 'ocean-steel',
+  image_position = 'center right',
+  image_fit = 'cover',
+  image_brightness = 0.95,
+  image_contrast = 1.12,
+  overlay_strength = 0.48
+where id = '90000000-0000-0000-0000-000000000002';
+
+update public.banners
+set
+  theme_preset = 'sunset-amber',
+  image_position = 'center left',
+  image_fit = 'cover',
+  image_brightness = 0.90,
+  image_contrast = 1.08,
+  overlay_strength = 0.42
+where id = '90000000-0000-0000-0000-000000000003';
+
 commit;

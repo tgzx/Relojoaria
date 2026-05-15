@@ -18,6 +18,7 @@
   --shadow-soft: 0 20px 45px rgba(15, 23, 42, 0.12);
   --shadow-card: 0 12px 30px rgba(15, 23, 42, 0.08);
   --container-width: 1200px;
+  --header-height: 146px;
   --header-offset: 170px;
   --transition-base: 240ms ease;
 }
@@ -41,6 +42,7 @@ body {
   color: var(--color-text);
   font-family: "Outfit", system-ui, sans-serif;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 img {
@@ -268,16 +270,48 @@ a {
 }
 
 .hero-panel {
+  --hero-bg-image: none;
+  --hero-image-position: center center;
+  --hero-image-fit: cover;
+  --hero-image-brightness: 0.92;
+  --hero-image-contrast: 1.05;
+  --hero-overlay-strength: 0.56;
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(41, 49, 72, 0.88)),
+    linear-gradient(135deg, rgba(229, 107, 47, 0.3), transparent);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(10, 17, 32, 0.88), rgba(21, 29, 46, 0.5));
   position: relative;
   overflow: hidden;
   border-radius: 34px;
-  background:
-    linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(41, 49, 72, 0.88)),
-    linear-gradient(135deg, rgba(229, 107, 47, 0.3), transparent);
+  isolation: isolate;
+  background: var(--hero-theme-base);
   color: #fff;
   padding: 30px 22px;
   min-height: 320px;
   box-shadow: 0 30px 60px rgba(15, 23, 42, 0.18);
+}
+
+.hero-panel__media,
+.hero-panel__veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hero-panel__media {
+  background-image: var(--hero-bg-image);
+  background-position: var(--hero-image-position);
+  background-repeat: no-repeat;
+  background-size: var(--hero-image-fit);
+  filter: brightness(var(--hero-image-brightness)) contrast(var(--hero-image-contrast));
+  transform: scale(1.04);
+  opacity: 0.82;
+}
+
+.hero-panel__veil {
+  background: var(--hero-theme-overlay);
+  opacity: var(--hero-overlay-strength);
 }
 
 .hero-panel::before,
@@ -306,9 +340,59 @@ a {
 
 .hero-grid {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: grid;
   gap: 24px;
+}
+
+.hero-panel--classic-night {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(38, 46, 70, 0.92)),
+    radial-gradient(circle at top right, rgba(229, 107, 47, 0.22), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(9, 14, 27, 0.94), rgba(25, 33, 51, 0.5));
+}
+
+.hero-panel--sunset-amber {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(94, 43, 12, 0.94), rgba(197, 89, 28, 0.84)),
+    radial-gradient(circle at top right, rgba(255, 214, 168, 0.24), transparent 38%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(69, 24, 4, 0.86), rgba(138, 64, 18, 0.34));
+}
+
+.hero-panel--ocean-steel {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(19, 53, 76, 0.96), rgba(34, 93, 110, 0.86)),
+    radial-gradient(circle at top left, rgba(170, 225, 255, 0.16), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(12, 35, 48, 0.9), rgba(19, 58, 71, 0.32));
+}
+
+.hero-panel--forest-luxe {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(24, 49, 37, 0.97), rgba(52, 95, 71, 0.86)),
+    radial-gradient(circle at top right, rgba(240, 196, 115, 0.12), transparent 40%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(12, 29, 21, 0.88), rgba(27, 50, 38, 0.32));
+}
+
+.hero-panel--soft-ivory {
+  --hero-theme-base:
+    linear-gradient(135deg, rgba(243, 233, 221, 0.98), rgba(231, 216, 198, 0.94)),
+    radial-gradient(circle at top right, rgba(229, 107, 47, 0.18), transparent 42%);
+  --hero-theme-overlay:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(230, 214, 196, 0.18));
+  color: #132033;
+}
+
+.hero-panel--soft-ivory .section-kicker,
+.hero-panel--soft-ivory .hero-copy p {
+  color: rgba(19, 32, 51, 0.78);
+}
+
+.hero-panel--soft-ivory .hero-card {
+  background: rgba(255, 255, 255, 0.74);
 }
 
 .hero-copy {
@@ -453,11 +537,13 @@ a {
 
 .section-nav {
   position: sticky;
-  top: calc(var(--header-offset) - 2px);
+  top: calc(var(--header-height) - 1px);
   z-index: 30;
-  padding: 10px 0 14px;
-  background: linear-gradient(180deg, rgba(246, 239, 229, 0.95), rgba(246, 239, 229, 0.65));
+  padding: 4px 0 12px;
+  background: rgba(246, 239, 229, 0.96);
   backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+  box-shadow: 0 16px 26px rgba(246, 239, 229, 0.78);
 }
 
 .chip {
@@ -977,6 +1063,57 @@ a {
   background: rgba(185, 28, 28, 0.95);
 }
 
+.install-prompt {
+  position: fixed;
+  inset: auto 16px 16px;
+  z-index: 75;
+  display: grid;
+  justify-content: center;
+}
+
+.install-prompt__card {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+}
+
+.install-prompt__card h2 {
+  margin: 8px 0 10px;
+  font-family: "Fraunces", serif;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.install-prompt__card p {
+  margin: 0;
+  color: var(--color-text-soft);
+  line-height: 1.6;
+}
+
+.install-prompt__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.install-prompt__steps {
+  margin: 16px 0 0;
+  padding-left: 18px;
+  color: var(--color-text-soft);
+  display: grid;
+  gap: 8px;
+}
+
+.install-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .intro-overlay {
   position: fixed;
   inset: 0;
@@ -1136,6 +1273,12 @@ a {
   .category-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+
+  .install-prompt {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1148,7 +1291,7 @@ a {
   }
 
   .section-nav {
-    top: calc(var(--header-offset) + 2px);
+    top: calc(var(--header-height) - 1px);
   }
 
   .hero-panel {

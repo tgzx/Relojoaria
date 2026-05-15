@@ -60,6 +60,27 @@ const TABS = [
   { id: "preview", label: "Pré-visualizar" }
 ];
 
+const HERO_THEME_OPTIONS = [
+  { value: "classic-night", label: "Classic Night" },
+  { value: "sunset-amber", label: "Sunset Amber" },
+  { value: "ocean-steel", label: "Ocean Steel" },
+  { value: "forest-luxe", label: "Forest Luxe" },
+  { value: "soft-ivory", label: "Soft Ivory" }
+];
+
+const HERO_POSITION_OPTIONS = [
+  { value: "center center", label: "Centro" },
+  { value: "top center", label: "Topo" },
+  { value: "bottom center", label: "Base" },
+  { value: "center left", label: "Esquerda" },
+  { value: "center right", label: "Direita" }
+];
+
+const HERO_FIT_OPTIONS = [
+  { value: "cover", label: "Preencher" },
+  { value: "contain", label: "Conter" }
+];
+
 const adminState = {
   session: null,
   profile: null,
@@ -98,13 +119,20 @@ async function initAdmin() {
     return;
   }
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  supabase.auth.onAuthStateChange(async (event, session) => {
     adminState.session = session;
-    if (!session) {
+    if (!session || event === "SIGNED_OUT") {
       renderLogin();
       return;
     }
-    await loadAdminData();
+
+    if (event === "TOKEN_REFRESHED" && adminState.store) {
+      return;
+    }
+
+    if (["INITIAL_SESSION", "SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
+      await loadAdminData();
+    }
   });
 
   await requireAuth();
@@ -929,13 +957,17 @@ function renderBrandsManager() {
 
 function renderAppearanceManager() {
   const banner = adminState.editingBanner || createEmptyBannerDraft();
-  const previewBanner = adminState.banners[0];
+  const hasDraftContent = Boolean(banner.id || banner.title || banner.subtitle || banner.image_url);
+  const previewBanner = hasDraftContent ? banner : adminState.banners[0] || createEmptyBannerDraft();
+  const previewTheme = normalizeHeroThemeKey(previewBanner.theme_preset);
+  const previewStyle = buildHeroPreviewStyle(previewBanner);
 
   return `
     <section class="settings-grid">
       <article class="panel-card">
         <span class="section-kicker">Campanhas visuais</span>
         <h2>${banner.id ? "Editar banner" : "Novo banner"}</h2>
+        <p class="muted-copy">Defina a foto, o tema e o enquadramento da tarja principal da home sem depender do Supabase manualmente.</p>
         <form id="banner-form" class="grid-form">
           <input type="hidden" name="id" value="${escapeHtml(banner.id || "")}" />
           <label class="admin-field">
@@ -954,6 +986,63 @@ function renderAppearanceManager() {
             <span>Upload de imagem</span>
             <input type="file" id="banner-upload-input" accept=".jpg,.jpeg,.png,.webp" />
           </label>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field">
+              <span>Tema de fundo</span>
+              <select name="theme_preset">
+                ${renderOptions(HERO_THEME_OPTIONS, normalizeHeroThemeKey(banner.theme_preset))}
+              </select>
+            </label>
+            <label class="admin-field">
+              <span>Enquadramento</span>
+              <select name="image_position">
+                ${renderOptions(HERO_POSITION_OPTIONS, banner.image_position || "center center")}
+              </select>
+            </label>
+          </div>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field">
+              <span>Ajuste da foto</span>
+              <select name="image_fit">
+                ${renderOptions(HERO_FIT_OPTIONS, banner.image_fit || "cover")}
+              </select>
+            </label>
+            <label class="admin-field">
+              <span>Escurecimento da camada</span>
+              <input
+                type="range"
+                name="overlay_strength"
+                min="0.08"
+                max="0.92"
+                step="0.02"
+                value="${escapeHtml(String(Number(banner.overlay_strength ?? 0.56).toFixed(2)))}"
+              />
+            </label>
+          </div>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field">
+              <span>Brilho da foto</span>
+              <input
+                type="range"
+                name="image_brightness"
+                min="0.40"
+                max="1.60"
+                step="0.05"
+                value="${escapeHtml(String(Number(banner.image_brightness ?? 0.92).toFixed(2)))}"
+              />
+            </label>
+            <label class="admin-field">
+              <span>Contraste da foto</span>
+              <input
+                type="range"
+                name="image_contrast"
+                min="0.60"
+                max="1.80"
+                step="0.05"
+                value="${escapeHtml(String(Number(banner.image_contrast ?? 1.05).toFixed(2)))}"
+              />
+            </label>
+          </div>
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Link alvo</span>
@@ -996,8 +1085,11 @@ function renderAppearanceManager() {
         <h2>Visual da home</h2>
         <p>Veja rapidamente como o topo da vitrine vai aparecer para o cliente.</p>
         <div class="editor-preview">
-          <div class="editor-preview-card">
-            <div class="editor-preview-media">
+          <div class="editor-preview-card editor-preview-card--hero hero-theme-preview--${escapeHtml(previewTheme)}" style="${previewStyle}">
+            <div class="editor-preview-hero-media" aria-hidden="true"></div>
+            <div class="editor-preview-hero-veil" aria-hidden="true"></div>
+            <div class="editor-preview-hero-copy">
+              <span class="section-kicker">Hero da vitrine</span>
               <img src="${escapeHtml(previewBanner?.image_url || adminState.store.logo_url || "./assets/placeholders/product-placeholder.svg")}" alt="Prévia do banner" />
             </div>
             <strong>${escapeHtml(previewBanner?.title || adminState.store.name)}</strong>
@@ -1012,7 +1104,7 @@ function renderAppearanceManager() {
                   <div class="list-item-header">
                     <div>
                       <strong class="list-item-title">${escapeHtml(item.title || "Banner sem título")}</strong>
-                      <span class="list-item-subtitle">${escapeHtml(item.target_type || "hero")}</span>
+                      <span class="list-item-subtitle">${escapeHtml(item.target_type || "hero")} · ${escapeHtml(item.theme_preset || "classic-night")}</span>
                     </div>
                     <span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativo" : "Oculto"}</span>
                   </div>
@@ -1313,6 +1405,30 @@ function bindAdminLayoutEvents() {
   qs("#quick-new-product")?.addEventListener("click", () => openProductEditor());
   qs("#open-preview-tab")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());
+
+  const previewFrame = qs(".preview-frame");
+  if (previewFrame) {
+    previewFrame.src = "./index.html?embedded_preview=1";
+    previewFrame.loading = "lazy";
+    const previewIntro = previewFrame.previousElementSibling;
+    if (previewIntro?.tagName === "P") {
+      previewIntro.textContent =
+        "A prévia embutida desativa os prompts de instalação para ficar mais estável enquanto você cadastra produtos e banners.";
+    }
+
+    const previewActions = document.createElement("div");
+    previewActions.className = "preview-actions";
+    previewActions.innerHTML = `
+      <button class="btn btn-secondary" type="button" id="reload-preview-iframe">Atualizar prévia</button>
+      <button class="btn btn-primary" type="button" id="open-preview-external-inline">Abrir em nova aba</button>
+    `;
+    previewFrame.parentElement?.insertBefore(previewActions, previewFrame);
+
+    qs("#reload-preview-iframe")?.addEventListener("click", () => {
+      previewFrame.src = "./index.html?embedded_preview=1&t=" + Date.now();
+    });
+    qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
+  }
 
   qsa("[data-go-tab]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -2110,6 +2226,12 @@ async function saveBanner(event) {
     title: String(data.get("title") || ""),
     subtitle: String(data.get("subtitle") || ""),
     image_url: imageUrl,
+    theme_preset: normalizeHeroThemeKey(String(data.get("theme_preset") || "classic-night")),
+    image_position: String(data.get("image_position") || "center center"),
+    image_fit: String(data.get("image_fit") || "cover"),
+    image_brightness: Number(data.get("image_brightness") || 0.92),
+    image_contrast: Number(data.get("image_contrast") || 1.05),
+    overlay_strength: Number(data.get("overlay_strength") || 0.56),
     target_url: String(data.get("target_url") || ""),
     target_type: String(data.get("target_type") || "hero"),
     is_active: form.querySelector("[name='is_active']").checked,
@@ -2262,6 +2384,44 @@ function renderFlagBadges(product) {
   return flags.length ? flags.join(" · ") : "—";
 }
 
+function normalizeHeroThemeKey(theme) {
+  const allowed = new Set(HERO_THEME_OPTIONS.map((option) => option.value));
+  return allowed.has(theme) ? theme : "classic-night";
+}
+
+function clampPreviewValue(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function escapeCssUrl(url) {
+  return String(url || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\)/g, "\\)");
+}
+
+function buildHeroPreviewStyle(banner = {}) {
+  const imageUrl = banner?.image_url ? `url("${escapeCssUrl(banner.image_url)}")` : "none";
+  const imagePosition = HERO_POSITION_OPTIONS.some((option) => option.value === banner?.image_position)
+    ? banner.image_position
+    : "center center";
+  const imageFit = HERO_FIT_OPTIONS.some((option) => option.value === banner?.image_fit) ? banner.image_fit : "cover";
+  const brightness = clampPreviewValue(banner?.image_brightness, 0.92, 0.4, 1.6);
+  const contrast = clampPreviewValue(banner?.image_contrast, 1.05, 0.6, 1.8);
+  const overlayStrength = clampPreviewValue(banner?.overlay_strength, 0.56, 0.08, 0.92);
+
+  return [
+    `--hero-bg-image: ${imageUrl}`,
+    `--hero-image-position: ${imagePosition}`,
+    `--hero-image-fit: ${imageFit}`,
+    `--hero-image-brightness: ${brightness}`,
+    `--hero-image-contrast: ${contrast}`,
+    `--hero-overlay-strength: ${overlayStrength}`
+  ].join("; ");
+}
+
 function getTabLabel(tabId) {
   return TABS.find((item) => item.id === tabId)?.label || "Painel";
 }
@@ -2345,6 +2505,12 @@ function createEmptyBannerDraft() {
     title: "",
     subtitle: "",
     image_url: "",
+    theme_preset: "classic-night",
+    image_position: "center center",
+    image_fit: "cover",
+    image_brightness: 0.92,
+    image_contrast: 1.05,
+    overlay_strength: 0.56,
     target_url: "",
     target_type: "hero",
     is_active: true,

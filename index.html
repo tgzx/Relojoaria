@@ -8,6 +8,9 @@
       content="Vitrine digital PWA integrada ao WhatsApp para lojas locais e vendedores."
     />
     <meta name="theme-color" content="#111827" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="VitrineZap" />
     <title>VitrineZap PWA</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -260,6 +263,37 @@
     </div>
 
     <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="install-prompt" class="install-prompt is-hidden" aria-hidden="true">
+      <section class="install-prompt__card" role="dialog" aria-labelledby="install-prompt-title">
+        <button
+          id="close-install-prompt"
+          class="modal-close install-prompt__close"
+          type="button"
+          aria-label="Fechar aviso de instalação"
+        >
+          ×
+        </button>
+        <span class="section-kicker">Abra como app</span>
+        <h2 id="install-prompt-title">Instale a vitrine no seu celular</h2>
+        <p id="install-prompt-copy">
+          Adicione esta vitrine à tela inicial para abrir mais rápido, com cara de aplicativo.
+        </p>
+        <ol id="install-ios-steps" class="install-prompt__steps is-hidden">
+          <li>No Safari, toque em <strong>Compartilhar</strong>.</li>
+          <li>Escolha <strong>Adicionar à Tela de Início</strong>.</li>
+          <li>Confirme para instalar como app.</li>
+        </ol>
+        <div class="install-prompt__actions">
+          <button id="confirm-install-prompt" class="btn btn-primary" type="button">
+            Instalar app
+          </button>
+          <button id="dismiss-install-prompt" class="btn btn-ghost" type="button">
+            Depois
+          </button>
+        </div>
+      </section>
+    </div>
 
     <script type="module" src="./js/app.js"></script>
   </body>
