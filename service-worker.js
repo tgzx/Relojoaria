@@ -1,5 +1,5 @@
 const STATIC_CACHE = "vitrinezap-static-v5";
-const HTML_CACHE = "vitrinezap-html-v5";
+const HTML_CACHE = "vitrinezap-html-v6";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [

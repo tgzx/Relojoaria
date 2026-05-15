@@ -525,7 +525,6 @@ a {
 .brand-rail,
 .promo-rail,
 .category-grid,
-.products-rail,
 .section-nav-track {
   display: flex;
   align-items: center;
@@ -535,10 +534,18 @@ a {
   padding-bottom: 0;
 }
 
+.products-rail {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: max-content;
+  padding-bottom: 0;
+}
+
 .brand-rail::-webkit-scrollbar,
 .promo-rail::-webkit-scrollbar,
 .category-grid::-webkit-scrollbar,
-.products-rail::-webkit-scrollbar,
 .section-nav-track::-webkit-scrollbar {
   display: none;
 }
@@ -649,8 +656,16 @@ body.theme-dark .chip.is-active {
 }
 
 .dynamic-sections {
-  display: grid;
-  gap: 30px;
+  display: block;
+  min-width: 0;
+}
+
+.dynamic-sections > .page-section {
+  min-width: 0;
+}
+
+.dynamic-sections > .page-section + .page-section {
+  margin-top: 30px;
 }
 
 .page-section {
@@ -701,6 +716,29 @@ body.theme-dark .chip.is-active {
 
 .section-carousel-shell {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.section-carousel-viewport {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.section-carousel-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.section-carousel-viewport > .products-rail {
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
 }
 
 .carousel-nav {
@@ -725,11 +763,11 @@ body.theme-dark .chip.is-active {
 }
 
 .carousel-nav--prev {
-  left: -12px;
+  left: 8px;
 }
 
 .carousel-nav--next {
-  right: -12px;
+  right: 8px;
 }
 
 .products-rail .product-card {
@@ -1785,28 +1823,22 @@ body.theme-dark .product-badge--warning {
     overflow: clip;
   }
 
-  .products-rail {
-    --mobile-rail-card-width: min(66vw, 248px);
-    width: 100vw;
-    max-width: 100vw;
-    margin-inline: calc(50% - 50vw);
-    padding: 2px 0 4px;
-    gap: 14px;
-    align-items: stretch;
+  .section-carousel-viewport {
     scroll-snap-type: x proximity;
-    scroll-padding-inline: calc((100vw - var(--mobile-rail-card-width)) / 2);
-    overscroll-behavior-x: contain;
+    scroll-padding-inline: 16px;
   }
 
-  .products-rail::before,
-  .products-rail::after {
-    content: "";
-    flex: 0 0 calc((100vw - var(--mobile-rail-card-width)) / 2);
+  .products-rail {
+    --mobile-rail-card-width: min(66vw, 248px);
+    width: max-content;
+    min-width: 100%;
+    padding: 2px 0 4px;
+    gap: 14px;
   }
 
   .products-rail .product-card {
     flex: 0 0 var(--mobile-rail-card-width);
-    scroll-snap-align: center;
+    scroll-snap-align: start;
     scroll-snap-stop: always;
   }
 

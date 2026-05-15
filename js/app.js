@@ -449,8 +449,10 @@ function renderSectionCarouselShell({ label, railClassName, itemsHtml }) {
       >
         <span aria-hidden="true">‹</span>
       </button>
-      <div class="${railClassName}" data-carousel-rail>
-        ${itemsHtml}
+      <div class="section-carousel-viewport" data-carousel-viewport>
+        <div class="${railClassName}" data-carousel-rail>
+          ${itemsHtml}
+        </div>
       </div>
       <button
         class="carousel-nav carousel-nav--next is-hidden"
@@ -477,25 +479,27 @@ function setupSectionCarousels() {
   const desktopQuery = window.matchMedia("(min-width: 1024px)");
 
   shells.forEach((shell) => {
+    const viewport = shell.querySelector("[data-carousel-viewport]");
     const rail = shell.querySelector("[data-carousel-rail]");
     const prevButton = shell.querySelector("[data-carousel-prev]");
     const nextButton = shell.querySelector("[data-carousel-next]");
+    const scroller = viewport || rail;
 
-    if (!rail || !prevButton || !nextButton) return;
+    if (!rail || !scroller || !prevButton || !nextButton) return;
 
     const updateButtons = () => {
-      const maxScrollLeft = Math.max(0, rail.scrollWidth - rail.clientWidth);
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
       const canScroll = desktopQuery.matches && maxScrollLeft > 6;
-      const atStart = rail.scrollLeft <= 6;
-      const atEnd = rail.scrollLeft >= maxScrollLeft - 6;
+      const atStart = scroller.scrollLeft <= 6;
+      const atEnd = scroller.scrollLeft >= maxScrollLeft - 6;
 
       prevButton.classList.toggle("is-hidden", !canScroll || atStart);
       nextButton.classList.toggle("is-hidden", !canScroll || atEnd);
     };
 
     const scrollByPage = (direction) => {
-      const distance = Math.max(rail.clientWidth * 0.82, 260) * direction;
-      rail.scrollBy({
+      const distance = Math.max(scroller.clientWidth * 0.82, 260) * direction;
+      scroller.scrollBy({
         left: distance,
         behavior: supportsReducedMotion() ? "auto" : "smooth"
       });
@@ -506,13 +510,13 @@ function setupSectionCarousels() {
 
     prevButton.addEventListener("click", handlePrev);
     nextButton.addEventListener("click", handleNext);
-    rail.addEventListener("scroll", updateButtons, { passive: true });
+    scroller.addEventListener("scroll", updateButtons, { passive: true });
     window.addEventListener("resize", updateButtons);
 
     let resizeObserver = null;
     if ("ResizeObserver" in window) {
       resizeObserver = new ResizeObserver(() => updateButtons());
-      resizeObserver.observe(rail);
+      resizeObserver.observe(scroller);
     }
 
     if (typeof desktopQuery.addEventListener === "function") {
@@ -524,7 +528,7 @@ function setupSectionCarousels() {
     cleanupFns.push(() => {
       prevButton.removeEventListener("click", handlePrev);
       nextButton.removeEventListener("click", handleNext);
-      rail.removeEventListener("scroll", updateButtons);
+      scroller.removeEventListener("scroll", updateButtons);
       window.removeEventListener("resize", updateButtons);
       resizeObserver?.disconnect();
       if (typeof desktopQuery.removeEventListener === "function") {
