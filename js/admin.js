@@ -84,6 +84,16 @@ const HERO_FIT_OPTIONS = [
   { value: "contain", label: "Conter" }
 ];
 
+const BUSINESS_HOURS_DAYS = [
+  { key: "monday", label: "Segunda" },
+  { key: "tuesday", label: "Terça" },
+  { key: "wednesday", label: "Quarta" },
+  { key: "thursday", label: "Quinta" },
+  { key: "friday", label: "Sexta" },
+  { key: "saturday", label: "Sábado" },
+  { key: "sunday", label: "Domingo" }
+];
+
 const adminState = {
   session: null,
   profile: null,
@@ -1396,6 +1406,7 @@ function renderAutomations() {
 function renderSettings() {
   const store = adminState.store || {};
   const settings = adminState.settings || {};
+  const businessHours = normalizeBusinessHours(settings.business_hours);
 
   return `
     <section class="settings-grid">
@@ -1793,6 +1804,8 @@ function bindNotificationsTab() {
 function bindSettingsTab() {
   bindDirtyFormState("#settings-form", "settings");
   qs("#settings-form")?.addEventListener("submit", saveSettings);
+  mountBusinessHoursEditor();
+  qs("#open-business-hours-editor")?.addEventListener("click", openBusinessHoursEditor);
 }
 
 function bindAutomationTab() {
@@ -2940,6 +2953,290 @@ function debounceAdmin(callback) {
     window.clearTimeout(timerId);
     timerId = window.setTimeout(() => callback(...args), 260);
   };
+}
+
+function normalizeBusinessHours(sourceValue) {
+  const parsed = parseJsonSafe(sourceValue, null);
+  const source =
+    parsed && typeof parsed === "object" && Object.keys(parsed).length ? parsed : defaultBusinessHours();
+
+  return BUSINESS_HOURS_DAYS.reduce((accumulator, day) => {
+    const periods = Array.isArray(source?.[day.key]) ? source[day.key] : [];
+    accumulator[day.key] = periods
+      .map((period) => ({
+        start: normalizeTimeValue(period?.start, "09:00"),
+        end: normalizeTimeValue(period?.end, "18:00")
+      }))
+      .filter((period) => isBusinessHoursRangeValid(period.start, period.end))
+      .slice(0, 2);
+
+    return accumulator;
+  }, {});
+}
+
+function normalizeTimeValue(value, fallback) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || "").trim());
+  return match ? `${match[1]}:${match[2]}` : fallback;
+}
+
+function getBusinessHoursDayDraft(periods = []) {
+  const firstPeriod = periods[0] || { start: "09:00", end: "18:00" };
+  const secondPeriod = periods[1] || { start: "13:00", end: "18:00" };
+
+  return {
+    closed: !periods.length,
+    split: periods.length > 1,
+    morningStart: normalizeTimeValue(firstPeriod.start, "09:00"),
+    morningEnd: normalizeTimeValue(firstPeriod.end, "18:00"),
+    afternoonStart: normalizeTimeValue(secondPeriod.start, "13:00"),
+    afternoonEnd: normalizeTimeValue(secondPeriod.end, "18:00")
+  };
+}
+
+function formatBusinessHoursPeriods(periods = []) {
+  if (!periods.length) return "Fechado";
+  return periods.map((period) => `${period.start} as ${period.end}`).join(" • ");
+}
+
+function renderBusinessHoursSummary(hours) {
+  const normalized = normalizeBusinessHours(hours);
+
+  return BUSINESS_HOURS_DAYS.map(
+    (day) => `
+      <article class="business-hours-summary__row">
+        <strong>${escapeHtml(day.label)}</strong>
+        <span>${escapeHtml(formatBusinessHoursPeriods(normalized[day.key]))}</span>
+      </article>
+    `
+  ).join("");
+}
+
+function buildBusinessHoursCompactLabel(hours) {
+  const normalized = normalizeBusinessHours(hours);
+  const openDays = BUSINESS_HOURS_DAYS.filter((day) => normalized[day.key]?.length);
+  if (!openDays.length) return "Nenhum horario definido";
+  return `${openDays.length} dia(s) com expediente definido`;
+}
+
+function isBusinessHoursRangeValid(start, end) {
+  return timeToMinutes(start) < timeToMinutes(end);
+}
+
+function timeToMinutes(value) {
+  const [hour = "0", minute = "0"] = String(value || "").split(":");
+  return Number(hour) * 60 + Number(minute);
+}
+
+function mountBusinessHoursEditor() {
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!hoursField) return;
+
+  const wrapper = hoursField.closest(".admin-field");
+  if (!wrapper) return;
+
+  const normalized = normalizeBusinessHours(hoursField.value);
+  hoursField.value = JSON.stringify(normalized);
+  hoursField.classList.add("is-hidden");
+  hoursField.setAttribute("aria-hidden", "true");
+
+  const label = wrapper.querySelector("span");
+  if (label) {
+    label.textContent = "Horarios de funcionamento";
+  }
+
+  let card = wrapper.querySelector(".business-hours-card");
+  if (!card) {
+    card = document.createElement("section");
+    card.className = "business-hours-card";
+    wrapper.appendChild(card);
+  }
+
+  card.innerHTML = `
+    <div class="business-hours-card__header">
+      <div>
+        <strong class="list-item-title">Expediente da loja</strong>
+        <p class="muted-copy">Defina um turno simples ou dois turnos com pausa para almoco.</p>
+      </div>
+      <button class="btn btn-secondary" type="button" id="open-business-hours-editor">Editar horarios</button>
+    </div>
+    <div id="business-hours-summary" class="business-hours-summary">
+      ${renderBusinessHoursSummary(normalized)}
+    </div>
+  `;
+}
+
+function openBusinessHoursEditor() {
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!hoursField) return;
+
+  const normalized = normalizeBusinessHours(hoursField.value);
+  let modalRoot = qs("#admin-hours-modal-root");
+  if (!modalRoot) {
+    modalRoot = document.createElement("div");
+    modalRoot.id = "admin-hours-modal-root";
+    document.body.appendChild(modalRoot);
+  }
+
+  modalRoot.innerHTML = `
+    <div class="editor-backdrop" id="hours-editor-backdrop"></div>
+    <section class="editor-shell hours-editor-shell" role="dialog" aria-modal="true" aria-labelledby="hours-editor-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">Atendimento da loja</span>
+          <h2 id="hours-editor-title">Horarios de funcionamento</h2>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-hours-editor">Fechar</button>
+      </header>
+      <div class="editor-body hours-editor-body">
+        <p class="muted-copy">Escolha um horario continuo ou ative a pausa de almoco para cadastrar dois turnos no mesmo dia.</p>
+        <div class="hours-editor-grid">
+          ${BUSINESS_HOURS_DAYS.map((day) => {
+            const draft = getBusinessHoursDayDraft(normalized[day.key]);
+            return `
+              <article class="hours-day-card ${draft.closed ? "is-closed" : ""} ${draft.split ? "has-split" : ""}" data-hours-day="${escapeHtml(day.key)}">
+                <div class="hours-day-card__header">
+                  <strong>${escapeHtml(day.label)}</strong>
+                  <label class="hours-day-toggle">
+                    <input type="checkbox" data-hours-closed ${draft.closed ? "checked" : ""} />
+                    <span>Fechado</span>
+                  </label>
+                </div>
+                <div class="hours-day-card__body">
+                  <label class="hours-day-split">
+                    <input type="checkbox" data-hours-split ${draft.split ? "checked" : ""} ${draft.closed ? "disabled" : ""} />
+                    <span>Com pausa para almoco</span>
+                  </label>
+                  <div class="hours-time-grid">
+                    <label class="admin-field">
+                      <span>Inicio</span>
+                      <input type="time" data-hours-morning-start value="${escapeHtml(draft.morningStart)}" ${draft.closed ? "disabled" : ""} />
+                    </label>
+                    <label class="admin-field">
+                      <span>Fim</span>
+                      <input type="time" data-hours-morning-end value="${escapeHtml(draft.morningEnd)}" ${draft.closed ? "disabled" : ""} />
+                    </label>
+                  </div>
+                  <div class="hours-time-grid hours-time-grid--split">
+                    <label class="admin-field">
+                      <span>Retorno</span>
+                      <input type="time" data-hours-afternoon-start value="${escapeHtml(draft.afternoonStart)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                    </label>
+                    <label class="admin-field">
+                      <span>Encerramento</span>
+                      <input type="time" data-hours-afternoon-end value="${escapeHtml(draft.afternoonEnd)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                    </label>
+                  </div>
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </div>
+      <footer class="editor-footer">
+        <div class="editor-footer-actions">
+          <button class="btn btn-secondary" type="button" id="cancel-hours-editor">Cancelar</button>
+          <button class="btn btn-primary" type="button" id="apply-hours-editor">Aplicar horarios</button>
+        </div>
+      </footer>
+    </section>
+  `;
+
+  qsa("[data-hours-day]", modalRoot).forEach(syncBusinessHoursDayCard);
+  qs("#hours-editor-backdrop")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#close-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#cancel-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#apply-hours-editor")?.addEventListener("click", applyBusinessHoursEditor);
+
+  modalRoot.addEventListener("change", (event) => {
+    const card = event.target.closest("[data-hours-day]");
+    if (!card) return;
+    syncBusinessHoursDayCard(card);
+  });
+}
+
+function syncBusinessHoursDayCard(card) {
+  const closedInput = qs("[data-hours-closed]", card);
+  const splitInput = qs("[data-hours-split]", card);
+  const morningStart = qs("[data-hours-morning-start]", card);
+  const morningEnd = qs("[data-hours-morning-end]", card);
+  const afternoonStart = qs("[data-hours-afternoon-start]", card);
+  const afternoonEnd = qs("[data-hours-afternoon-end]", card);
+  const isClosed = Boolean(closedInput?.checked);
+  const hasSplit = Boolean(splitInput?.checked) && !isClosed;
+
+  card.classList.toggle("is-closed", isClosed);
+  card.classList.toggle("has-split", hasSplit);
+
+  if (splitInput) splitInput.disabled = isClosed;
+  [morningStart, morningEnd].forEach((input) => {
+    if (input) input.disabled = isClosed;
+  });
+  [afternoonStart, afternoonEnd].forEach((input) => {
+    if (input) input.disabled = isClosed || !hasSplit;
+  });
+}
+
+function applyBusinessHoursEditor() {
+  const modalRoot = qs("#admin-hours-modal-root");
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!modalRoot || !hoursField) return;
+
+  const nextValue = {};
+
+  for (const day of BUSINESS_HOURS_DAYS) {
+    const card = qs(`[data-hours-day="${day.key}"]`, modalRoot);
+    if (!card) continue;
+
+    const closed = qs("[data-hours-closed]", card)?.checked;
+    const split = qs("[data-hours-split]", card)?.checked;
+    if (closed) {
+      nextValue[day.key] = [];
+      continue;
+    }
+
+    const morningStart = normalizeTimeValue(qs("[data-hours-morning-start]", card)?.value, "09:00");
+    const morningEnd = normalizeTimeValue(qs("[data-hours-morning-end]", card)?.value, "18:00");
+
+    if (!isBusinessHoursRangeValid(morningStart, morningEnd)) {
+      showToast(`Revise o primeiro turno de ${day.label}.`, "warning");
+      return;
+    }
+
+    const periods = [{ start: morningStart, end: morningEnd }];
+
+    if (split) {
+      const afternoonStart = normalizeTimeValue(qs("[data-hours-afternoon-start]", card)?.value, "13:00");
+      const afternoonEnd = normalizeTimeValue(qs("[data-hours-afternoon-end]", card)?.value, "18:00");
+
+      if (!isBusinessHoursRangeValid(afternoonStart, afternoonEnd)) {
+        showToast(`Revise o segundo turno de ${day.label}.`, "warning");
+        return;
+      }
+
+      if (timeToMinutes(afternoonStart) <= timeToMinutes(morningEnd)) {
+        showToast(`A pausa de ${day.label} precisa comecar depois do primeiro turno.`, "warning");
+        return;
+      }
+
+      periods.push({ start: afternoonStart, end: afternoonEnd });
+    }
+
+    nextValue[day.key] = periods;
+  }
+
+  hoursField.value = JSON.stringify(nextValue);
+  qs("#business-hours-summary")?.replaceChildren();
+  const summary = qs("#business-hours-summary");
+  if (summary) {
+    summary.innerHTML = renderBusinessHoursSummary(nextValue);
+  }
+
+  markAdminFormDirty("settings");
+  closeBusinessHoursEditor();
+}
+
+function closeBusinessHoursEditor() {
+  qs("#admin-hours-modal-root")?.remove();
 }
 
 initAdmin();

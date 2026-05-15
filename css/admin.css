@@ -569,6 +569,7 @@ th {
   max-height: 92vh;
   margin: auto;
   overflow: auto;
+  overscroll-behavior: contain;
   border-radius: 20px 20px 0 0;
 }
 
@@ -813,6 +814,135 @@ th {
   gap: 10px;
 }
 
+.business-hours-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--admin-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 246, 241, 0.92)),
+    linear-gradient(135deg, rgba(188, 169, 139, 0.08), rgba(17, 17, 17, 0.02));
+}
+
+.business-hours-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.business-hours-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.business-hours-summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.business-hours-summary__row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.business-hours-summary__row strong {
+  font-size: 0.92rem;
+}
+
+.business-hours-summary__row span {
+  color: var(--admin-text-soft);
+  text-align: right;
+}
+
+.hours-editor-shell {
+  max-width: 980px;
+}
+
+.hours-editor-shell .editor-footer {
+  padding-top: 22px;
+  padding-bottom: 22px;
+}
+
+.hours-editor-shell .editor-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.hours-editor-shell .editor-footer-actions .btn {
+  min-width: 146px;
+  padding-inline: 22px;
+}
+
+.hours-editor-body {
+  display: grid;
+  gap: 18px;
+}
+
+.hours-editor-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.hours-day-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface-strong);
+}
+
+.hours-day-card.is-closed {
+  background: color-mix(in srgb, var(--admin-surface-muted) 72%, #ffffff);
+}
+
+.hours-day-card__header,
+.hours-day-toggle,
+.hours-day-split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hours-day-toggle,
+.hours-day-split {
+  font-size: 0.92rem;
+  color: var(--admin-text-soft);
+}
+
+.hours-day-card__body {
+  display: grid;
+  gap: 12px;
+}
+
+.hours-day-card.is-closed .hours-day-card__body {
+  opacity: 0.5;
+}
+
+.hours-time-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hours-time-grid--split {
+  display: none;
+}
+
+.hours-day-card.has-split .hours-time-grid--split {
+  display: grid;
+}
+
 .upload-chip,
 .tag-chip,
 .selection-chip {
@@ -915,6 +1045,46 @@ th {
   .editor-content {
     grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
     align-items: start;
+  }
+}
+
+@media (max-width: 759px) {
+  .hours-editor-shell .editor-footer-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: grid;
+    gap: 12px;
+  }
+
+  .hours-editor-shell .editor-footer-actions .btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .business-hours-card__header,
+  .hours-day-card__header {
+    grid-template-columns: 1fr;
+  }
+
+  .business-hours-card__header,
+  .hours-day-card__header,
+  .hours-day-toggle,
+  .hours-day-split {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .hours-time-grid,
+  .hours-day-card.has-split .hours-time-grid--split {
+    grid-template-columns: 1fr;
+  }
+
+  .business-hours-summary__row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .business-hours-summary__row span {
+    text-align: left;
   }
 }
 
