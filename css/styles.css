@@ -142,8 +142,8 @@ a {
 }
 
 .brand-logo-shell {
-  width: 56px;
-  height: 56px;
+  width: 75px;
+  height: 75px;
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-primary) 90%, #232323 10%);
   overflow: hidden;
