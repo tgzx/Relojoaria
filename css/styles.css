@@ -1635,7 +1635,7 @@ a {
   }
 
   .products-rail {
-    --mobile-rail-card-width: min(78vw, 292px);
+    --mobile-rail-card-width: min(66vw, 248px);
     width: 100vw;
     max-width: 100vw;
     margin-inline: calc(50% - 50vw);
@@ -1680,6 +1680,12 @@ a {
   .products-grid--catalog,
   .product-skeleton-grid {
     grid-template-columns: 1fr;
+  }
+
+  .products-grid--catalog .product-card,
+  .product-skeleton-grid .product-card-skeleton {
+    width: min(75%, 280px);
+    justify-self: center;
   }
 
   .footer-shell {

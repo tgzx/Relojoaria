@@ -1865,10 +1865,39 @@ function renderProductEditor() {
               </label>
               ${
                 adminState.pendingProductFiles.length
-                  ? `<div class="upload-list">${adminState.pendingProductFiles
-                      .map((file) => `<span class="upload-chip">${escapeHtml(file.name)}</span>`)
-                      .join("")}</div>`
-                  : ""
+                  ? `
+                    <div class="list-stack">
+                      ${adminState.pendingProductFiles
+                        .map(
+                          (file, index) => `
+                            <article class="list-item">
+                              <div class="list-item-header">
+                                <div>
+                                  <strong>${escapeHtml(file.name)}</strong>
+                                  <span class="list-item-subtitle">
+                                    ${escapeHtml(formatFileSize(file.size))}
+                                    ${
+                                      !(draft.images || []).some((image) => image.is_primary) && index === 0
+                                        ? " · Sera a principal se nao houver outra definida."
+                                        : ""
+                                    }
+                                  </span>
+                                </div>
+                                <button
+                                  class="btn btn-danger"
+                                  type="button"
+                                  data-remove-pending-image="${escapeHtml(getPendingProductFileKey(file))}"
+                                >
+                                  Remover da fila
+                                </button>
+                              </div>
+                            </article>
+                          `
+                        )
+                        .join("")}
+                    </div>
+                  `
+                  : `<span class="list-item-subtitle">Nenhum arquivo selecionado ainda. As imagens serao enviadas quando voce salvar o produto.</span>`
               }
               <div class="list-stack">
                 ${(draft.images || [])
@@ -1959,7 +1988,9 @@ function bindProductEditorEvents() {
   qs("#save-draft-product")?.addEventListener("click", () => saveProduct(false));
   qs("#save-publish-product")?.addEventListener("click", () => saveProduct(true));
   qs("#product-images-input")?.addEventListener("change", (event) => {
-    adminState.pendingProductFiles = Array.from(event.currentTarget.files || []);
+    persistEditorDraftFromDom();
+    queuePendingProductFiles(Array.from(event.currentTarget.files || []));
+    event.currentTarget.value = "";
     renderProductEditor();
   });
   qs("#product-editor-form [name='name']")?.addEventListener("input", (event) => {
@@ -1979,6 +2010,62 @@ function bindProductEditorEvents() {
   qsa("[data-primary-image]").forEach((button) =>
     button.addEventListener("click", () => setPrimaryProductImage(button.dataset.primaryImage))
   );
+  qsa("[data-remove-pending-image]").forEach((button) =>
+    button.addEventListener("click", () => removePendingProductFile(button.dataset.removePendingImage))
+  );
+}
+
+function getPendingProductFileKey(file) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function queuePendingProductFiles(files = []) {
+  const existingKeys = new Set(adminState.pendingProductFiles.map((file) => getPendingProductFileKey(file)));
+
+  files.forEach((file) => {
+    if (!(file instanceof File)) return;
+    const key = getPendingProductFileKey(file);
+    if (existingKeys.has(key)) return;
+    existingKeys.add(key);
+    adminState.pendingProductFiles.push(file);
+  });
+}
+
+function removePendingProductFile(fileKey) {
+  adminState.pendingProductFiles = adminState.pendingProductFiles.filter(
+    (file) => getPendingProductFileKey(file) !== fileKey
+  );
+  renderProductEditor();
+}
+
+function formatFileSize(size = 0) {
+  if (!Number.isFinite(size) || size <= 0) return "Arquivo sem tamanho informado";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getProductImageUploadErrorMessage(error, fileName = "") {
+  const rawMessage = error?.message || "Falha desconhecida ao enviar a imagem.";
+  const message = rawMessage.toLowerCase();
+
+  if (message.includes("bucket") && message.includes("not found")) {
+    return "Crie o bucket 'product-images' no Supabase antes de enviar imagens de produto.";
+  }
+
+  if (message.includes("row-level security") || message.includes("not allowed")) {
+    return "O Supabase bloqueou o upload da imagem. Revise as policies do bucket 'product-images'.";
+  }
+
+  if (message.includes("mime") || message.includes("content type")) {
+    return `O arquivo ${fileName || "selecionado"} nao foi aceito pelo Supabase.`;
+  }
+
+  if (message.includes("product_images") || message.includes("foreign key")) {
+    return `A imagem subiu, mas nao foi vinculada ao produto${fileName ? ` (${fileName})` : ""}. Revise a tabela product_images e as policies.`;
+  }
+
+  return fileName ? `Falha ao enviar ${fileName}: ${rawMessage}` : rawMessage;
 }
 
 function persistEditorDraftFromDom() {
@@ -2034,6 +2121,7 @@ function closeProductEditor() {
 async function saveProduct(publish) {
   persistEditorDraftFromDom();
   const draft = adminState.editingProduct;
+  let savedProduct = null;
 
   if (!draft.name.trim()) {
     showToast("Nome do produto é obrigatório.", "warning");
@@ -2061,12 +2149,20 @@ async function saveProduct(publish) {
   };
 
   try {
-    const savedProduct = draft.id
+    savedProduct = draft.id
       ? await adminUpdateProduct(draft.id, payload)
       : await adminCreateProduct(payload);
 
+    adminState.editingProduct = {
+      ...draft,
+      ...savedProduct,
+      images: Array.isArray(savedProduct.images) ? savedProduct.images : draft.images || []
+    };
+
     if (adminState.pendingProductFiles.length) {
-      await uploadProductImages(savedProduct);
+      const createdImages = await uploadProductImages(savedProduct);
+      adminState.editingProduct.images = [...(adminState.editingProduct.images || []), ...createdImages];
+      adminState.pendingProductFiles = [];
     }
 
     await adminCreateAuditLog({
@@ -2083,25 +2179,58 @@ async function saveProduct(publish) {
     await refreshAllData();
   } catch (error) {
     console.error(error);
+    if (savedProduct?.id) {
+      adminState.editingProduct = {
+        ...(adminState.editingProduct || draft),
+        ...savedProduct,
+        images: adminState.editingProduct?.images || savedProduct.images || []
+      };
+      renderProductEditor();
+      showToast(
+        error.message || "Produto salvo, mas houve um problema ao enviar ou vincular a imagem.",
+        "danger"
+      );
+      return;
+    }
     showToast(error.message || "Não foi possível salvar o produto.", "danger");
   }
 }
 
 async function uploadProductImages(product) {
-  const existingImages = product.images || [];
-  for (let index = 0; index < adminState.pendingProductFiles.length; index += 1) {
-    const file = adminState.pendingProductFiles[index];
-    const upload = await uploadProductImage(file, adminState.store.id, product.id);
-    await createProductImageRecord({
-      store_id: adminState.store.id,
-      product_id: product.id,
-      image_url: upload.publicUrl,
-      storage_path: upload.path,
-      alt_text: product.name,
-      is_primary: !existingImages.length && index === 0,
-      sort_order: existingImages.length + index
-    });
+  const existingImages = [...(adminState.editingProduct?.images || product.images || [])];
+  const createdImages = [];
+  const filesToUpload = [...adminState.pendingProductFiles];
+
+  for (let index = 0; index < filesToUpload.length; index += 1) {
+    const file = filesToUpload[index];
+    try {
+      const upload = await uploadProductImage(file, adminState.store.id, product.id);
+      const createdImage = await createProductImageRecord({
+        store_id: adminState.store.id,
+        product_id: product.id,
+        image_url: upload.publicUrl,
+        storage_path: upload.path,
+        alt_text: product.name,
+        is_primary: !existingImages.some((image) => image.is_primary) && index === 0,
+        sort_order: existingImages.length
+      });
+
+      createdImages.push(createdImage);
+      existingImages.push(createdImage);
+
+      if (adminState.editingProduct) {
+        adminState.editingProduct.images = [...existingImages];
+      }
+
+      adminState.pendingProductFiles = adminState.pendingProductFiles.filter(
+        (pendingFile) => getPendingProductFileKey(pendingFile) !== getPendingProductFileKey(file)
+      );
+    } catch (error) {
+      throw new Error(getProductImageUploadErrorMessage(error, file?.name));
+    }
   }
+
+  return createdImages;
 }
 
 async function setPrimaryProductImage(imageId) {
@@ -2125,8 +2254,20 @@ async function setPrimaryProductImage(imageId) {
 async function removeExistingProductImage(imageId) {
   const proceed = window.confirm("Remover esta imagem do produto?");
   if (!proceed) return;
+  const currentImages = adminState.editingProduct.images || [];
+  const removedImage = currentImages.find((image) => image.id === imageId);
   await adminDeleteProductImage(imageId);
-  adminState.editingProduct.images = (adminState.editingProduct.images || []).filter((image) => image.id !== imageId);
+  let remainingImages = currentImages.filter((image) => image.id !== imageId);
+
+  if (removedImage?.is_primary && remainingImages.length) {
+    await adminUpdateProductImage(remainingImages[0].id, { is_primary: true });
+    remainingImages = remainingImages.map((image, index) => ({
+      ...image,
+      is_primary: index === 0
+    }));
+  }
+
+  adminState.editingProduct.images = remainingImages;
   showToast("Imagem removida.", "warning");
   renderProductEditor();
 }
