@@ -115,6 +115,12 @@ const adminState = {
     sectionId: ""
   },
   isLoadingAdminData: false,
+  isAdminDataLoadQueued: false,
+  hasLoadedAdminData: false,
+  lastLoadedUserId: null,
+  hasUnsavedAdminFormChanges: false,
+  dirtyAdminTab: null,
+  pendingBackgroundRender: false,
   isSavingProduct: false,
   productSaveMode: null
 };
@@ -138,14 +144,70 @@ function registerGlobalDebugHandlers() {
     console.error("Promise rejeitada sem catch", {
       reason: event.reason?.message || String(event.reason)
     });
-  });
+  }, 0);
+}
+
+function resetAdminSessionState() {
+  adminState.isLoadingAdminData = false;
+  adminState.isAdminDataLoadQueued = false;
+  adminState.hasLoadedAdminData = false;
+  adminState.lastLoadedUserId = null;
+  adminState.hasUnsavedAdminFormChanges = false;
+  adminState.dirtyAdminTab = null;
+  adminState.pendingBackgroundRender = false;
+}
+
+function markAdminFormDirty(tabId = adminState.currentAdminTab) {
+  adminState.hasUnsavedAdminFormChanges = true;
+  adminState.dirtyAdminTab = tabId;
+}
+
+function clearAdminFormDirty(tabId = null) {
+  if (tabId && adminState.dirtyAdminTab && adminState.dirtyAdminTab !== tabId) {
+    return;
+  }
+
+  adminState.hasUnsavedAdminFormChanges = false;
+  adminState.dirtyAdminTab = null;
+}
+
+function bindDirtyFormState(selector, tabId = adminState.currentAdminTab) {
+  const form = qs(selector);
+  if (!form) return;
+
+  const markDirty = () => markAdminFormDirty(tabId);
+  form.addEventListener("input", markDirty);
+  form.addEventListener("change", markDirty);
+}
+
+function renderAdminLayoutFromBackground() {
+  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === adminState.currentAdminTab) {
+    adminState.pendingBackgroundRender = true;
+    return;
+  }
+
+  adminState.pendingBackgroundRender = false;
+  renderAdminLayout();
 }
 
 function triggerAdminDataLoad() {
-  if (adminState.isLoadingAdminData) {
+  const sessionUserId = adminState.session?.user?.id;
+  if (!sessionUserId) {
     return;
   }
-  queueMicrotask(() => {
+  if (adminState.isLoadingAdminData || adminState.isAdminDataLoadQueued) {
+    return;
+  }
+  if (
+    adminState.hasLoadedAdminData &&
+    adminState.lastLoadedUserId === sessionUserId &&
+    adminState.store
+  ) {
+    return;
+  }
+  adminState.isAdminDataLoadQueued = true;
+  window.setTimeout(() => {
+    adminState.isAdminDataLoadQueued = false;
     loadAdminData().catch((error) => {
       console.error("Erro não tratado em loadAdminData", error.message || String(error));
     });
@@ -163,15 +225,27 @@ async function initAdmin() {
   supabase.auth.onAuthStateChange((event, session) => {
     adminState.session = session;
     if (!session || event === "SIGNED_OUT") {
+      resetAdminSessionState();
       renderLogin();
       return;
     }
 
-    if (event === "TOKEN_REFRESHED" && adminState.store) {
+    if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
       return;
     }
 
-    if (["INITIAL_SESSION", "SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
+    const sameLoadedUser =
+      adminState.hasLoadedAdminData &&
+      adminState.lastLoadedUserId === session.user.id &&
+      adminState.store;
+
+    if (sameLoadedUser) {
+      return;
+    }
+
+    if (["SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
+      adminState.hasLoadedAdminData = false;
+      adminState.lastLoadedUserId = null;
       triggerAdminDataLoad();
     }
   });
@@ -182,16 +256,20 @@ async function initAdmin() {
 async function requireAuth() {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
+    resetAdminSessionState();
     renderLogin();
     return;
   }
 
   adminState.session = data.session;
   if (!data.session) {
+    resetAdminSessionState();
     renderLogin();
     return;
   }
 
+  adminState.hasLoadedAdminData = false;
+  adminState.lastLoadedUserId = null;
   triggerAdminDataLoad();
 }
 
@@ -200,6 +278,7 @@ async function loadAdminData() {
     return;
   }
 
+  const sessionUserId = adminState.session?.user?.id || null;
   adminState.isLoadingAdminData = true;
 
   try {
@@ -258,10 +337,11 @@ async function loadAdminData() {
     adminState.banners = banners || [];
     adminState.notifications = notifications || [];
     adminState.pushSummary = pushSummary || { count: 0, data: [] };
+    adminState.hasLoadedAdminData = true;
+    adminState.lastLoadedUserId = sessionUserId;
 
     setThemeVariables(settings || {}, { context: "admin" });
-    await refreshStaleSections(true);
-    renderAdminLayout();
+    renderAdminLayoutFromBackground();
   } catch (error) {
     console.error(error);
     renderLoadError(
@@ -1497,6 +1577,8 @@ function renderPreview() {
 function bindAdminLayoutEvents() {
   qsa("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", () => {
+      clearAdminFormDirty();
+      adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.adminTab;
       renderAdminLayout();
     });
@@ -1533,6 +1615,8 @@ function bindAdminLayoutEvents() {
 
   qsa("[data-go-tab]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty();
+      adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.goTab;
       renderAdminLayout();
     })
@@ -1598,13 +1682,16 @@ function bindProductsTab() {
 }
 
 function bindSectionTab() {
+  bindDirtyFormState("#section-form", "sections");
   qs("#new-section-button")?.addEventListener("click", () => {
+    clearAdminFormDirty("sections");
     adminState.editingSection = createEmptySectionDraft();
     renderAdminLayout();
   });
 
   qsa("[data-edit-section]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("sections");
       adminState.currentAdminTab = "sections";
       adminState.editingSection = structuredClone(
         adminState.sections.find((item) => item.id === button.dataset.editSection) || createEmptySectionDraft()
@@ -1625,13 +1712,16 @@ function bindSectionTab() {
 }
 
 function bindCategoryTab() {
+  bindDirtyFormState("#category-form", "categories");
   qs("#category-form")?.addEventListener("submit", saveCategory);
   qs("#reset-category-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("categories");
     adminState.editingCategory = createEmptyCategoryDraft();
     renderAdminLayout();
   });
   qsa("[data-edit-category]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("categories");
       adminState.editingCategory = structuredClone(
         adminState.categories.find((item) => item.id === button.dataset.editCategory) || createEmptyCategoryDraft()
       );
@@ -1644,13 +1734,16 @@ function bindCategoryTab() {
 }
 
 function bindBrandTab() {
+  bindDirtyFormState("#brand-form", "brands");
   qs("#brand-form")?.addEventListener("submit", saveBrand);
   qs("#reset-brand-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("brands");
     adminState.editingBrand = createEmptyBrandDraft();
     renderAdminLayout();
   });
   qsa("[data-edit-brand]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("brands");
       adminState.editingBrand = structuredClone(
         adminState.brands.find((item) => item.id === button.dataset.editBrand) || createEmptyBrandDraft()
       );
@@ -1663,17 +1756,21 @@ function bindBrandTab() {
 }
 
 function bindAppearanceTab() {
+  bindDirtyFormState("#banner-form", "appearance");
   qs("#banner-form")?.addEventListener("submit", saveBanner);
   qs("#banner-upload-input")?.addEventListener("change", (event) => {
     adminState.pendingBannerFile = event.currentTarget.files?.[0] || null;
+    markAdminFormDirty("appearance");
   });
   qs("#reset-banner-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("appearance");
     adminState.editingBanner = createEmptyBannerDraft();
     adminState.pendingBannerFile = null;
     renderAdminLayout();
   });
   qsa("[data-edit-banner]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("appearance");
       adminState.editingBanner = structuredClone(
         adminState.banners.find((item) => item.id === button.dataset.editBanner) || createEmptyBannerDraft()
       );
@@ -1686,6 +1783,7 @@ function bindAppearanceTab() {
 }
 
 function bindNotificationsTab() {
+  bindDirtyFormState("#notification-form", "notifications");
   qs("#notification-form")?.addEventListener("submit", saveNotification);
   qsa("[data-send-notification]").forEach((button) =>
     button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
@@ -1693,6 +1791,7 @@ function bindNotificationsTab() {
 }
 
 function bindSettingsTab() {
+  bindDirtyFormState("#settings-form", "settings");
   qs("#settings-form")?.addEventListener("submit", saveSettings);
 }
 
@@ -2378,6 +2477,7 @@ async function applyBulkAction(action) {
 
 async function saveSection(event) {
   event.preventDefault();
+  clearAdminFormDirty("sections");
   const form = event.currentTarget;
   const formData = new FormData(form);
   const selectedProductIds = formData.getAll("selectedProductIds").map(String);
@@ -2443,6 +2543,7 @@ function isSectionStale(section) {
 
 async function saveCategory(event) {
   event.preventDefault();
+  clearAdminFormDirty("categories");
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveCategory({
@@ -2471,6 +2572,7 @@ async function removeCategory(categoryId) {
 
 async function saveBrand(event) {
   event.preventDefault();
+  clearAdminFormDirty("brands");
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveBrand({
@@ -2499,6 +2601,7 @@ async function removeBrand(brandId) {
 
 async function saveBanner(event) {
   event.preventDefault();
+  clearAdminFormDirty("appearance");
   const form = event.currentTarget;
   const data = new FormData(form);
   let imageUrl = String(data.get("image_url") || "");
@@ -2545,6 +2648,7 @@ async function removeBanner(bannerId) {
 
 async function saveNotification(event) {
   event.preventDefault();
+  clearAdminFormDirty("notifications");
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveNotification({
@@ -2575,6 +2679,7 @@ async function sendNotification(notificationId) {
 
 async function saveSettings(event) {
   event.preventDefault();
+  clearAdminFormDirty("settings");
   const form = event.currentTarget;
   const data = new FormData(form);
 
@@ -2634,6 +2739,7 @@ async function refreshAllData() {
   adminState.banners = banners || [];
   adminState.notifications = notifications || [];
   adminState.pushSummary = pushSummary || { count: 0, data: [] };
+  adminState.pendingBackgroundRender = false;
 
   renderAdminLayout();
 }
