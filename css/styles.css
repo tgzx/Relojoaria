@@ -466,10 +466,11 @@ a {
 .products-rail,
 .section-nav-track {
   display: flex;
+  align-items: center;
   gap: 12px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 4px;
+  padding-bottom: 0;
 }
 
 .brand-rail::-webkit-scrollbar,
@@ -539,11 +540,10 @@ a {
   position: sticky;
   top: calc(var(--header-height) - 1px);
   z-index: 30;
-  padding: 4px 0 12px;
+  padding: 6px 0;
   background: rgba(246, 239, 229, 0.96);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(17, 24, 39, 0.06);
-  box-shadow: 0 16px 26px rgba(246, 239, 229, 0.78);
 }
 
 .chip {

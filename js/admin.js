@@ -110,16 +110,52 @@ const adminState = {
     categoryId: "",
     brandId: "",
     sectionId: ""
-  }
+  },
+  isLoadingAdminData: false
 };
 
+let globalDebugHandlersRegistered = false;
+
+function registerGlobalDebugHandlers() {
+  if (globalDebugHandlersRegistered) return;
+  globalDebugHandlersRegistered = true;
+
+  window.addEventListener("error", (event) => {
+    console.error("Erro global capturado", {
+      message: event.message,
+      source: event.filename,
+      line: event.lineno,
+      column: event.colno
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("Promise rejeitada sem catch", {
+      reason: event.reason?.message || String(event.reason)
+    });
+  });
+}
+
+function triggerAdminDataLoad() {
+  if (adminState.isLoadingAdminData) {
+    return;
+  }
+  queueMicrotask(() => {
+    loadAdminData().catch((error) => {
+      console.error("Erro não tratado em loadAdminData", error.message || String(error));
+    });
+  });
+}
+
 async function initAdmin() {
+  registerGlobalDebugHandlers();
+
   if (APP_CONFIG.SUPABASE_URL.startsWith("COLE_AQUI") || APP_CONFIG.SUPABASE_ANON_KEY.startsWith("COLE_AQUI")) {
     renderSetupMessage();
     return;
   }
 
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  supabase.auth.onAuthStateChange((event, session) => {
     adminState.session = session;
     if (!session || event === "SIGNED_OUT") {
       renderLogin();
@@ -131,7 +167,7 @@ async function initAdmin() {
     }
 
     if (["INITIAL_SESSION", "SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
-      await loadAdminData();
+      triggerAdminDataLoad();
     }
   });
 
@@ -151,14 +187,34 @@ async function requireAuth() {
     return;
   }
 
-  await loadAdminData();
+  triggerAdminDataLoad();
 }
 
 async function loadAdminData() {
-  try {
-    const [profile, memberships] = await Promise.all([getCurrentUserProfile(), getMyStoreMemberships()]);
-    const membership = memberships.find((item) => ["owner", "manager"].includes(item.role) && item.store?.is_active);
+  if (adminState.isLoadingAdminData) {
+    return;
+  }
 
+  adminState.isLoadingAdminData = true;
+
+  try {
+    // Timeout helper
+    const withTimeout = (promise, timeoutMs, label) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} demorou mais de ${timeoutMs / 1000}s`)), timeoutMs)
+        )
+      ]);
+    };
+
+    const profilePromise = withTimeout(getCurrentUserProfile(), 10000, "getCurrentUserProfile");
+    const profile = await profilePromise;
+
+    const membershipsPromise = withTimeout(getMyStoreMemberships(), 10000, "getMyStoreMemberships");
+    const memberships = await membershipsPromise;
+
+    const membership = memberships.find((item) => ["owner", "manager"].includes(item.role) && item.store?.is_active);
     adminState.profile = profile;
     adminState.membership = membership || null;
 
@@ -169,17 +225,25 @@ async function loadAdminData() {
 
     adminState.store = membership.store;
 
-    const [settings, productsRes, categories, brands, sections, banners, notifications, pushSummary] =
-      await Promise.all([
-        getStoreSettings(membership.store.id).catch(() => null),
-        adminListProducts(membership.store.id, adminState.productFilters),
-        adminListCategories(membership.store.id),
-        adminListBrands(membership.store.id),
-        adminListSections(membership.store.id),
-        adminListBanners(membership.store.id),
-        adminListNotifications(membership.store.id),
-        adminListPushSubscriptionsSummary(membership.store.id)
-      ]);
+    const settingsPromise = withTimeout(getStoreSettings(membership.store.id).catch(() => null), 10000, "getStoreSettings");
+    const productsPromise = withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListProducts");
+    const categoriesPromise = withTimeout(adminListCategories(membership.store.id), 10000, "adminListCategories");
+    const brandsPromise = withTimeout(adminListBrands(membership.store.id), 10000, "adminListBrands");
+    const sectionsPromise = withTimeout(adminListSections(membership.store.id), 10000, "adminListSections");
+    const bannersPromise = withTimeout(adminListBanners(membership.store.id), 10000, "adminListBanners");
+    const notificationsPromise = withTimeout(adminListNotifications(membership.store.id), 10000, "adminListNotifications");
+    const pushSummaryPromise = withTimeout(adminListPushSubscriptionsSummary(membership.store.id), 10000, "adminListPushSubscriptionsSummary");
+
+    const [settings, productsRes, categories, brands, sections, banners, notifications, pushSummary] = await Promise.all([
+      settingsPromise,
+      productsPromise,
+      categoriesPromise,
+      brandsPromise,
+      sectionsPromise,
+      bannersPromise,
+      notificationsPromise,
+      pushSummaryPromise
+    ]);
 
     adminState.settings = settings;
     adminState.products = productsRes.data || [];
@@ -195,8 +259,12 @@ async function loadAdminData() {
     renderAdminLayout();
   } catch (error) {
     console.error(error);
-    showToast(error.message || "Não foi possível carregar o painel.", "danger");
-    renderLogin();
+    renderLoadError(
+      error.message || "Não foi possível carregar o painel.",
+      () => triggerAdminDataLoad()
+    );
+  } finally {
+    adminState.isLoadingAdminData = false;
   }
 }
 
@@ -253,6 +321,25 @@ function renderAccessDenied() {
     </div>
   `;
 
+  qs("#logout-button")?.addEventListener("click", handleLogout);
+}
+
+function renderLoadError(errorMessage, onRetry) {
+  qs("#admin-root").innerHTML = `
+    <div class="auth-screen">
+      <section class="auth-card">
+        <span class="section-kicker">Erro de carregamento</span>
+        <h1>Não foi possível carregar o painel</h1>
+        <p>${errorMessage}</p>
+        <div class="auth-actions">
+          <button class="btn btn-primary" type="button" id="retry-button">Tentar novamente</button>
+          <button class="btn btn-secondary" type="button" id="logout-button">Sair</button>
+        </div>
+      </section>
+    </div>
+  `;
+
+  qs("#retry-button")?.addEventListener("click", onRetry);
   qs("#logout-button")?.addEventListener("click", handleLogout);
 }
 
