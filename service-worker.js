@@ -1,5 +1,5 @@
-const STATIC_CACHE = "vitrinezap-static-v4";
-const HTML_CACHE = "vitrinezap-html-v4";
+const STATIC_CACHE = "vitrinezap-static-v5";
+const HTML_CACHE = "vitrinezap-html-v5";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [
@@ -57,18 +57,37 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.endsWith("/css/styles.css") || url.pathname.endsWith("css/styles.css")) {
+  const isStorefrontStaticAsset =
+    request.destination === "script" ||
+    request.destination === "style" ||
+    url.pathname.endsWith("/manifest.json") ||
+    url.pathname.endsWith("manifest.json") ||
+    url.pathname.endsWith("/css/styles.css") ||
+    url.pathname.endsWith("css/styles.css") ||
+    url.pathname.endsWith("/js/config.js") ||
+    url.pathname.endsWith("js/config.js") ||
+    url.pathname.endsWith("/js/app.js") ||
+    url.pathname.endsWith("js/app.js") ||
+    url.pathname.endsWith("/js/storeApi.js") ||
+    url.pathname.endsWith("js/storeApi.js") ||
+    url.pathname.endsWith("/js/supabaseClient.js") ||
+    url.pathname.endsWith("js/supabaseClient.js") ||
+    url.pathname.endsWith("/js/utils.js") ||
+    url.pathname.endsWith("js/utils.js") ||
+    url.pathname.endsWith("/js/pwa.js") ||
+    url.pathname.endsWith("js/pwa.js") ||
+    url.pathname.endsWith("/js/push.js") ||
+    url.pathname.endsWith("js/push.js") ||
+    url.pathname.endsWith("/js/cartFuture.js") ||
+    url.pathname.endsWith("js/cartFuture.js");
+
+  if (isStorefrontStaticAsset) {
     event.respondWith(networkFirstStatic(request));
     return;
   }
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirstHtml(request));
-    return;
-  }
-
-  if (url.pathname.endsWith("/js/config.js") || url.pathname.endsWith("js/config.js")) {
-    event.respondWith(networkFirstConfig(request));
     return;
   }
 
@@ -118,18 +137,6 @@ async function cacheFirstAsset(request) {
       status: 503,
       statusText: "Offline"
     });
-  }
-}
-
-async function networkFirstConfig(request) {
-  const cache = await caches.open(STATIC_CACHE);
-
-  try {
-    const response = await fetch(request, { cache: "no-store" });
-    cache.put(request, response.clone());
-    return response;
-  } catch (error) {
-    return (await cache.match(request)) || fetch(request);
   }
 }
 

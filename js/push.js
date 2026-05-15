@@ -2,6 +2,18 @@ import { APP_CONFIG } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 import { qs, showToast } from "./utils.js";
 
+function setPushButtonLabel(button, isSubscribed) {
+  if (!button) return;
+
+  const fullLabel = isSubscribed ? "Desativar novidades" : "Receber novidades";
+  const compactLabel = isSubscribed ? "Silenciar" : "Novidades";
+
+  button.dataset.fullLabel = fullLabel;
+  button.dataset.compactLabel = compactLabel;
+  button.textContent = fullLabel;
+  window.dispatchEvent(new CustomEvent("vitrinezap:header-actions-update"));
+}
+
 export function isPushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
@@ -95,7 +107,7 @@ export async function registerPushButton(storeId, options = {}) {
   const existing = registration ? await registration.pushManager.getSubscription() : null;
 
   button.classList.remove("is-hidden");
-  button.textContent = existing ? "Desativar novidades" : "Receber novidades";
+  setPushButtonLabel(button, Boolean(existing));
 
   button.addEventListener("click", async () => {
     button.disabled = true;
@@ -106,11 +118,11 @@ export async function registerPushButton(storeId, options = {}) {
 
       if (current) {
         await unsubscribeFromPush();
-        button.textContent = "Receber novidades";
+        setPushButtonLabel(button, false);
         showToast("Notificações desativadas neste dispositivo.", "warning");
       } else {
         await subscribeUserToPush(storeId);
-        button.textContent = "Desativar novidades";
+        setPushButtonLabel(button, true);
         showToast("Novidades ativadas com sucesso.", "success");
       }
     } catch (error) {

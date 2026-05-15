@@ -66,8 +66,11 @@ const appState = {
   isOffline: !navigator.onLine,
   usingCachedData: false,
   currentModalProduct: null,
+  carouselCleanup: null,
   sectionNavCleanup: null,
-  activeSectionAnchor: ""
+  activeSectionAnchor: "",
+  storeStatus: null,
+  headerResizeObserver: null
 };
 
 async function initApp() {
@@ -145,6 +148,13 @@ function bindShellEvents() {
   window.addEventListener("resize", updateHeaderOffset);
   window.addEventListener("online", handleConnectivityChange);
   window.addEventListener("offline", handleConnectivityChange);
+  window.addEventListener("vitrinezap:header-actions-update", applyResponsiveHeaderActions);
+
+  const header = qs(".site-header");
+  if (header && "ResizeObserver" in window && !appState.headerResizeObserver) {
+    appState.headerResizeObserver = new ResizeObserver(() => updateHeaderOffset());
+    appState.headerResizeObserver.observe(header);
+  }
 }
 
 function debounceSearch(callback) {
@@ -180,7 +190,7 @@ function hydrateHomeState(home, usingCachedData) {
   appState.categories = home.categories || [];
   appState.usingCachedData = usingCachedData;
 
-  setThemeVariables(home.settings || {});
+  setThemeVariables(home.settings || {}, { context: "storefront" });
   renderStoreFrame();
   renderHero();
   renderDynamicSections();
@@ -207,9 +217,14 @@ function renderStoreFrame() {
     appState.store.description || "Explore os produtos e fale direto com a loja pelo WhatsApp.";
 
   const status = computeStoreStatus(appState.settings || {});
+  appState.storeStatus = status;
   const statusElement = qs("#store-status");
   statusElement.textContent = status.label;
   statusElement.className = status.className;
+  setResponsiveHeaderLabel(statusElement, {
+    fullLabel: status.label,
+    compactLabel: getCompactStatusLabel(status)
+  });
 
   if (appState.isEmbeddedPreview) {
     qs("#install-app-button")?.classList.add("is-hidden");
@@ -228,6 +243,14 @@ function renderStoreFrame() {
     }
     window.open(defaultWhatsApp, "_blank", "noopener");
   });
+  setResponsiveHeaderLabel(qs("#whatsapp-cta"), {
+    fullLabel: "Falar no WhatsApp",
+    compactLabel: "WhatsApp"
+  });
+  setResponsiveHeaderLabel(qs("#install-app-button"), {
+    fullLabel: "Instalar app",
+    compactLabel: "App"
+  });
 
   const footerWhatsApp = qs("#footer-whatsapp");
   footerWhatsApp.href = defaultWhatsApp;
@@ -237,6 +260,8 @@ function renderStoreFrame() {
     instagramLink.href = appState.settings.instagram_url;
     instagramLink.classList.remove("is-hidden");
   }
+
+  applyResponsiveHeaderActions();
 }
 
 function renderHero() {
@@ -345,12 +370,18 @@ function renderHero() {
 }
 
 function renderDynamicSections() {
+  appState.carouselCleanup?.();
+
   const root = qs("#dynamic-sections");
   root.innerHTML = appState.sections
     .map((section) => {
-      const layoutClass = section.layout === "grid" ? "products-grid products-grid--catalog" : "products-rail";
+      const layout = normalizeSectionLayout(section.layout);
       return `
-        <section class="container page-section" id="section-${escapeHtml(section.slug)}" data-section-anchor="${escapeHtml(section.slug)}">
+        <section
+          class="container page-section section-layout section-layout--${escapeHtml(layout)}"
+          id="section-${escapeHtml(section.slug)}"
+          data-section-anchor="${escapeHtml(section.slug)}"
+        >
           <div class="section-header">
             <div>
               <span class="section-kicker">${escapeHtml(section.type || "Vitrine")}</span>
@@ -362,13 +393,149 @@ function renderDynamicSections() {
               }
             </div>
           </div>
-          <div class="${layoutClass}">
-            ${(section.products || []).map((product) => renderProductCard(product)).join("")}
-          </div>
+          ${renderSectionProducts(section, layout)}
         </section>
       `;
     })
     .join("");
+
+  setupSectionCarousels();
+}
+
+function normalizeSectionLayout(layout) {
+  const allowed = new Set(["horizontal_carousel", "grid", "compact_list", "hero_cards"]);
+  return allowed.has(layout) ? layout : "horizontal_carousel";
+}
+
+function renderSectionProducts(section, layout) {
+  const products = section.products || [];
+
+  switch (layout) {
+    case "grid":
+      return `
+        <div class="products-grid products-grid--catalog section-products section-products--grid">
+          ${products.map((product) => renderProductCard(product)).join("")}
+        </div>
+      `;
+    case "compact_list":
+      return `
+        <div class="products-list-compact section-products section-products--compact">
+          ${products.map((product) => renderProductCard(product, { variant: "compact" })).join("")}
+        </div>
+      `;
+    case "hero_cards":
+      return renderSectionCarouselShell({
+        label: section.title,
+        railClassName: "products-rail products-hero-rail section-products section-products--hero",
+        itemsHtml: products.map((product) => renderProductCard(product, { variant: "hero" })).join("")
+      });
+    default:
+      return renderSectionCarouselShell({
+        label: section.title,
+        railClassName: "products-rail section-products section-products--carousel",
+        itemsHtml: products.map((product) => renderProductCard(product)).join("")
+      });
+  }
+}
+
+function renderSectionCarouselShell({ label, railClassName, itemsHtml }) {
+  return `
+    <div class="section-carousel-shell" data-carousel-shell>
+      <button
+        class="carousel-nav carousel-nav--prev is-hidden"
+        type="button"
+        data-carousel-prev
+        aria-label="Ver itens anteriores de ${escapeHtml(label)}"
+      >
+        <span aria-hidden="true">‹</span>
+      </button>
+      <div class="${railClassName}" data-carousel-rail>
+        ${itemsHtml}
+      </div>
+      <button
+        class="carousel-nav carousel-nav--next is-hidden"
+        type="button"
+        data-carousel-next
+        aria-label="Ver mais itens de ${escapeHtml(label)}"
+      >
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+  `;
+}
+
+function setupSectionCarousels() {
+  appState.carouselCleanup?.();
+
+  const shells = qsa("[data-carousel-shell]");
+  if (!shells.length) {
+    appState.carouselCleanup = null;
+    return;
+  }
+
+  const cleanupFns = [];
+  const desktopQuery = window.matchMedia("(min-width: 1024px)");
+
+  shells.forEach((shell) => {
+    const rail = shell.querySelector("[data-carousel-rail]");
+    const prevButton = shell.querySelector("[data-carousel-prev]");
+    const nextButton = shell.querySelector("[data-carousel-next]");
+
+    if (!rail || !prevButton || !nextButton) return;
+
+    const updateButtons = () => {
+      const maxScrollLeft = Math.max(0, rail.scrollWidth - rail.clientWidth);
+      const canScroll = desktopQuery.matches && maxScrollLeft > 6;
+      const atStart = rail.scrollLeft <= 6;
+      const atEnd = rail.scrollLeft >= maxScrollLeft - 6;
+
+      prevButton.classList.toggle("is-hidden", !canScroll || atStart);
+      nextButton.classList.toggle("is-hidden", !canScroll || atEnd);
+    };
+
+    const scrollByPage = (direction) => {
+      const distance = Math.max(rail.clientWidth * 0.82, 260) * direction;
+      rail.scrollBy({
+        left: distance,
+        behavior: supportsReducedMotion() ? "auto" : "smooth"
+      });
+    };
+
+    const handlePrev = () => scrollByPage(-1);
+    const handleNext = () => scrollByPage(1);
+
+    prevButton.addEventListener("click", handlePrev);
+    nextButton.addEventListener("click", handleNext);
+    rail.addEventListener("scroll", updateButtons, { passive: true });
+    window.addEventListener("resize", updateButtons);
+
+    let resizeObserver = null;
+    if ("ResizeObserver" in window) {
+      resizeObserver = new ResizeObserver(() => updateButtons());
+      resizeObserver.observe(rail);
+    }
+
+    if (typeof desktopQuery.addEventListener === "function") {
+      desktopQuery.addEventListener("change", updateButtons);
+    }
+
+    window.requestAnimationFrame(updateButtons);
+
+    cleanupFns.push(() => {
+      prevButton.removeEventListener("click", handlePrev);
+      nextButton.removeEventListener("click", handleNext);
+      rail.removeEventListener("scroll", updateButtons);
+      window.removeEventListener("resize", updateButtons);
+      resizeObserver?.disconnect();
+      if (typeof desktopQuery.removeEventListener === "function") {
+        desktopQuery.removeEventListener("change", updateButtons);
+      }
+    });
+  });
+
+  appState.carouselCleanup = () => {
+    cleanupFns.forEach((cleanup) => cleanup());
+  };
 }
 
 function renderSectionNavigation() {
@@ -674,7 +841,7 @@ function renderFavoritesSection() {
   grid.innerHTML = favoriteProducts.map((product) => renderProductCard(product)).join("");
 }
 
-function renderProductCard(product) {
+function renderProductCard(product, options = {}) {
   const settings = appState.settings || {};
   const productUrl = `${window.location.origin}${window.location.pathname}#produto-${product.slug}`;
   const whatsappLink = buildWhatsAppLink({
@@ -684,9 +851,11 @@ function renderProductCard(product) {
   });
   const badges = productBadges(product);
   const futureCartEnabled = getFutureCartFeatureState(settings);
+  const variant = options.variant || "default";
+  const cardClassName = ["product-card", variant !== "default" ? `product-card--${variant}` : ""].filter(Boolean).join(" ");
 
   return `
-    <article class="product-card" data-product-id="${escapeHtml(product.id)}">
+    <article class="${cardClassName}" data-product-id="${escapeHtml(product.id)}">
       <div class="product-card__media">
         <img
           src="${escapeHtml(getPrimaryImage(product))}"
@@ -992,6 +1161,7 @@ function updateHeaderOffset() {
   const headerHeight = qs(".site-header")?.offsetHeight || 146;
   document.documentElement.style.setProperty("--header-height", `${headerHeight}px`);
   document.documentElement.style.setProperty("--header-offset", `${headerHeight + 76}px`);
+  applyResponsiveHeaderActions();
   window.requestAnimationFrame(() => {
     if (appState.sectionNavCleanup) {
       const activeChip = qsa("#section-nav-track .chip.is-active")[0];
@@ -1000,6 +1170,41 @@ function updateHeaderOffset() {
       appState.activeSectionAnchor = "";
     }
   });
+}
+
+function isCompactHeaderViewport() {
+  return window.matchMedia("(max-width: 719px)").matches;
+}
+
+function getCompactStatusLabel(status) {
+  if (!status) return "💬";
+  if (status.className.includes("status-pill--warning")) return "🟠";
+  if (status.className.includes("status-pill--muted")) return "💬";
+  return "🟢";
+}
+
+function setResponsiveHeaderLabel(element, { fullLabel, compactLabel }) {
+  if (!element) return;
+  element.dataset.fullLabel = fullLabel;
+  element.dataset.compactLabel = compactLabel || fullLabel;
+}
+
+function applyResponsiveHeaderActions() {
+  const isCompact = isCompactHeaderViewport();
+  [
+    qs("#store-status"),
+    qs("#whatsapp-cta"),
+    qs("#install-app-button"),
+    qs("#push-button")
+  ]
+    .filter(Boolean)
+    .forEach((element) => {
+      const fullLabel = element.dataset.fullLabel || element.textContent.trim();
+      const compactLabel = element.dataset.compactLabel || fullLabel;
+      element.textContent = isCompact ? compactLabel : fullLabel;
+      element.setAttribute("aria-label", fullLabel);
+      element.setAttribute("title", fullLabel);
+    });
 }
 
 async function handleBodyClick(event) {

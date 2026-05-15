@@ -108,7 +108,10 @@ export async function registerPwa() {
 
   if ("serviceWorker" in navigator) {
     try {
-      await navigator.serviceWorker.register("./service-worker.js");
+      const registration = await navigator.serviceWorker.register("./service-worker.js", {
+        updateViaCache: "none"
+      });
+      registration.update().catch(() => {});
     } catch (error) {
       console.warn("Falha ao registrar service worker", error);
     }

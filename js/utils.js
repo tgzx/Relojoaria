@@ -6,6 +6,104 @@ const STORAGE_KEYS = {
 
 const DAYS_MAP = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
+const STORE_THEME_PRESETS = {
+  light: {
+    label: "Areia clara",
+    colorScheme: "light",
+    bgTop: "#fffaf5",
+    bg: "#f6efe5",
+    bgBottom: "#f7f1ea",
+    surface: "rgba(255, 255, 255, 0.9)",
+    surfaceStrong: "#ffffff",
+    text: "#1f2937",
+    textSoft: "#6b7280",
+    border: "rgba(17, 24, 39, 0.08)",
+    headerBg: "rgba(246, 239, 229, 0.88)",
+    headerBorder: "rgba(17, 24, 39, 0.06)",
+    mutedBg: "rgba(17, 24, 39, 0.06)",
+    mutedBgStrong: "rgba(17, 24, 39, 0.12)",
+    footerBg: "#111827",
+    footerText: "rgba(255, 255, 255, 0.86)"
+  },
+  midnight: {
+    label: "Noite elegante",
+    colorScheme: "dark",
+    bgTop: "#0e1525",
+    bg: "#111827",
+    bgBottom: "#0a1020",
+    surface: "rgba(18, 25, 39, 0.9)",
+    surfaceStrong: "#182234",
+    text: "#f3f6fb",
+    textSoft: "#b2bfd3",
+    border: "rgba(255, 255, 255, 0.08)",
+    headerBg: "rgba(10, 15, 26, 0.86)",
+    headerBorder: "rgba(255, 255, 255, 0.06)",
+    mutedBg: "rgba(255, 255, 255, 0.08)",
+    mutedBgStrong: "rgba(255, 255, 255, 0.14)",
+    footerBg: "#050912",
+    footerText: "rgba(255, 255, 255, 0.9)"
+  },
+  ocean: {
+    label: "Azul oceano",
+    colorScheme: "light",
+    bgTop: "#f4fbff",
+    bg: "#eaf4f8",
+    bgBottom: "#e5eef4",
+    surface: "rgba(255, 255, 255, 0.92)",
+    surfaceStrong: "#ffffff",
+    text: "#173042",
+    textSoft: "#5f7384",
+    border: "rgba(23, 48, 66, 0.1)",
+    headerBg: "rgba(234, 244, 248, 0.9)",
+    headerBorder: "rgba(23, 48, 66, 0.08)",
+    mutedBg: "rgba(23, 48, 66, 0.06)",
+    mutedBgStrong: "rgba(23, 48, 66, 0.12)",
+    footerBg: "#173042",
+    footerText: "rgba(255, 255, 255, 0.9)"
+  },
+  forest: {
+    label: "Verde ateliê",
+    colorScheme: "light",
+    bgTop: "#f7fbf5",
+    bg: "#edf4ec",
+    bgBottom: "#e7efe4",
+    surface: "rgba(255, 255, 255, 0.92)",
+    surfaceStrong: "#ffffff",
+    text: "#24362c",
+    textSoft: "#6a7d71",
+    border: "rgba(36, 54, 44, 0.08)",
+    headerBg: "rgba(237, 244, 236, 0.9)",
+    headerBorder: "rgba(36, 54, 44, 0.08)",
+    mutedBg: "rgba(36, 54, 44, 0.06)",
+    mutedBgStrong: "rgba(36, 54, 44, 0.12)",
+    footerBg: "#1b2c22",
+    footerText: "rgba(255, 255, 255, 0.88)"
+  },
+  rose: {
+    label: "Rosé editorial",
+    colorScheme: "light",
+    bgTop: "#fff8fa",
+    bg: "#f7ecef",
+    bgBottom: "#f3e5e9",
+    surface: "rgba(255, 255, 255, 0.92)",
+    surfaceStrong: "#ffffff",
+    text: "#352735",
+    textSoft: "#7d6b7b",
+    border: "rgba(53, 39, 53, 0.08)",
+    headerBg: "rgba(247, 236, 239, 0.9)",
+    headerBorder: "rgba(53, 39, 53, 0.08)",
+    mutedBg: "rgba(53, 39, 53, 0.05)",
+    mutedBgStrong: "rgba(53, 39, 53, 0.1)",
+    footerBg: "#241a28",
+    footerText: "rgba(255, 255, 255, 0.9)"
+  }
+};
+
+export const STORE_THEME_OPTIONS = Object.entries(STORE_THEME_PRESETS).map(([value, config]) => ({
+  value,
+  label: config.label
+}));
+
 export function qs(selector, scope = document) {
   return scope.querySelector(selector);
 }
@@ -215,13 +313,114 @@ export function showToast(message, tone = "default") {
   }, 3400);
 }
 
-export function setThemeVariables(settings = {}) {
-  const root = document.documentElement;
-  if (settings.primary_color) root.style.setProperty("--color-primary", settings.primary_color);
-  if (settings.secondary_color) {
-    root.style.setProperty("--color-secondary", settings.secondary_color);
-    root.style.setProperty("--admin-accent", settings.secondary_color);
+function clampColorChannel(value) {
+  return Math.max(0, Math.min(255, value));
+}
+
+function normalizeHexColor(value, fallback) {
+  const candidate = String(value || "").trim();
+  const safeFallback = String(fallback || "#000000").trim();
+  const expanded = candidate.replace(/^#/, "");
+  const normalized = expanded.length === 3 ? expanded.split("").map((char) => char + char).join("") : expanded;
+  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return `#${normalized.toLowerCase()}`;
   }
+  return safeFallback;
+}
+
+function hexToRgb(hex) {
+  const safeHex = normalizeHexColor(hex, "#000000").slice(1);
+  return {
+    r: Number.parseInt(safeHex.slice(0, 2), 16),
+    g: Number.parseInt(safeHex.slice(2, 4), 16),
+    b: Number.parseInt(safeHex.slice(4, 6), 16)
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function mixHexColors(colorA, colorB, ratio = 0.5) {
+  const safeRatio = Math.max(0, Math.min(1, ratio));
+  const left = hexToRgb(colorA);
+  const right = hexToRgb(colorB);
+  const r = clampColorChannel(Math.round(left.r + (right.r - left.r) * safeRatio));
+  const g = clampColorChannel(Math.round(left.g + (right.g - left.g) * safeRatio));
+  const b = clampColorChannel(Math.round(left.b + (right.b - left.b) * safeRatio));
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function resolveStoreThemePreset(themeMode = "light") {
+  const aliases = {
+    dark: "midnight",
+    night: "midnight",
+    custom: "light"
+  };
+  const normalizedMode = aliases[themeMode] || themeMode;
+  return STORE_THEME_PRESETS[normalizedMode] || STORE_THEME_PRESETS.light;
+}
+
+export function getStoreThemeLabel(themeMode = "light") {
+  return resolveStoreThemePreset(themeMode).label;
+}
+
+export function setThemeVariables(settings = {}, options = {}) {
+  const { context = "storefront" } = options;
+  const root = document.documentElement;
+  const themePreset = resolveStoreThemePreset(settings.theme_mode || "light");
+  const primaryColor = normalizeHexColor(settings.primary_color, "#111827");
+  const secondaryColor = normalizeHexColor(settings.secondary_color, "#e56b2f");
+
+  root.style.setProperty("--admin-primary", primaryColor);
+  root.style.setProperty("--admin-accent", secondaryColor);
+
+  if (context !== "storefront") {
+    return;
+  }
+
+  const isDarkScheme = themePreset.colorScheme === "dark";
+  const accentSoftAlpha = isDarkScheme ? 0.24 : 0.14;
+  const primaryGlowAlpha = isDarkScheme ? 0.2 : 0.08;
+  const secondaryGlowAlpha = isDarkScheme ? 0.24 : 0.16;
+  const chipBg = isDarkScheme ? "rgba(255, 255, 255, 0.94)" : "rgba(255, 255, 255, 0.78)";
+  const chipText = isDarkScheme ? "#203047" : themePreset.textSoft;
+  const chipBorder = isDarkScheme ? "rgba(255, 255, 255, 0.1)" : "rgba(17, 24, 39, 0.09)";
+  const favoriteBg = isDarkScheme ? "rgba(255, 255, 255, 0.96)" : "rgba(255, 255, 255, 0.88)";
+  const favoriteFg = isDarkScheme ? "#223247" : themePreset.text;
+  const favoriteBorder = isDarkScheme ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.06)";
+
+  root.style.colorScheme = themePreset.colorScheme;
+  root.style.setProperty("--color-primary", primaryColor);
+  root.style.setProperty("--color-secondary", secondaryColor);
+  root.style.setProperty("--color-bg-top", themePreset.bgTop);
+  root.style.setProperty("--color-bg", themePreset.bg);
+  root.style.setProperty("--color-bg-bottom", themePreset.bgBottom);
+  root.style.setProperty("--color-surface", themePreset.surface);
+  root.style.setProperty("--color-surface-strong", themePreset.surfaceStrong);
+  root.style.setProperty("--color-text", themePreset.text);
+  root.style.setProperty("--color-text-soft", themePreset.textSoft);
+  root.style.setProperty("--color-border", themePreset.border);
+  root.style.setProperty("--color-muted-bg", themePreset.mutedBg);
+  root.style.setProperty("--color-muted-bg-strong", themePreset.mutedBgStrong);
+  root.style.setProperty("--color-header-bg", themePreset.headerBg);
+  root.style.setProperty("--color-header-border", themePreset.headerBorder);
+  root.style.setProperty("--color-footer-bg", themePreset.footerBg);
+  root.style.setProperty("--color-footer-text", themePreset.footerText);
+  root.style.setProperty("--color-footer-link", secondaryColor);
+  root.style.setProperty("--color-accent-soft", hexToRgba(secondaryColor, accentSoftAlpha));
+  root.style.setProperty("--color-page-glow-primary", hexToRgba(secondaryColor, secondaryGlowAlpha));
+  root.style.setProperty("--color-page-glow-secondary", hexToRgba(primaryColor, primaryGlowAlpha));
+  root.style.setProperty("--color-surface-tint", mixHexColors(themePreset.bgTop, secondaryColor, isDarkScheme ? 0.18 : 0.08));
+  root.style.setProperty("--color-chip-bg", chipBg);
+  root.style.setProperty("--color-chip-text", chipText);
+  root.style.setProperty("--color-chip-border", chipBorder);
+  root.style.setProperty("--color-chip-active-bg", primaryColor);
+  root.style.setProperty("--color-chip-active-text", "#ffffff");
+  root.style.setProperty("--color-favorite-bg", favoriteBg);
+  root.style.setProperty("--color-favorite-fg", favoriteFg);
+  root.style.setProperty("--color-favorite-border", favoriteBorder);
 }
 
 export function computeStoreStatus(settings = {}) {

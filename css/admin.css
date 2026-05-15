@@ -113,6 +113,11 @@ a {
   gap: 8px;
 }
 
+.admin-field .muted-copy {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .admin-field span,
 .step-title,
 .tab-panel h2,

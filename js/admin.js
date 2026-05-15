@@ -38,11 +38,13 @@ import {
   escapeHtml,
   formatCurrency,
   formatDateTime,
+  getStoreThemeLabel,
   getPrimaryImage,
   parseJsonSafe,
   qs,
   qsa,
   setThemeVariables,
+  STORE_THEME_OPTIONS,
   showToast,
   slugify
 } from "./utils.js";
@@ -254,7 +256,7 @@ async function loadAdminData() {
     adminState.notifications = notifications || [];
     adminState.pushSummary = pushSummary || { count: 0, data: [] };
 
-    setThemeVariables(settings || {});
+    setThemeVariables(settings || {}, { context: "admin" });
     await refreshStaleSections(true);
     renderAdminLayout();
   } catch (error) {
@@ -1372,6 +1374,13 @@ function renderSettings() {
               <input type="color" name="secondary_color" value="${escapeHtml(settings.secondary_color || "#e56b2f")}" />
             </label>
           </div>
+          <label class="admin-field">
+            <span>Tema base da vitrine</span>
+            <select name="theme_mode">
+              ${renderOptions(STORE_THEME_OPTIONS, settings.theme_mode || "light")}
+            </select>
+            <small class="muted-copy">Escolha a atmosfera da vitrine. As cores acima refinam os destaques e o contraste do tema.</small>
+          </label>
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Intro mode</span>
@@ -1411,10 +1420,6 @@ function renderSettings() {
               <input type="text" name="locale" value="${escapeHtml(settings.locale || "pt-BR")}" />
             </label>
           </div>
-          <label class="admin-field">
-            <span>Theme mode</span>
-            <input type="text" name="theme_mode" value="${escapeHtml(settings.theme_mode || "light")}" />
-          </label>
           <div class="inline-grid inline-grid--2">
             <label class="admin-field admin-field--switch">
               <span>Ativar notificações</span>
@@ -1455,6 +1460,12 @@ function renderSettings() {
             <div>
               <strong class="list-item-title">Hero</strong>
               <span class="list-item-subtitle">${escapeHtml(settings.hero_mode || "banner")}</span>
+            </div>
+          </article>
+          <article class="list-item">
+            <div>
+              <strong class="list-item-title">Tema</strong>
+              <span class="list-item-subtitle">${escapeHtml(getStoreThemeLabel(settings.theme_mode || "light"))}</span>
             </div>
           </article>
           <article class="list-item">
@@ -2415,7 +2426,7 @@ async function saveSettings(event) {
     ...adminState.store,
     ...storePayload
   };
-  setThemeVariables(adminState.settings);
+  setThemeVariables(adminState.settings, { context: "admin" });
   showToast("Configurações salvas.", "success");
   renderAdminLayout();
 }
