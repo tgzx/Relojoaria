@@ -8,40 +8,48 @@ const DAYS_MAP = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frida
 
 const STORE_THEME_PRESETS = {
   light: {
-    label: "Areia clara",
+    label: "Light Premium",
     colorScheme: "light",
-    bgTop: "#fffaf5",
-    bg: "#f6efe5",
-    bgBottom: "#f7f1ea",
-    surface: "rgba(255, 255, 255, 0.9)",
+    bgTop: "#fafaf8",
+    bg: "#f7f7f4",
+    bgBottom: "#f1efe9",
+    surface: "rgba(255, 255, 255, 0.84)",
     surfaceStrong: "#ffffff",
-    text: "#1f2937",
-    textSoft: "#6b7280",
-    border: "rgba(17, 24, 39, 0.08)",
-    headerBg: "rgba(246, 239, 229, 0.88)",
-    headerBorder: "rgba(17, 24, 39, 0.06)",
-    mutedBg: "rgba(17, 24, 39, 0.06)",
-    mutedBgStrong: "rgba(17, 24, 39, 0.12)",
-    footerBg: "#111827",
-    footerText: "rgba(255, 255, 255, 0.86)"
+    surfaceElevated: "#fcfcfa",
+    text: "#171717",
+    textSoft: "#6b6b6b",
+    border: "#e7e5e0",
+    headerBg: "rgba(250, 250, 248, 0.88)",
+    headerBorder: "rgba(23, 23, 23, 0.08)",
+    mutedBg: "rgba(17, 17, 17, 0.045)",
+    mutedBgStrong: "rgba(17, 17, 17, 0.085)",
+    footerBg: "#111111",
+    footerText: "rgba(245, 245, 240, 0.82)",
+    primaryBase: "#111111",
+    primaryContrast: "#fafaf8",
+    accentBase: "#bca98b"
   },
   midnight: {
-    label: "Noite elegante",
+    label: "Dark Premium",
     colorScheme: "dark",
-    bgTop: "#0e1525",
-    bg: "#111827",
-    bgBottom: "#0a1020",
-    surface: "rgba(18, 25, 39, 0.9)",
-    surfaceStrong: "#182234",
-    text: "#f3f6fb",
-    textSoft: "#b2bfd3",
-    border: "rgba(255, 255, 255, 0.08)",
-    headerBg: "rgba(10, 15, 26, 0.86)",
-    headerBorder: "rgba(255, 255, 255, 0.06)",
-    mutedBg: "rgba(255, 255, 255, 0.08)",
-    mutedBgStrong: "rgba(255, 255, 255, 0.14)",
-    footerBg: "#050912",
-    footerText: "rgba(255, 255, 255, 0.9)"
+    bgTop: "#0b0b0b",
+    bg: "#080808",
+    bgBottom: "#101010",
+    surface: "rgba(18, 18, 18, 0.92)",
+    surfaceStrong: "#161616",
+    surfaceElevated: "#1b1b1b",
+    text: "#f5f5f0",
+    textSoft: "#a3a3a3",
+    border: "#2a2a2a",
+    headerBg: "rgba(8, 8, 8, 0.88)",
+    headerBorder: "rgba(255, 255, 255, 0.05)",
+    mutedBg: "rgba(255, 255, 255, 0.05)",
+    mutedBgStrong: "rgba(255, 255, 255, 0.09)",
+    footerBg: "#050505",
+    footerText: "rgba(245, 245, 240, 0.86)",
+    primaryBase: "#f5f5f0",
+    primaryContrast: "#111111",
+    accentBase: "#d6c4a8"
   },
   ocean: {
     label: "Azul oceano",
@@ -99,9 +107,9 @@ const STORE_THEME_PRESETS = {
   }
 };
 
-export const STORE_THEME_OPTIONS = Object.entries(STORE_THEME_PRESETS).map(([value, config]) => ({
+export const STORE_THEME_OPTIONS = ["light", "midnight"].map((value) => ({
   value,
-  label: config.label
+  label: STORE_THEME_PRESETS[value].label
 }));
 
 export function qs(selector, scope = document) {
@@ -352,14 +360,28 @@ function mixHexColors(colorA, colorB, ratio = 0.5) {
   return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
+function getContrastTextColor(color) {
+  const { r, g, b } = hexToRgb(color);
+  const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+  return luminance >= 152 ? "#111111" : "#fafaf8";
+}
+
 function resolveStoreThemePreset(themeMode = "light") {
   const aliases = {
     dark: "midnight",
     night: "midnight",
-    custom: "light"
+    custom: "light",
+    ocean: "light",
+    forest: "light",
+    rose: "light"
   };
   const normalizedMode = aliases[themeMode] || themeMode;
   return STORE_THEME_PRESETS[normalizedMode] || STORE_THEME_PRESETS.light;
+}
+
+export function normalizeStoreThemeMode(themeMode = "light") {
+  const themePreset = resolveStoreThemePreset(themeMode);
+  return themePreset.colorScheme === "dark" ? "midnight" : "light";
 }
 
 export function getStoreThemeLabel(themeMode = "light") {
@@ -370,37 +392,53 @@ export function setThemeVariables(settings = {}, options = {}) {
   const { context = "storefront" } = options;
   const root = document.documentElement;
   const themePreset = resolveStoreThemePreset(settings.theme_mode || "light");
-  const primaryColor = normalizeHexColor(settings.primary_color, "#111827");
-  const secondaryColor = normalizeHexColor(settings.secondary_color, "#e56b2f");
+  const hasCustomPrimary = Boolean(String(settings.primary_color || "").trim());
+  const hasCustomSecondary = Boolean(String(settings.secondary_color || "").trim());
+  const normalizedPrimary = normalizeHexColor(settings.primary_color, "#111827");
+  const normalizedSecondary = normalizeHexColor(settings.secondary_color, "#e56b2f");
+  const isDarkScheme = themePreset.colorScheme === "dark";
+  const adminPrimary = normalizedPrimary === "#111827" ? "#111111" : normalizedPrimary;
+  const adminAccent = normalizedSecondary === "#e56b2f" ? "#bca98b" : normalizedSecondary;
+  const primaryColor =
+    hasCustomPrimary && normalizedPrimary !== "#111827" ? normalizedPrimary : themePreset.primaryBase;
+  const secondaryColor =
+    hasCustomSecondary && normalizedSecondary !== "#e56b2f" ? normalizedSecondary : themePreset.accentBase;
+  const primaryContrast = themePreset.primaryContrast || getContrastTextColor(primaryColor);
 
-  root.style.setProperty("--admin-primary", primaryColor);
-  root.style.setProperty("--admin-accent", secondaryColor);
+  root.style.setProperty("--admin-primary", adminPrimary);
+  root.style.setProperty("--admin-primary-contrast", getContrastTextColor(adminPrimary));
+  root.style.setProperty("--admin-accent", adminAccent);
 
   if (context !== "storefront") {
+    document.body.classList.remove("theme-dark");
     return;
   }
 
-  const isDarkScheme = themePreset.colorScheme === "dark";
-  const accentSoftAlpha = isDarkScheme ? 0.24 : 0.14;
-  const primaryGlowAlpha = isDarkScheme ? 0.2 : 0.08;
-  const secondaryGlowAlpha = isDarkScheme ? 0.24 : 0.16;
-  const chipBg = isDarkScheme ? "rgba(255, 255, 255, 0.94)" : "rgba(255, 255, 255, 0.78)";
-  const chipText = isDarkScheme ? "#203047" : themePreset.textSoft;
-  const chipBorder = isDarkScheme ? "rgba(255, 255, 255, 0.1)" : "rgba(17, 24, 39, 0.09)";
-  const favoriteBg = isDarkScheme ? "rgba(255, 255, 255, 0.96)" : "rgba(255, 255, 255, 0.88)";
-  const favoriteFg = isDarkScheme ? "#223247" : themePreset.text;
-  const favoriteBorder = isDarkScheme ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.06)";
+  const accentSoftAlpha = isDarkScheme ? 0.18 : 0.08;
+  const primaryGlowAlpha = isDarkScheme ? 0.1 : 0.03;
+  const secondaryGlowAlpha = isDarkScheme ? 0.14 : 0.07;
+  const chipBg = isDarkScheme ? "rgba(245, 245, 240, 0.035)" : "rgba(255, 255, 255, 0.78)";
+  const chipText = isDarkScheme ? "rgba(245, 245, 240, 0.88)" : themePreset.textSoft;
+  const chipBorder = isDarkScheme ? "rgba(245, 245, 240, 0.14)" : themePreset.border;
+  const favoriteBg = isDarkScheme ? "#f3f1eb" : "#ffffff";
+  const favoriteFg = isDarkScheme ? "#111111" : themePreset.text;
+  const favoriteBorder = isDarkScheme ? "rgba(245, 245, 240, 0.08)" : themePreset.border;
 
   root.style.colorScheme = themePreset.colorScheme;
+  document.body.classList.toggle("theme-dark", isDarkScheme);
   root.style.setProperty("--color-primary", primaryColor);
+  root.style.setProperty("--color-primary-contrast", primaryContrast);
   root.style.setProperty("--color-secondary", secondaryColor);
+  root.style.setProperty("--color-accent", secondaryColor);
   root.style.setProperty("--color-bg-top", themePreset.bgTop);
   root.style.setProperty("--color-bg", themePreset.bg);
   root.style.setProperty("--color-bg-bottom", themePreset.bgBottom);
   root.style.setProperty("--color-surface", themePreset.surface);
   root.style.setProperty("--color-surface-strong", themePreset.surfaceStrong);
+  root.style.setProperty("--color-surface-elevated", themePreset.surfaceElevated || themePreset.surfaceStrong);
   root.style.setProperty("--color-text", themePreset.text);
   root.style.setProperty("--color-text-soft", themePreset.textSoft);
+  root.style.setProperty("--color-text-muted", themePreset.textSoft);
   root.style.setProperty("--color-border", themePreset.border);
   root.style.setProperty("--color-muted-bg", themePreset.mutedBg);
   root.style.setProperty("--color-muted-bg-strong", themePreset.mutedBgStrong);
@@ -417,7 +455,7 @@ export function setThemeVariables(settings = {}, options = {}) {
   root.style.setProperty("--color-chip-text", chipText);
   root.style.setProperty("--color-chip-border", chipBorder);
   root.style.setProperty("--color-chip-active-bg", primaryColor);
-  root.style.setProperty("--color-chip-active-text", "#ffffff");
+  root.style.setProperty("--color-chip-active-text", primaryContrast);
   root.style.setProperty("--color-favorite-bg", favoriteBg);
   root.style.setProperty("--color-favorite-fg", favoriteFg);
   root.style.setProperty("--color-favorite-border", favoriteBorder);

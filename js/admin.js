@@ -40,6 +40,7 @@ import {
   formatDateTime,
   getStoreThemeLabel,
   getPrimaryImage,
+  normalizeStoreThemeMode,
   parseJsonSafe,
   qs,
   qsa,
@@ -1379,7 +1380,7 @@ function renderSettings() {
           <label class="admin-field">
             <span>Tema base da vitrine</span>
             <select name="theme_mode">
-              ${renderOptions(STORE_THEME_OPTIONS, settings.theme_mode || "light")}
+              ${renderOptions(STORE_THEME_OPTIONS, normalizeStoreThemeMode(settings.theme_mode || "light"))}
             </select>
             <small class="muted-copy">Escolha a atmosfera da vitrine. As cores acima refinam os destaques e o contraste do tema.</small>
           </label>
