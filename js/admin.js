@@ -2707,8 +2707,12 @@ async function sendNotification(notificationId) {
     return;
   }
 
-  await adminSendNotification(notificationId);
-  showToast("Envio de notificação iniciado.", "success");
+  const result = await adminSendNotification(notificationId);
+  if (result?.sent > 0) {
+    showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
+  } else {
+    showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+  }
   adminState.notifications = await adminListNotifications(adminState.store.id);
   renderAdminLayout();
 }

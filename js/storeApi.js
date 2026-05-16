@@ -693,8 +693,26 @@ export async function adminSendNotification(notificationId) {
     }
   });
 
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw new Error(await getFunctionErrorMessage(result.error, "Nao foi possivel enviar a notificacao."));
+  }
+
   return result.data;
+}
+
+async function getFunctionErrorMessage(error, fallbackMessage) {
+  const context = error?.context;
+
+  if (context && typeof context.json === "function") {
+    try {
+      const payload = await context.json();
+      return payload?.error || payload?.message || error.message || fallbackMessage;
+    } catch {
+      return error.message || fallbackMessage;
+    }
+  }
+
+  return error?.message || fallbackMessage;
 }
 
 export async function adminListPushSubscriptionsSummary(storeId) {

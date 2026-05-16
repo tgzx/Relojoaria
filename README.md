@@ -80,7 +80,7 @@ O `VitrineZap PWA` foi pensado para lojas locais, vendedores autônomos, relojoa
 └── supabase/
     ├── schema.sql
     ├── seed.sql
-    └── edge-functions/
+    └── functions/
         └── send-push/
             └── index.ts
 ```
@@ -220,14 +220,25 @@ Exemplo de `VAPID_SUBJECT`:
 
 ### Deploy da Edge Function
 
+O Supabase CLI procura Edge Functions em `supabase/functions/<nome>`.
+Neste projeto, a função de envio fica em `supabase/functions/send-push/index.ts`.
+
 1. Instale a Supabase CLI, se necessário.
 2. Faça login.
 3. Linke o projeto.
-4. Faça deploy:
+4. Rode a migration/grants de push.
+5. Configure os secrets.
+6. Faça deploy:
 
 ```bash
+supabase db push
+supabase secrets set VAPID_PUBLIC_KEY="SUA_CHAVE_PUBLICA"
+supabase secrets set VAPID_PRIVATE_KEY="SUA_CHAVE_PRIVADA"
+supabase secrets set VAPID_SUBJECT="mailto:contato@sualoja.com"
 supabase functions deploy send-push
 ```
+
+`SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` sao variaveis reservadas que o Supabase injeta automaticamente na Edge Function hospedada.
 
 ## 8. Rodar localmente
 
