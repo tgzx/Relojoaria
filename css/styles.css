@@ -1930,7 +1930,8 @@ body.theme-dark .product-badge--warning {
   .products-grid--catalog .product-card,
   .product-skeleton-grid .product-card-skeleton {
     width: 100%;
-    justify-self: stretch;
+    justify-self: center;
+    max-width: 85%;
   }
 
   .footer-shell {
