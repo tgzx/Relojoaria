@@ -49,6 +49,24 @@ export function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 }
 
+function uint8ArrayToUrlBase64(bytes) {
+  const binary = Array.from(bytes)
+    .map((byte) => String.fromCharCode(byte))
+    .join("");
+
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function subscriptionUsesApplicationServerKey(subscription, applicationServerKey) {
+  const subscriptionKey = subscription?.options?.applicationServerKey;
+  if (!subscriptionKey) return true;
+
+  return (
+    uint8ArrayToUrlBase64(new Uint8Array(subscriptionKey)) ===
+    uint8ArrayToUrlBase64(new Uint8Array(applicationServerKey))
+  );
+}
+
 export async function saveSubscriptionToSupabase(subscription, storeId) {
   const { error } = await supabase.rpc("public_upsert_push_subscription", {
     target_store_id: storeId,
@@ -72,15 +90,20 @@ export async function subscribeUserToPush(storeId) {
   await requestNotificationPermission();
   const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
+  const applicationServerKey = urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY);
 
   if (existing) {
-    await saveSubscriptionToSupabase(existing, storeId);
-    return existing;
+    if (subscriptionUsesApplicationServerKey(existing, applicationServerKey)) {
+      await saveSubscriptionToSupabase(existing, storeId);
+      return existing;
+    }
+
+    await existing.unsubscribe();
   }
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY)
+    applicationServerKey
   });
 
   await saveSubscriptionToSupabase(subscription, storeId);
@@ -122,9 +145,16 @@ export async function registerPushButton(storeId, options = {}) {
 
   const registration = await navigator.serviceWorker.ready.catch(() => null);
   const existing = registration ? await registration.pushManager.getSubscription() : null;
+  const applicationServerKey = APP_CONFIG.PUBLIC_VAPID_KEY
+    ? urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY)
+    : null;
+  const isCurrentSubscription =
+    existing && applicationServerKey
+      ? subscriptionUsesApplicationServerKey(existing, applicationServerKey)
+      : Boolean(existing);
 
   button.classList.remove("is-hidden");
-  setPushButtonLabel(button, Boolean(existing));
+  setPushButtonLabel(button, Boolean(isCurrentSubscription));
 
   button.addEventListener("click", async () => {
     button.disabled = true;
@@ -132,8 +162,9 @@ export async function registerPushButton(storeId, options = {}) {
     try {
       const liveRegistration = await navigator.serviceWorker.ready;
       const current = await liveRegistration.pushManager.getSubscription();
+      const liveApplicationServerKey = urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY);
 
-      if (current) {
+      if (current && subscriptionUsesApplicationServerKey(current, liveApplicationServerKey)) {
         await unsubscribeFromPush();
         setPushButtonLabel(button, false);
         showToast("Notificações desativadas neste dispositivo.", "warning");

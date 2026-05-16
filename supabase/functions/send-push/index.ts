@@ -129,7 +129,7 @@ serve(async (request) => {
     } catch (error) {
       failed += 1;
       const { statusCode, message } = getPushErrorInfo(error);
-      if (statusCode === 404 || statusCode === 410) {
+      if (isInvalidSubscriptionStatus(statusCode)) {
         invalidSubscriptionIds.push(item.id);
       }
       console.error("Falha ao enviar push", {
@@ -159,9 +159,19 @@ serve(async (request) => {
     ok: true,
     sent,
     failed,
-    invalidated: invalidSubscriptionIds.length
+    invalidated: invalidSubscriptionIds.length,
+    message:
+      sent > 0
+        ? undefined
+        : invalidSubscriptionIds.length > 0
+          ? "Os dispositivos inscritos rejeitaram o push e foram removidos. Peça para os clientes ativarem as notificacoes novamente."
+          : "Nao foi possivel entregar a notificacao aos dispositivos inscritos."
   });
 });
+
+function isInvalidSubscriptionStatus(statusCode: number) {
+  return [400, 403, 404, 410].includes(statusCode);
+}
 
 function getPushErrorInfo(error: unknown) {
   if (typeof error === "object" && error !== null) {
