@@ -12,18 +12,19 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="VitrineZap" />
     <title>VitrineZap PWA</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
     <link rel="manifest" href="./manifest.json" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
     <link rel="stylesheet" href="./css/styles.css" />
   </head>
-  <body>
+  <body class="app-loading">
+    <div id="app-loading-screen" class="app-loading-screen" role="status" aria-live="polite">
+      <span class="sr-only">Carregando vitrine</span>
+      <div class="app-loading-mark" aria-hidden="true">
+        <span></span>
+      </div>
+    </div>
+
     <div id="intro-overlay" class="intro-overlay is-hidden" aria-hidden="true"></div>
 
     <header class="site-header">

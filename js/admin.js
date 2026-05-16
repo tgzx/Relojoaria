@@ -40,6 +40,7 @@ import {
   formatDateTime,
   getStoreThemeLabel,
   getPrimaryImage,
+  normalizeStoreThemeMode,
   parseJsonSafe,
   qs,
   qsa,
@@ -57,7 +58,6 @@ const TABS = [
   { id: "brands", label: "Marcas" },
   { id: "appearance", label: "Banners" },
   { id: "notifications", label: "Notificações" },
-  { id: "automations", label: "Automações" },
   { id: "settings", label: "Configurações" },
   { id: "preview", label: "Pré-visualizar" }
 ];
@@ -83,6 +83,18 @@ const HERO_FIT_OPTIONS = [
   { value: "contain", label: "Conter" }
 ];
 
+const BUSINESS_HOURS_DAYS = [
+  { key: "monday", label: "Segunda" },
+  { key: "tuesday", label: "Terça" },
+  { key: "wednesday", label: "Quarta" },
+  { key: "thursday", label: "Quinta" },
+  { key: "friday", label: "Sexta" },
+  { key: "saturday", label: "Sábado" },
+  { key: "sunday", label: "Domingo" }
+];
+
+const NOTIFICATION_PAGE_SIZE = 5;
+
 const adminState = {
   session: null,
   profile: null,
@@ -105,6 +117,11 @@ const adminState = {
   productEditorStep: 1,
   pendingProductFiles: [],
   pendingBannerFile: null,
+  isNotificationHistoryOpen: false,
+  notificationHistoryPage: 1,
+  notificationPlanningModalType: "",
+  notificationPlanningPage: 1,
+  editingNotificationId: null,
   selectedProductIds: [],
   productFilters: {
     search: "",
@@ -114,9 +131,17 @@ const adminState = {
     sectionId: ""
   },
   isLoadingAdminData: false,
+  isAdminDataLoadQueued: false,
+  hasLoadedAdminData: false,
+  lastLoadedUserId: null,
+  hasUnsavedAdminFormChanges: false,
+  dirtyAdminTab: null,
+  pendingBackgroundRender: false,
   isSavingProduct: false,
   productSaveMode: null
 };
+
+const openAdminModalKeys = new Set();
 
 let globalDebugHandlersRegistered = false;
 
@@ -137,14 +162,89 @@ function registerGlobalDebugHandlers() {
     console.error("Promise rejeitada sem catch", {
       reason: event.reason?.message || String(event.reason)
     });
-  });
+  }, 0);
+}
+
+function resetAdminSessionState() {
+  adminState.isLoadingAdminData = false;
+  adminState.isAdminDataLoadQueued = false;
+  adminState.hasLoadedAdminData = false;
+  adminState.lastLoadedUserId = null;
+  adminState.hasUnsavedAdminFormChanges = false;
+  adminState.dirtyAdminTab = null;
+  adminState.pendingBackgroundRender = false;
+  openAdminModalKeys.clear();
+  syncAdminModalBodyScroll();
+}
+
+function syncAdminModalBodyScroll() {
+  const shouldLockScroll = openAdminModalKeys.size > 0;
+  document.documentElement.style.overflow = shouldLockScroll ? "hidden" : "";
+  document.body.style.overflow = shouldLockScroll ? "hidden" : "";
+}
+
+function setAdminModalOpen(modalKey, isOpen) {
+  if (!modalKey) return;
+  if (isOpen) {
+    openAdminModalKeys.add(modalKey);
+  } else {
+    openAdminModalKeys.delete(modalKey);
+  }
+
+  syncAdminModalBodyScroll();
+}
+
+function markAdminFormDirty(tabId = adminState.currentAdminTab) {
+  adminState.hasUnsavedAdminFormChanges = true;
+  adminState.dirtyAdminTab = tabId;
+}
+
+function clearAdminFormDirty(tabId = null) {
+  if (tabId && adminState.dirtyAdminTab && adminState.dirtyAdminTab !== tabId) {
+    return;
+  }
+
+  adminState.hasUnsavedAdminFormChanges = false;
+  adminState.dirtyAdminTab = null;
+}
+
+function bindDirtyFormState(selector, tabId = adminState.currentAdminTab) {
+  const form = qs(selector);
+  if (!form) return;
+
+  const markDirty = () => markAdminFormDirty(tabId);
+  form.addEventListener("input", markDirty);
+  form.addEventListener("change", markDirty);
+}
+
+function renderAdminLayoutFromBackground() {
+  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === adminState.currentAdminTab) {
+    adminState.pendingBackgroundRender = true;
+    return;
+  }
+
+  adminState.pendingBackgroundRender = false;
+  renderAdminLayout();
 }
 
 function triggerAdminDataLoad() {
-  if (adminState.isLoadingAdminData) {
+  const sessionUserId = adminState.session?.user?.id;
+  if (!sessionUserId) {
     return;
   }
-  queueMicrotask(() => {
+  if (adminState.isLoadingAdminData || adminState.isAdminDataLoadQueued) {
+    return;
+  }
+  if (
+    adminState.hasLoadedAdminData &&
+    adminState.lastLoadedUserId === sessionUserId &&
+    adminState.store
+  ) {
+    return;
+  }
+  adminState.isAdminDataLoadQueued = true;
+  window.setTimeout(() => {
+    adminState.isAdminDataLoadQueued = false;
     loadAdminData().catch((error) => {
       console.error("Erro não tratado em loadAdminData", error.message || String(error));
     });
@@ -162,15 +262,27 @@ async function initAdmin() {
   supabase.auth.onAuthStateChange((event, session) => {
     adminState.session = session;
     if (!session || event === "SIGNED_OUT") {
+      resetAdminSessionState();
       renderLogin();
       return;
     }
 
-    if (event === "TOKEN_REFRESHED" && adminState.store) {
+    if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
       return;
     }
 
-    if (["INITIAL_SESSION", "SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
+    const sameLoadedUser =
+      adminState.hasLoadedAdminData &&
+      adminState.lastLoadedUserId === session.user.id &&
+      adminState.store;
+
+    if (sameLoadedUser) {
+      return;
+    }
+
+    if (["SIGNED_IN", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event) || !adminState.store) {
+      adminState.hasLoadedAdminData = false;
+      adminState.lastLoadedUserId = null;
       triggerAdminDataLoad();
     }
   });
@@ -181,16 +293,20 @@ async function initAdmin() {
 async function requireAuth() {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
+    resetAdminSessionState();
     renderLogin();
     return;
   }
 
   adminState.session = data.session;
   if (!data.session) {
+    resetAdminSessionState();
     renderLogin();
     return;
   }
 
+  adminState.hasLoadedAdminData = false;
+  adminState.lastLoadedUserId = null;
   triggerAdminDataLoad();
 }
 
@@ -199,6 +315,7 @@ async function loadAdminData() {
     return;
   }
 
+  const sessionUserId = adminState.session?.user?.id || null;
   adminState.isLoadingAdminData = true;
 
   try {
@@ -257,10 +374,11 @@ async function loadAdminData() {
     adminState.banners = banners || [];
     adminState.notifications = notifications || [];
     adminState.pushSummary = pushSummary || { count: 0, data: [] };
+    adminState.hasLoadedAdminData = true;
+    adminState.lastLoadedUserId = sessionUserId;
 
     setThemeVariables(settings || {}, { context: "admin" });
-    await refreshStaleSections(true);
-    renderAdminLayout();
+    renderAdminLayoutFromBackground();
   } catch (error) {
     console.error(error);
     renderLoadError(
@@ -416,6 +534,8 @@ function renderAdminLayout() {
   `;
 
   bindAdminLayoutEvents();
+  renderNotificationHistoryModal();
+  renderNotificationPlanningModal();
 }
 
 function renderTabButtons() {
@@ -446,8 +566,6 @@ function renderCurrentTab() {
       return renderAppearanceManager();
     case "notifications":
       return renderNotifications();
-    case "automations":
-      return renderAutomations();
     case "settings":
       return renderSettings();
     case "preview":
@@ -1214,64 +1332,346 @@ function renderAppearanceManager() {
 }
 
 function renderNotifications() {
+  const targetOptions = getNotificationTargetOptions();
+  const recentNotifications = getRegularNotifications().slice(0, 5);
+  const scheduledNotifications = getScheduledNotifications();
+  const recurringNotifications = getRecurringNotifications();
+  const editingNotification = adminState.editingNotificationId
+    ? adminState.notifications.find((item) => item.id === adminState.editingNotificationId)
+    : null;
+  const titleValue = editingNotification?.title || "";
+  const bodyValue = editingNotification?.body || "";
+  const targetValue = editingNotification?.target_url || "";
+  const scheduledValue = toDateTimeLocalValue(editingNotification?.scheduled_at || "");
+  const recurrenceValue = editingNotification?.recurrence_rule || "";
+  const submitLabel = scheduledValue || recurrenceValue ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
   return `
     <section class="settings-grid">
       <article class="panel-card">
         <span class="section-kicker">Push notifications</span>
-        <h2>Criar notificação</h2>
+        <h2>${editingNotification ? "Editar notificação" : "Criar notificação"}</h2>
         <p>${adminState.settings?.enable_notifications ? "O recurso está habilitado para a loja." : "As notificações estão desativadas na configuração pública da loja."}</p>
         <form id="notification-form" class="notification-form">
           <label class="admin-field">
             <span>Título</span>
-            <input type="text" name="title" required placeholder="Novidades na vitrine" />
+            <input type="text" name="title" required placeholder="Novidades na vitrine" value="${escapeHtml(titleValue)}" />
           </label>
           <label class="admin-field">
             <span>Mensagem</span>
-            <textarea name="body" required placeholder="Confira os itens que acabaram de entrar."></textarea>
+            <textarea name="body" required placeholder="Confira os itens que acabaram de entrar.">${escapeHtml(bodyValue)}</textarea>
           </label>
           <label class="admin-field">
             <span>URL alvo</span>
-            <input type="url" name="target_url" placeholder="https://..." />
+            <input type="text" name="target_url" list="notification-target-options" placeholder="URL completa, ./index.html ou seção da vitrine" value="${escapeHtml(targetValue)}" />
+            <datalist id="notification-target-options">
+              ${targetOptions
+                .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
+                .join("")}
+            </datalist>
+            <p class="muted-copy">Deixe em branco para abrir a página inicial. As seções abaixo são carregadas da vitrine atual.</p>
           </label>
-          <label class="admin-field">
-            <span>Imagem opcional</span>
-            <input type="url" name="image_url" placeholder="https://..." />
-          </label>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field">
+              <span>Agendar envio</span>
+              <input type="datetime-local" name="scheduled_at" value="${escapeHtml(scheduledValue)}" />
+            </label>
+            <label class="admin-field">
+              <span>Recorrência</span>
+              <select name="recurrence_rule">
+                <option value="" ${recurrenceValue ? "" : "selected"}>Não repetir</option>
+                <option value="daily" ${recurrenceValue === "daily" ? "selected" : ""}>Diariamente</option>
+                <option value="weekly" ${recurrenceValue === "weekly" ? "selected" : ""}>Semanalmente</option>
+                <option value="monthly" ${recurrenceValue === "monthly" ? "selected" : ""}>Mensalmente</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted-copy">Sem agendamento, a notificação fica em rascunho para envio manual. Com recorrência, ela reaparece em Agendadas após cada disparo.</p>
           <div class="notification-actions">
-            <button class="btn btn-primary" type="submit">Salvar notificação</button>
+            <button class="btn btn-primary" type="submit" id="notification-submit-button">${escapeHtml(submitLabel)}</button>
+            ${
+              editingNotification
+                ? `<button class="btn btn-secondary" type="button" id="cancel-notification-edit">Cancelar edição</button>`
+                : ""
+            }
           </div>
         </form>
       </article>
 
-      <article class="panel-card">
-        <span class="section-kicker">Base instalada</span>
-        <h2>${adminState.pushSummary.count} dispositivo(s) inscrito(s)</h2>
-        <p>O pedido de permissão é progressivo e só aparece quando o cliente clicar no botão da vitrine.</p>
-        <div class="list-stack">
-          ${adminState.notifications
-            .map(
-              (item) => `
-                <article class="list-item">
-                  <div class="list-item-header">
-                    <div>
-                      <strong class="list-item-title">${escapeHtml(item.title)}</strong>
-                      <span class="list-item-subtitle">${escapeHtml(item.body)}</span>
-                    </div>
-                    <span class="badge ${
-                      item.status === "sent" ? "badge--success" : item.status === "draft" ? "badge--muted" : "badge--warning"
-                    }">${escapeHtml(item.status)}</span>
-                  </div>
-                  <div class="list-item-footer">
-                    <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}">Enviar</button>
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+      <article class="panel-card notification-side-card">
+        <div class="notification-side-summary">
+          <span class="section-kicker">Base instalada</span>
+          <div class="notification-install-base">
+            <strong>${adminState.pushSummary.count}</strong>
+            <span>dispositivo(s) inscrito(s)</span>
+          </div>
+          <p>Dispositivos aptos a receber novidades.</p>
+        </div>
+        <div class="notification-planning-grid">
+          ${renderNotificationBucket("Agendadas", scheduledNotifications, "Nenhum envio agendado.", "scheduled")}
+          ${renderNotificationBucket("Recorrentes", recurringNotifications, "Nenhuma recorrência ativa.", "recurring")}
         </div>
       </article>
+
+      <article class="panel-card">
+        <div class="section-card__header">
+          <div>
+            <span class="section-kicker">Histórico recente</span>
+            <h2>${adminState.notifications.length} notificação(ões)</h2>
+          </div>
+          <button class="btn btn-secondary" type="button" id="open-notification-history">Mostrar todos</button>
+        </div>
+        <div class="list-stack">
+          ${recentNotifications.length
+            ? recentNotifications.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">Nenhuma notificação criada ainda.</span></article>`}
+        </div>
+      </article>
+
     </section>
   `;
+}
+
+function renderNotificationBucket(title, items, emptyMessage, type) {
+  return `
+    <div class="notification-bucket">
+      <div class="notification-bucket__header">
+        <strong>${escapeHtml(title)}</strong>
+        <div class="notification-bucket__actions">
+          <span class="badge badge--muted">${items.length}</span>
+          ${
+            items.length > 3
+              ? `<button class="btn btn-secondary btn-sm" type="button" data-open-planning-modal="${escapeHtml(type)}">Mostrar todos</button>`
+              : ""
+          }
+        </div>
+      </div>
+      <div class="list-stack">
+        ${items.length
+          ? items.slice(0, 3).map((item) => renderNotificationListItem(item, { compact: true })).join("")
+          : `<article class="list-item"><span class="list-item-subtitle">${escapeHtml(emptyMessage)}</span></article>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderNotificationListItem(item, options = {}) {
+  const target = item.target_url ? `Destino: ${item.target_url}` : "Sem destino";
+  const sentAt = item.sent_at ? `Enviada em ${formatDateTime(item.sent_at, adminState.settings?.locale || "pt-BR")}` : "";
+  const scheduledAt = item.scheduled_at ? `Agendada para ${formatDateTime(item.scheduled_at, adminState.settings?.locale || "pt-BR")}` : "";
+  const recurrence = item.recurrence_rule ? `Recorrência: ${getNotificationRecurrenceLabel(item.recurrence_rule)}` : "";
+  const meta = [target, scheduledAt || sentAt, recurrence].filter(Boolean).join(" · ");
+  const canEdit = ["draft", "scheduled", "failed"].includes(item.status);
+  const canCancelSchedule = Boolean(item.scheduled_at && !item.recurrence_rule && item.status === "scheduled");
+  const canStopRecurrence = Boolean(item.recurrence_rule);
+
+  return `
+    <article class="list-item ${options.compact ? "list-item--compact" : ""}">
+      <div class="list-item-header">
+        <div>
+          <strong class="list-item-title">${escapeHtml(item.title)}</strong>
+          <span class="list-item-subtitle">${escapeHtml(item.body)}</span>
+          ${meta ? `<small class="list-item-subtitle">${escapeHtml(meta)}</small>` : ""}
+        </div>
+        <span class="badge ${getNotificationStatusClass(item.status)}">${escapeHtml(getNotificationStatusLabel(item.status))}</span>
+      </div>
+      <div class="list-item-footer">
+        ${
+          canEdit
+            ? `<button class="btn btn-secondary" type="button" data-edit-notification="${escapeHtml(item.id)}">Editar</button>`
+            : ""
+        }
+        ${
+          canStopRecurrence
+            ? `<button class="btn btn-secondary" type="button" data-stop-recurrence="${escapeHtml(item.id)}">Encerrar recorrência</button>`
+            : ""
+        }
+        ${
+          canCancelSchedule
+            ? `<button class="btn btn-secondary" type="button" data-cancel-schedule="${escapeHtml(item.id)}">Cancelar agendamento</button>`
+            : ""
+        }
+        <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}">Enviar agora</button>
+      </div>
+    </article>
+  `;
+}
+
+function getNotificationStatusLabel(status) {
+  const labels = {
+    draft: "Rascunho",
+    scheduled: "Agendada",
+    sent: "Enviada",
+    failed: "Falhou"
+  };
+  return labels[status] || "Rascunho";
+}
+
+function getNotificationRecurrenceLabel(rule) {
+  const labels = {
+    daily: "diária",
+    weekly: "semanal",
+    monthly: "mensal"
+  };
+  return labels[rule] || rule;
+}
+
+function getNotificationStatusClass(status) {
+  if (status === "sent") return "badge--success";
+  if (status === "draft" || status === "scheduled") return "badge--muted";
+  if (status === "failed") return "badge--warning";
+  return "badge--muted";
+}
+
+function getScheduledNotifications() {
+  return adminState.notifications.filter((item) => item.scheduled_at && !item.recurrence_rule && item.status !== "sent");
+}
+
+function getRecurringNotifications() {
+  return adminState.notifications.filter((item) => item.recurrence_rule || item.recurrence_interval || item.is_recurring);
+}
+
+function getRegularNotifications() {
+  return adminState.notifications.filter(
+    (item) => !getScheduledNotifications().includes(item) && !getRecurringNotifications().includes(item)
+  );
+}
+
+function toDateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
+function renderNotificationHistoryModal() {
+  let root = qs("#admin-notification-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-notification-modal-root";
+    document.body.appendChild(root);
+  }
+
+  if (!adminState.isNotificationHistoryOpen) {
+    root.innerHTML = "";
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(adminState.notifications.length / NOTIFICATION_PAGE_SIZE));
+  adminState.notificationHistoryPage = Math.min(Math.max(adminState.notificationHistoryPage, 1), totalPages);
+  const start = (adminState.notificationHistoryPage - 1) * NOTIFICATION_PAGE_SIZE;
+  const pageItems = adminState.notifications.slice(start, start + NOTIFICATION_PAGE_SIZE);
+
+  root.innerHTML = `
+    <div class="editor-backdrop" id="notification-history-backdrop"></div>
+    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-history-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">Histórico completo</span>
+          <h2 id="notification-history-title">Notificações</h2>
+          <p class="muted-copy">${adminState.notifications.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-notification-history">Fechar</button>
+      </header>
+      <div class="editor-body">
+        <div class="list-stack">
+          ${pageItems.length
+            ? pageItems.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">Nenhuma notificação encontrada.</span></article>`}
+        </div>
+      </div>
+      <footer class="editor-footer notification-pagination">
+        <button class="btn btn-secondary" type="button" data-notification-page="${adminState.notificationHistoryPage - 1}" ${adminState.notificationHistoryPage <= 1 ? "disabled" : ""}>‹</button>
+        <div class="notification-pagination__pages">
+          ${Array.from({ length: totalPages }, (_, index) => {
+            const page = index + 1;
+            return `<button class="btn ${page === adminState.notificationHistoryPage ? "btn-primary" : "btn-secondary"}" type="button" data-notification-page="${page}">${page}</button>`;
+          }).join("")}
+        </div>
+        <button class="btn btn-secondary" type="button" data-notification-page="${adminState.notificationHistoryPage + 1}" ${adminState.notificationHistoryPage >= totalPages ? "disabled" : ""}>›</button>
+      </footer>
+    </section>
+  `;
+
+  bindNotificationHistoryModal();
+}
+
+function renderNotificationPlanningModal() {
+  let root = qs("#admin-notification-planning-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-notification-planning-modal-root";
+    document.body.appendChild(root);
+  }
+
+  if (!adminState.notificationPlanningModalType) {
+    root.innerHTML = "";
+    return;
+  }
+
+  const isRecurring = adminState.notificationPlanningModalType === "recurring";
+  const items = isRecurring ? getRecurringNotifications() : getScheduledNotifications();
+  const title = isRecurring ? "Notificações recorrentes" : "Notificações agendadas";
+  const kicker = isRecurring ? "Recorrentes" : "Agendadas";
+  const emptyMessage = isRecurring ? "Nenhuma recorrência ativa." : "Nenhum envio agendado.";
+  const totalPages = Math.max(1, Math.ceil(items.length / NOTIFICATION_PAGE_SIZE));
+  adminState.notificationPlanningPage = Math.min(Math.max(adminState.notificationPlanningPage, 1), totalPages);
+  const start = (adminState.notificationPlanningPage - 1) * NOTIFICATION_PAGE_SIZE;
+  const pageItems = items.slice(start, start + NOTIFICATION_PAGE_SIZE);
+
+  root.innerHTML = `
+    <div class="editor-backdrop" id="notification-planning-backdrop"></div>
+    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-planning-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">${escapeHtml(kicker)}</span>
+          <h2 id="notification-planning-title">${escapeHtml(title)}</h2>
+          <p class="muted-copy">${items.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-notification-planning">Fechar</button>
+      </header>
+      <div class="editor-body">
+        <div class="list-stack">
+          ${pageItems.length
+            ? pageItems.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">${escapeHtml(emptyMessage)}</span></article>`}
+        </div>
+      </div>
+      <footer class="editor-footer notification-pagination">
+        <button class="btn btn-secondary" type="button" data-planning-page="${adminState.notificationPlanningPage - 1}" ${adminState.notificationPlanningPage <= 1 ? "disabled" : ""}>‹</button>
+        <div class="notification-pagination__pages">
+          ${Array.from({ length: totalPages }, (_, index) => {
+            const page = index + 1;
+            return `<button class="btn ${page === adminState.notificationPlanningPage ? "btn-primary" : "btn-secondary"}" type="button" data-planning-page="${page}">${page}</button>`;
+          }).join("")}
+        </div>
+        <button class="btn btn-secondary" type="button" data-planning-page="${adminState.notificationPlanningPage + 1}" ${adminState.notificationPlanningPage >= totalPages ? "disabled" : ""}>›</button>
+      </footer>
+    </section>
+  `;
+
+  bindNotificationPlanningModal();
+}
+
+function getNotificationTargetOptions() {
+  const options = [{ value: "./index.html", label: "Página inicial" }];
+
+  if (adminState.settings?.enable_favorites) {
+    options.push({ value: "#favorites-section", label: "Favoritos" });
+  }
+
+  adminState.sections
+    .filter((section) => section?.slug && section.is_active !== false)
+    .forEach((section) => {
+      options.push({
+        value: `#section-${section.slug}`,
+        label: section.title || section.slug
+      });
+    });
+
+  options.push({ value: "#all-products-section", label: "Todos os produtos" });
+
+  return options;
 }
 
 function renderAutomations() {
@@ -1315,6 +1715,7 @@ function renderAutomations() {
 function renderSettings() {
   const store = adminState.store || {};
   const settings = adminState.settings || {};
+  const businessHours = normalizeBusinessHours(settings.business_hours);
 
   return `
     <section class="settings-grid">
@@ -1379,7 +1780,7 @@ function renderSettings() {
           <label class="admin-field">
             <span>Tema base da vitrine</span>
             <select name="theme_mode">
-              ${renderOptions(STORE_THEME_OPTIONS, settings.theme_mode || "light")}
+              ${renderOptions(STORE_THEME_OPTIONS, normalizeStoreThemeMode(settings.theme_mode || "light"))}
             </select>
             <small class="muted-copy">Escolha a atmosfera da vitrine. As cores acima refinam os destaques e o contraste do tema.</small>
           </label>
@@ -1496,6 +1897,8 @@ function renderPreview() {
 function bindAdminLayoutEvents() {
   qsa("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", () => {
+      clearAdminFormDirty();
+      adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.adminTab;
       renderAdminLayout();
     });
@@ -1532,6 +1935,8 @@ function bindAdminLayoutEvents() {
 
   qsa("[data-go-tab]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty();
+      adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.goTab;
       renderAdminLayout();
     })
@@ -1544,7 +1949,6 @@ function bindAdminLayoutEvents() {
   bindAppearanceTab();
   bindNotificationsTab();
   bindSettingsTab();
-  bindAutomationTab();
 }
 
 function bindProductsTab() {
@@ -1597,13 +2001,16 @@ function bindProductsTab() {
 }
 
 function bindSectionTab() {
+  bindDirtyFormState("#section-form", "sections");
   qs("#new-section-button")?.addEventListener("click", () => {
+    clearAdminFormDirty("sections");
     adminState.editingSection = createEmptySectionDraft();
     renderAdminLayout();
   });
 
   qsa("[data-edit-section]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("sections");
       adminState.currentAdminTab = "sections";
       adminState.editingSection = structuredClone(
         adminState.sections.find((item) => item.id === button.dataset.editSection) || createEmptySectionDraft()
@@ -1624,13 +2031,16 @@ function bindSectionTab() {
 }
 
 function bindCategoryTab() {
+  bindDirtyFormState("#category-form", "categories");
   qs("#category-form")?.addEventListener("submit", saveCategory);
   qs("#reset-category-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("categories");
     adminState.editingCategory = createEmptyCategoryDraft();
     renderAdminLayout();
   });
   qsa("[data-edit-category]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("categories");
       adminState.editingCategory = structuredClone(
         adminState.categories.find((item) => item.id === button.dataset.editCategory) || createEmptyCategoryDraft()
       );
@@ -1643,13 +2053,16 @@ function bindCategoryTab() {
 }
 
 function bindBrandTab() {
+  bindDirtyFormState("#brand-form", "brands");
   qs("#brand-form")?.addEventListener("submit", saveBrand);
   qs("#reset-brand-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("brands");
     adminState.editingBrand = createEmptyBrandDraft();
     renderAdminLayout();
   });
   qsa("[data-edit-brand]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("brands");
       adminState.editingBrand = structuredClone(
         adminState.brands.find((item) => item.id === button.dataset.editBrand) || createEmptyBrandDraft()
       );
@@ -1662,17 +2075,21 @@ function bindBrandTab() {
 }
 
 function bindAppearanceTab() {
+  bindDirtyFormState("#banner-form", "appearance");
   qs("#banner-form")?.addEventListener("submit", saveBanner);
   qs("#banner-upload-input")?.addEventListener("change", (event) => {
     adminState.pendingBannerFile = event.currentTarget.files?.[0] || null;
+    markAdminFormDirty("appearance");
   });
   qs("#reset-banner-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("appearance");
     adminState.editingBanner = createEmptyBannerDraft();
     adminState.pendingBannerFile = null;
     renderAdminLayout();
   });
   qsa("[data-edit-banner]").forEach((button) =>
     button.addEventListener("click", () => {
+      clearAdminFormDirty("appearance");
       adminState.editingBanner = structuredClone(
         adminState.banners.find((item) => item.id === button.dataset.editBanner) || createEmptyBannerDraft()
       );
@@ -1685,18 +2102,149 @@ function bindAppearanceTab() {
 }
 
 function bindNotificationsTab() {
-  qs("#notification-form")?.addEventListener("submit", saveNotification);
+  const notificationForm = qs("#notification-form");
+  bindDirtyFormState("#notification-form", "notifications");
+  notificationForm?.addEventListener("submit", saveNotification);
+  notificationForm?.addEventListener("input", updateNotificationSubmitLabel);
+  notificationForm?.addEventListener("change", updateNotificationSubmitLabel);
+  updateNotificationSubmitLabel();
+  qs("#cancel-notification-edit")?.addEventListener("click", () => {
+    clearAdminFormDirty("notifications");
+    adminState.editingNotificationId = null;
+    renderAdminLayout();
+  });
+  qs("#open-notification-history")?.addEventListener("click", () => {
+    adminState.isNotificationHistoryOpen = true;
+    adminState.notificationHistoryPage = 1;
+    renderNotificationHistoryModal();
+  });
+  qsa("[data-open-planning-modal]").forEach((button) =>
+    button.addEventListener("click", () => {
+      adminState.notificationPlanningModalType = button.dataset.openPlanningModal;
+      adminState.notificationPlanningPage = 1;
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("[data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => editNotification(button.dataset.editNotification))
+  );
+  qsa("[data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", () => stopNotificationRecurrence(button.dataset.stopRecurrence))
+  );
+  qsa("[data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", () => cancelNotificationSchedule(button.dataset.cancelSchedule))
+  );
   qsa("[data-send-notification]").forEach((button) =>
     button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
   );
 }
 
-function bindSettingsTab() {
-  qs("#settings-form")?.addEventListener("submit", saveSettings);
+function updateNotificationSubmitLabel() {
+  const form = qs("#notification-form");
+  const button = qs("#notification-submit-button");
+  if (!form || !button) return;
+
+  const scheduledAt = parseDateTimeLocalValue(String(new FormData(form).get("scheduled_at") || ""));
+  const recurrenceRule = String(new FormData(form).get("recurrence_rule") || "");
+  if (scheduledAt || recurrenceRule) {
+    button.textContent = "Agendar";
+    return;
+  }
+
+  button.textContent = adminState.editingNotificationId ? "Atualizar rascunho" : "Salvar rascunho";
 }
 
-function bindAutomationTab() {
-  qs("#refresh-stale-sections")?.addEventListener("click", () => refreshStaleSections(false));
+function editNotification(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification) return;
+  adminState.editingNotificationId = notificationId;
+  renderAdminLayout();
+  qs("#notification-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function bindNotificationHistoryModal() {
+  const close = () => {
+    adminState.isNotificationHistoryOpen = false;
+    renderNotificationHistoryModal();
+  };
+
+  qs("#notification-history-backdrop")?.addEventListener("click", close);
+  qs("#close-notification-history")?.addEventListener("click", close);
+  qsa("[data-notification-page]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.dataset.notificationPage);
+      if (!Number.isFinite(nextPage)) return;
+      adminState.notificationHistoryPage = nextPage;
+      renderNotificationHistoryModal();
+    })
+  );
+  qsa("#admin-notification-modal-root [data-send-notification]").forEach((button) =>
+    button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
+  );
+  qsa("#admin-notification-modal-root [data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => {
+      close();
+      editNotification(button.dataset.editNotification);
+    })
+  );
+  qsa("#admin-notification-modal-root [data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await stopNotificationRecurrence(button.dataset.stopRecurrence);
+      renderNotificationHistoryModal();
+    })
+  );
+  qsa("#admin-notification-modal-root [data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await cancelNotificationSchedule(button.dataset.cancelSchedule);
+      renderNotificationHistoryModal();
+    })
+  );
+}
+
+function bindNotificationPlanningModal() {
+  const close = () => {
+    adminState.notificationPlanningModalType = "";
+    renderNotificationPlanningModal();
+  };
+
+  qs("#notification-planning-backdrop")?.addEventListener("click", close);
+  qs("#close-notification-planning")?.addEventListener("click", close);
+  qsa("[data-planning-page]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.dataset.planningPage);
+      if (!Number.isFinite(nextPage)) return;
+      adminState.notificationPlanningPage = nextPage;
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-send-notification]").forEach((button) =>
+    button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
+  );
+  qsa("#admin-notification-planning-modal-root [data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => {
+      close();
+      editNotification(button.dataset.editNotification);
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await stopNotificationRecurrence(button.dataset.stopRecurrence);
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await cancelNotificationSchedule(button.dataset.cancelSchedule);
+      renderNotificationPlanningModal();
+    })
+  );
+}
+
+function bindSettingsTab() {
+  bindDirtyFormState("#settings-form", "settings");
+  qs("#settings-form")?.addEventListener("submit", saveSettings);
+  mountBusinessHoursEditor();
+  qs("#open-business-hours-editor")?.addEventListener("click", openBusinessHoursEditor);
 }
 
 async function refreshProducts() {
@@ -1724,6 +2272,7 @@ function openProductEditor(productId = null) {
     ? structuredClone(adminState.products.find((product) => product.id === productId))
     : createEmptyProductDraft();
 
+  setAdminModalOpen("product-editor", true);
   renderProductEditor();
 }
 
@@ -2138,6 +2687,7 @@ function closeProductEditor(force = false) {
   adminState.isSavingProduct = false;
   adminState.productSaveMode = null;
   qs("#admin-modal-root").innerHTML = "";
+  setAdminModalOpen("product-editor", false);
 }
 
 async function saveProduct(publish) {
@@ -2377,6 +2927,7 @@ async function applyBulkAction(action) {
 
 async function saveSection(event) {
   event.preventDefault();
+  clearAdminFormDirty("sections");
   const form = event.currentTarget;
   const formData = new FormData(form);
   const selectedProductIds = formData.getAll("selectedProductIds").map(String);
@@ -2442,6 +2993,7 @@ function isSectionStale(section) {
 
 async function saveCategory(event) {
   event.preventDefault();
+  clearAdminFormDirty("categories");
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveCategory({
@@ -2470,6 +3022,7 @@ async function removeCategory(categoryId) {
 
 async function saveBrand(event) {
   event.preventDefault();
+  clearAdminFormDirty("brands");
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveBrand({
@@ -2498,6 +3051,7 @@ async function removeBrand(brandId) {
 
 async function saveBanner(event) {
   event.preventDefault();
+  clearAdminFormDirty("appearance");
   const form = event.currentTarget;
   const data = new FormData(form);
   let imageUrl = String(data.get("image_url") || "");
@@ -2544,36 +3098,162 @@ async function removeBanner(bannerId) {
 
 async function saveNotification(event) {
   event.preventDefault();
+  clearAdminFormDirty("notifications");
   const form = event.currentTarget;
   const data = new FormData(form);
-  await adminSaveNotification({
-    store_id: adminState.store.id,
-    title: String(data.get("title") || "").trim(),
-    body: String(data.get("body") || "").trim(),
-    target_url: String(data.get("target_url") || ""),
-    image_url: String(data.get("image_url") || ""),
-    status: "draft",
-    created_by: adminState.profile.id
-  });
-  showToast("Notificação salva em rascunho.", "success");
-  adminState.notifications = await adminListNotifications(adminState.store.id);
-  renderAdminLayout();
+  const targetUrl = String(data.get("target_url") || "").trim();
+  const scheduledAt = parseDateTimeLocalValue(String(data.get("scheduled_at") || ""));
+  const recurrenceRule = String(data.get("recurrence_rule") || "");
+  const recurrenceNextAt = recurrenceRule ? scheduledAt || new Date().toISOString() : null;
+  const status = scheduledAt || recurrenceRule ? "scheduled" : "draft";
+  const isEditing = Boolean(adminState.editingNotificationId);
+
+  try {
+    const payload = {
+      store_id: adminState.store.id,
+      title: String(data.get("title") || "").trim(),
+      body: String(data.get("body") || "").trim(),
+      target_url: targetUrl || "./index.html",
+      image_url: "",
+      status,
+      scheduled_at: scheduledAt,
+      recurrence_rule: recurrenceRule || null,
+      recurrence_next_at: recurrenceNextAt,
+      created_by: adminState.profile.id
+    };
+
+    if (isEditing) {
+      payload.id = adminState.editingNotificationId;
+      delete payload.created_by;
+    }
+
+    const savedNotification = await adminSaveNotification(payload);
+    const shouldSendNow =
+      status === "scheduled" && scheduledAt && !recurrenceRule && new Date(scheduledAt).getTime() <= Date.now();
+    let immediateSendResult = null;
+    let immediateSendError = null;
+    if (shouldSendNow) {
+      try {
+        immediateSendResult = await sendNotification(savedNotification.id, { silentRefresh: true });
+      } catch (error) {
+        immediateSendError = error;
+      }
+    }
+
+    adminState.editingNotificationId = null;
+    if (immediateSendError) {
+      showToast(immediateSendError.message || "Agendamento salvo, mas o envio imediato falhou.", "danger");
+    } else if (shouldSendNow && immediateSendResult?.sent > 0) {
+      showToast(`Horário já atingido. Notificação enviada para ${immediateSendResult.sent} dispositivo(s).`, "success");
+    } else if (shouldSendNow) {
+      showToast(immediateSendResult?.message || "Agendamento salvo, mas nenhum dispositivo recebeu agora.", "warning");
+    } else {
+      showToast(
+        status === "scheduled" ? "Notificação agendada." : isEditing ? "Rascunho atualizado." : "Notificação salva em rascunho.",
+        "success"
+      );
+    }
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível salvar a notificação.", "danger");
+  }
 }
 
-async function sendNotification(notificationId) {
+function parseDateTimeLocalValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function stopNotificationRecurrence(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification?.recurrence_rule) return;
+  if (!window.confirm("Encerrar a recorrência desta notificação? Ela ficará como rascunho e não será disparada automaticamente.")) return;
+
+  try {
+    await adminSaveNotification({
+      id: notificationId,
+      status: "draft",
+      recurrence_rule: null,
+      recurrence_next_at: null,
+      scheduled_at: null
+    });
+    if (adminState.editingNotificationId === notificationId) {
+      adminState.editingNotificationId = null;
+    }
+    showToast("Recorrência encerrada. A notificação voltou para rascunho.", "success");
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível encerrar a recorrência.", "danger");
+  }
+}
+
+async function cancelNotificationSchedule(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification?.scheduled_at || notification.recurrence_rule || notification.status !== "scheduled") return;
+  if (!window.confirm("Cancelar o agendamento desta notificação? Ela ficará como rascunho e não será disparada automaticamente.")) return;
+
+  try {
+    await adminSaveNotification({
+      id: notificationId,
+      status: "draft",
+      scheduled_at: null,
+      recurrence_next_at: null
+    });
+    if (adminState.editingNotificationId === notificationId) {
+      adminState.editingNotificationId = null;
+    }
+    showToast("Agendamento cancelado. A notificação voltou para rascunho.", "success");
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível cancelar o agendamento.", "danger");
+  }
+}
+
+async function sendNotification(notificationId, options = {}) {
   if (!adminState.settings?.enable_notifications) {
     showToast("Ative notificações nas configurações da loja antes de enviar.", "warning");
     return;
   }
 
-  await adminSendNotification(notificationId);
-  showToast("Envio de notificação iniciado.", "success");
-  adminState.notifications = await adminListNotifications(adminState.store.id);
-  renderAdminLayout();
+  try {
+    const result = await adminSendNotification(notificationId);
+    if (!options.silentRefresh) {
+      if (result?.sent > 0) {
+        showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
+      } else {
+        showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    await adminSaveNotification({
+      id: notificationId,
+      status: "failed",
+      sent_at: null
+    }).catch((updateError) => console.warn("Não foi possível marcar a notificação como falha.", updateError));
+    if (!options.silentRefresh) {
+      showToast(error.message || "Não foi possível enviar a notificação.", "danger");
+    }
+    if (options.silentRefresh) throw error;
+  }
+
+  if (!options.silentRefresh) {
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  }
+  return result;
 }
 
 async function saveSettings(event) {
   event.preventDefault();
+  clearAdminFormDirty("settings");
   const form = event.currentTarget;
   const data = new FormData(form);
 
@@ -2633,6 +3313,7 @@ async function refreshAllData() {
   adminState.banners = banners || [];
   adminState.notifications = notifications || [];
   adminState.pushSummary = pushSummary || { count: 0, data: [] };
+  adminState.pendingBackgroundRender = false;
 
   renderAdminLayout();
 }
@@ -2833,6 +3514,292 @@ function debounceAdmin(callback) {
     window.clearTimeout(timerId);
     timerId = window.setTimeout(() => callback(...args), 260);
   };
+}
+
+function normalizeBusinessHours(sourceValue) {
+  const parsed = parseJsonSafe(sourceValue, null);
+  const source =
+    parsed && typeof parsed === "object" && Object.keys(parsed).length ? parsed : defaultBusinessHours();
+
+  return BUSINESS_HOURS_DAYS.reduce((accumulator, day) => {
+    const periods = Array.isArray(source?.[day.key]) ? source[day.key] : [];
+    accumulator[day.key] = periods
+      .map((period) => ({
+        start: normalizeTimeValue(period?.start, "09:00"),
+        end: normalizeTimeValue(period?.end, "18:00")
+      }))
+      .filter((period) => isBusinessHoursRangeValid(period.start, period.end))
+      .slice(0, 2);
+
+    return accumulator;
+  }, {});
+}
+
+function normalizeTimeValue(value, fallback) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || "").trim());
+  return match ? `${match[1]}:${match[2]}` : fallback;
+}
+
+function getBusinessHoursDayDraft(periods = []) {
+  const firstPeriod = periods[0] || { start: "09:00", end: "18:00" };
+  const secondPeriod = periods[1] || { start: "13:00", end: "18:00" };
+
+  return {
+    closed: !periods.length,
+    split: periods.length > 1,
+    morningStart: normalizeTimeValue(firstPeriod.start, "09:00"),
+    morningEnd: normalizeTimeValue(firstPeriod.end, "18:00"),
+    afternoonStart: normalizeTimeValue(secondPeriod.start, "13:00"),
+    afternoonEnd: normalizeTimeValue(secondPeriod.end, "18:00")
+  };
+}
+
+function formatBusinessHoursPeriods(periods = []) {
+  if (!periods.length) return "Fechado";
+  return periods.map((period) => `${period.start} as ${period.end}`).join(" • ");
+}
+
+function renderBusinessHoursSummary(hours) {
+  const normalized = normalizeBusinessHours(hours);
+
+  return BUSINESS_HOURS_DAYS.map(
+    (day) => `
+      <article class="business-hours-summary__row">
+        <strong>${escapeHtml(day.label)}</strong>
+        <span>${escapeHtml(formatBusinessHoursPeriods(normalized[day.key]))}</span>
+      </article>
+    `
+  ).join("");
+}
+
+function buildBusinessHoursCompactLabel(hours) {
+  const normalized = normalizeBusinessHours(hours);
+  const openDays = BUSINESS_HOURS_DAYS.filter((day) => normalized[day.key]?.length);
+  if (!openDays.length) return "Nenhum horario definido";
+  return `${openDays.length} dia(s) com expediente definido`;
+}
+
+function isBusinessHoursRangeValid(start, end) {
+  return timeToMinutes(start) < timeToMinutes(end);
+}
+
+function timeToMinutes(value) {
+  const [hour = "0", minute = "0"] = String(value || "").split(":");
+  return Number(hour) * 60 + Number(minute);
+}
+
+function mountBusinessHoursEditor() {
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!hoursField) return;
+
+  const wrapper = hoursField.closest(".admin-field");
+  if (!wrapper) return;
+
+  const normalized = normalizeBusinessHours(hoursField.value);
+  hoursField.value = JSON.stringify(normalized);
+  hoursField.classList.add("is-hidden");
+  hoursField.setAttribute("aria-hidden", "true");
+
+  const label = wrapper.querySelector("span");
+  if (label) {
+    label.textContent = "Horarios de funcionamento";
+  }
+
+  let card = wrapper.querySelector(".business-hours-card");
+  if (!card) {
+    card = document.createElement("section");
+    card.className = "business-hours-card";
+    wrapper.appendChild(card);
+  }
+
+  card.innerHTML = `
+    <div class="business-hours-card__header">
+      <div>
+        <strong class="list-item-title">Expediente da loja</strong>
+        <p class="muted-copy">Defina um turno simples ou dois turnos com pausa para almoco.</p>
+      </div>
+      <button class="btn btn-secondary" type="button" id="open-business-hours-editor">Editar horarios</button>
+    </div>
+    <div id="business-hours-summary" class="business-hours-summary">
+      ${renderBusinessHoursSummary(normalized)}
+    </div>
+  `;
+}
+
+function openBusinessHoursEditor() {
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!hoursField) return;
+
+  setAdminModalOpen("hours-editor", true);
+  const normalized = normalizeBusinessHours(hoursField.value);
+  let modalRoot = qs("#admin-hours-modal-root");
+  if (!modalRoot) {
+    modalRoot = document.createElement("div");
+    modalRoot.id = "admin-hours-modal-root";
+    document.body.appendChild(modalRoot);
+  }
+
+  modalRoot.innerHTML = `
+    <div class="editor-backdrop" id="hours-editor-backdrop"></div>
+    <section class="editor-shell hours-editor-shell" role="dialog" aria-modal="true" aria-labelledby="hours-editor-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">Atendimento da loja</span>
+          <h2 id="hours-editor-title">Horarios de funcionamento</h2>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-hours-editor">Fechar</button>
+      </header>
+      <div class="editor-body hours-editor-body">
+        <p class="muted-copy">Escolha um horario continuo ou ative a pausa de almoco para cadastrar dois turnos no mesmo dia.</p>
+        <div class="hours-editor-grid">
+          ${BUSINESS_HOURS_DAYS.map((day) => {
+            const draft = getBusinessHoursDayDraft(normalized[day.key]);
+            return `
+              <article class="hours-day-card ${draft.closed ? "is-closed" : ""} ${draft.split ? "has-split" : ""}" data-hours-day="${escapeHtml(day.key)}">
+                <div class="hours-day-card__header">
+                  <strong>${escapeHtml(day.label)}</strong>
+                  <label class="hours-day-toggle">
+                    <input type="checkbox" data-hours-closed ${draft.closed ? "checked" : ""} />
+                    <span>Fechado</span>
+                  </label>
+                </div>
+                <div class="hours-day-card__body">
+                  <label class="hours-day-split">
+                    <input type="checkbox" data-hours-split ${draft.split ? "checked" : ""} ${draft.closed ? "disabled" : ""} />
+                    <span>Com pausa para almoco</span>
+                  </label>
+                  <div class="hours-time-grid">
+                    <label class="admin-field">
+                      <span>Inicio</span>
+                      <input type="time" data-hours-morning-start value="${escapeHtml(draft.morningStart)}" ${draft.closed ? "disabled" : ""} />
+                    </label>
+                    <label class="admin-field">
+                      <span>Fim</span>
+                      <input type="time" data-hours-morning-end value="${escapeHtml(draft.morningEnd)}" ${draft.closed ? "disabled" : ""} />
+                    </label>
+                  </div>
+                  <div class="hours-time-grid hours-time-grid--split">
+                    <label class="admin-field">
+                      <span>Retorno</span>
+                      <input type="time" data-hours-afternoon-start value="${escapeHtml(draft.afternoonStart)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                    </label>
+                    <label class="admin-field">
+                      <span>Encerramento</span>
+                      <input type="time" data-hours-afternoon-end value="${escapeHtml(draft.afternoonEnd)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                    </label>
+                  </div>
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </div>
+      <footer class="editor-footer">
+        <div class="editor-footer-actions">
+          <button class="btn btn-secondary" type="button" id="cancel-hours-editor">Cancelar</button>
+          <button class="btn btn-primary" type="button" id="apply-hours-editor">Aplicar horarios</button>
+        </div>
+      </footer>
+    </section>
+  `;
+
+  qsa("[data-hours-day]", modalRoot).forEach(syncBusinessHoursDayCard);
+  qs("#hours-editor-backdrop")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#close-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#cancel-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#apply-hours-editor")?.addEventListener("click", applyBusinessHoursEditor);
+
+  modalRoot.addEventListener("change", (event) => {
+    const card = event.target.closest("[data-hours-day]");
+    if (!card) return;
+    syncBusinessHoursDayCard(card);
+  });
+}
+
+function syncBusinessHoursDayCard(card) {
+  const closedInput = qs("[data-hours-closed]", card);
+  const splitInput = qs("[data-hours-split]", card);
+  const morningStart = qs("[data-hours-morning-start]", card);
+  const morningEnd = qs("[data-hours-morning-end]", card);
+  const afternoonStart = qs("[data-hours-afternoon-start]", card);
+  const afternoonEnd = qs("[data-hours-afternoon-end]", card);
+  const isClosed = Boolean(closedInput?.checked);
+  const hasSplit = Boolean(splitInput?.checked) && !isClosed;
+
+  card.classList.toggle("is-closed", isClosed);
+  card.classList.toggle("has-split", hasSplit);
+
+  if (splitInput) splitInput.disabled = isClosed;
+  [morningStart, morningEnd].forEach((input) => {
+    if (input) input.disabled = isClosed;
+  });
+  [afternoonStart, afternoonEnd].forEach((input) => {
+    if (input) input.disabled = isClosed || !hasSplit;
+  });
+}
+
+function applyBusinessHoursEditor() {
+  const modalRoot = qs("#admin-hours-modal-root");
+  const hoursField = qs("#settings-form textarea[name='business_hours']");
+  if (!modalRoot || !hoursField) return;
+
+  const nextValue = {};
+
+  for (const day of BUSINESS_HOURS_DAYS) {
+    const card = qs(`[data-hours-day="${day.key}"]`, modalRoot);
+    if (!card) continue;
+
+    const closed = qs("[data-hours-closed]", card)?.checked;
+    const split = qs("[data-hours-split]", card)?.checked;
+    if (closed) {
+      nextValue[day.key] = [];
+      continue;
+    }
+
+    const morningStart = normalizeTimeValue(qs("[data-hours-morning-start]", card)?.value, "09:00");
+    const morningEnd = normalizeTimeValue(qs("[data-hours-morning-end]", card)?.value, "18:00");
+
+    if (!isBusinessHoursRangeValid(morningStart, morningEnd)) {
+      showToast(`Revise o primeiro turno de ${day.label}.`, "warning");
+      return;
+    }
+
+    const periods = [{ start: morningStart, end: morningEnd }];
+
+    if (split) {
+      const afternoonStart = normalizeTimeValue(qs("[data-hours-afternoon-start]", card)?.value, "13:00");
+      const afternoonEnd = normalizeTimeValue(qs("[data-hours-afternoon-end]", card)?.value, "18:00");
+
+      if (!isBusinessHoursRangeValid(afternoonStart, afternoonEnd)) {
+        showToast(`Revise o segundo turno de ${day.label}.`, "warning");
+        return;
+      }
+
+      if (timeToMinutes(afternoonStart) <= timeToMinutes(morningEnd)) {
+        showToast(`A pausa de ${day.label} precisa comecar depois do primeiro turno.`, "warning");
+        return;
+      }
+
+      periods.push({ start: afternoonStart, end: afternoonEnd });
+    }
+
+    nextValue[day.key] = periods;
+  }
+
+  hoursField.value = JSON.stringify(nextValue);
+  qs("#business-hours-summary")?.replaceChildren();
+  const summary = qs("#business-hours-summary");
+  if (summary) {
+    summary.innerHTML = renderBusinessHoursSummary(nextValue);
+  }
+
+  markAdminFormDirty("settings");
+  closeBusinessHoursEditor();
+}
+
+function closeBusinessHoursEditor() {
+  qs("#admin-hours-modal-root")?.remove();
+  setAdminModalOpen("hours-editor", false);
 }
 
 initAdmin();

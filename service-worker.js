@@ -1,5 +1,5 @@
-const STATIC_CACHE = "vitrinezap-static-v5";
-const HTML_CACHE = "vitrinezap-html-v5";
+const STATIC_CACHE = "vitrinezap-static-v5.7";
+const HTML_CACHE = "vitrinezap-html-v6.4";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [
@@ -150,7 +150,6 @@ self.addEventListener("push", (event) => {
     body: payload.body,
     icon: payload.icon || "./assets/icons/icon-192.png",
     badge: payload.badge || "./assets/icons/icon-192.png",
-    image: payload.image,
     data: {
       target_url: payload.target_url || "./index.html"
     }
@@ -161,14 +160,23 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.target_url || "./index.html";
+  const rawTargetUrl = event.notification.data?.target_url || "./index.html";
+  const targetUrl = new URL(rawTargetUrl, self.registration.scope).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const matchingClient = clients.find((client) => client.url.includes(targetUrl));
+      const matchingClient = clients.find((client) => {
+        if (client.url === targetUrl) return true;
+        return client.url.split("#")[0] === targetUrl.split("#")[0];
+      });
+
       if (matchingClient) {
+        if (matchingClient.url !== targetUrl && "navigate" in matchingClient) {
+          return matchingClient.navigate(targetUrl);
+        }
         return matchingClient.focus();
       }
+
       return self.clients.openWindow(targetUrl);
     })
   );

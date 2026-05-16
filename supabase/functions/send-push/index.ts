@@ -14,7 +14,7 @@ serve(async (request) => {
   }
 
   if (request.method !== "POST") {
-    return jsonResponse({ error: "Método não permitido." }, 405);
+    return jsonResponse({ error: "Metodo nao permitido." }, 405);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -24,7 +24,7 @@ serve(async (request) => {
   const vapidSubject = Deno.env.get("VAPID_SUBJECT");
 
   if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
-    return jsonResponse({ error: "Secrets obrigatórios não configurados." }, 500);
+    return jsonResponse({ error: "Secrets obrigatorios nao configurados." }, 500);
   }
 
   const authorization = request.headers.get("Authorization");
@@ -33,21 +33,26 @@ serve(async (request) => {
   }
 
   const token = authorization.replace("Bearer ", "");
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  });
   const {
     data: { user },
     error: userError
   } = await supabaseAdmin.auth.getUser(token);
 
   if (userError || !user) {
-    return jsonResponse({ error: "Usuário não autenticado." }, 401);
+    return jsonResponse({ error: "Usuario nao autenticado." }, 401);
   }
 
   const body = await request.json().catch(() => null);
   const notificationId = body?.notification_id;
 
   if (!notificationId) {
-    return jsonResponse({ error: "notification_id é obrigatório." }, 400);
+    return jsonResponse({ error: "notification_id e obrigatorio." }, 400);
   }
 
   const { data: notification, error: notificationError } = await supabaseAdmin
@@ -57,7 +62,7 @@ serve(async (request) => {
     .single();
 
   if (notificationError || !notification) {
-    return jsonResponse({ error: "Notificação não encontrada." }, 404);
+    return jsonResponse({ error: "Notificacao nao encontrada." }, 404);
   }
 
   const { data: membership, error: membershipError } = await supabaseAdmin
@@ -69,7 +74,7 @@ serve(async (request) => {
     .maybeSingle();
 
   if (membershipError || !membership) {
-    return jsonResponse({ error: "Sem permissão para enviar push nesta loja." }, 403);
+    return jsonResponse({ error: "Sem permissao para enviar push nesta loja." }, 403);
   }
 
   const { data: subscriptions, error: subscriptionsError } = await supabaseAdmin
@@ -82,13 +87,30 @@ serve(async (request) => {
     return jsonResponse({ error: subscriptionsError.message }, 500);
   }
 
+  if (!subscriptions?.length) {
+    await supabaseAdmin
+      .from("notifications")
+      .update({
+        status: "failed",
+        sent_at: null
+      })
+      .eq("id", notification.id);
+
+    return jsonResponse({
+      ok: true,
+      sent: 0,
+      failed: 0,
+      invalidated: 0,
+      message: "Nenhum dispositivo inscrito para receber notificacoes."
+    });
+  }
+
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
   const payload = JSON.stringify({
     title: notification.title,
     body: notification.body,
-    target_url: notification.target_url || "/index.html",
-    image: notification.image_url || undefined,
+    target_url: notification.target_url || "./index.html",
     icon: "/assets/icons/icon-192.png",
     badge: "/assets/icons/icon-192.png"
   });
@@ -97,20 +119,23 @@ serve(async (request) => {
   let sent = 0;
   let failed = 0;
 
-  for (const item of subscriptions ?? []) {
+  for (const item of subscriptions) {
     try {
-      await webpush.sendNotification(item.subscription, payload);
+      await webpush.sendNotification(item.subscription, payload, {
+        TTL: 60 * 60 * 6
+      });
       sent += 1;
     } catch (error) {
       failed += 1;
-      const statusCode = error?.statusCode ?? error?.status ?? 500;
-      if (statusCode === 404 || statusCode === 410) {
+      const { statusCode, message, body } = getPushErrorInfo(error);
+      if (isInvalidSubscriptionStatus(statusCode)) {
         invalidSubscriptionIds.push(item.id);
       }
       console.error("Falha ao enviar push", {
         endpoint: item.endpoint,
         statusCode,
-        message: error?.message
+        message,
+        body
       });
     }
   }
@@ -130,21 +155,40 @@ serve(async (request) => {
     })
     .eq("id", notification.id);
 
-  /*
-    Se o pacote web-push tiver incompatibilidade no runtime da Edge Function,
-    mantenha esta função como referência e considere migrar o disparo para:
-    1. FCM
-    2. OneSignal
-    3. Um backend Node simples e barato
-  */
-
   return jsonResponse({
     ok: true,
     sent,
     failed,
-    invalidated: invalidSubscriptionIds.length
+    invalidated: invalidSubscriptionIds.length,
+    message:
+      sent > 0
+        ? undefined
+        : invalidSubscriptionIds.length > 0
+          ? "Os dispositivos inscritos rejeitaram o push e foram removidos. Peça para os clientes ativarem as notificacoes novamente."
+          : "Nao foi possivel entregar a notificacao aos dispositivos inscritos."
   });
 });
+
+function isInvalidSubscriptionStatus(statusCode: number) {
+  return [404, 410].includes(statusCode);
+}
+
+function getPushErrorInfo(error: unknown) {
+  if (typeof error === "object" && error !== null) {
+    const record = error as { statusCode?: number; status?: number; message?: string; body?: unknown };
+    return {
+      statusCode: record.statusCode ?? record.status ?? 500,
+      message: record.message ?? "Erro desconhecido",
+      body: typeof record.body === "string" ? record.body : record.body ? JSON.stringify(record.body) : undefined
+    };
+  }
+
+  return {
+    statusCode: 500,
+    message: String(error),
+    body: undefined
+  };
+}
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {

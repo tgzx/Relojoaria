@@ -7,7 +7,7 @@ import {
   incrementProductView
 } from "./storeApi.js";
 import { registerPwa } from "./pwa.js";
-import { registerPushButton } from "./push.js";
+import { registerPushButton, registerPushReminder } from "./push.js";
 import { getFutureCartFeatureState, renderAddToCartButton, createFutureCartNotice } from "./cartFuture.js";
 import {
   buildWhatsAppLink,
@@ -79,6 +79,7 @@ async function initApp() {
   updateHeaderOffset();
 
   if (APP_CONFIG.SUPABASE_URL.startsWith("COLE_AQUI") || APP_CONFIG.SUPABASE_ANON_KEY.startsWith("COLE_AQUI")) {
+    revealStorefrontShell();
     renderSetupRequired();
     return;
   }
@@ -86,8 +87,10 @@ async function initApp() {
   try {
     await loadHomeData();
     await loadCatalogProducts({ reset: true });
+    runInitialReveal();
   } catch (error) {
     console.error(error);
+    revealStorefrontShell();
     renderFatalState(error);
   }
 }
@@ -100,9 +103,17 @@ function bindShellEvents() {
     "input",
     debounceSearch(async (event) => {
       appState.filters.search = event.target.value.trim();
+      if (appState.filters.search) {
+        scrollCatalogIntoView();
+      }
       await loadCatalogProducts({ reset: true });
     })
   );
+  searchInput?.addEventListener("focus", () => {
+    if (searchInput.value.trim()) {
+      scrollCatalogIntoView();
+    }
+  });
 
   filtersForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -197,13 +208,61 @@ function hydrateHomeState(home, usingCachedData) {
   renderSectionNavigation();
   renderFilterOptions();
   renderFavoritesSection();
-  maybeShowIntro();
 
   if (!appState.isEmbeddedPreview) {
     registerPushButton(appState.store.id, {
       enabled: Boolean(appState.settings?.enable_notifications)
     }).catch(() => {});
+    registerPushReminder(appState.store.id, {
+      enabled: Boolean(appState.settings?.enable_notifications)
+    }).catch(() => {});
   }
+}
+
+async function runInitialReveal() {
+  const loadingScreen = qs("#app-loading-screen");
+  const reducedMotion = supportsReducedMotion();
+  const introReady = prepareIntroOverlay();
+
+  if (loadingScreen) {
+    await delay(reducedMotion ? 0 : 320);
+    loadingScreen.classList.add("is-dismissing");
+    await delay(reducedMotion ? 0 : 560);
+    loadingScreen.remove();
+  }
+
+  if (introReady) {
+    await finishIntroOverlay();
+  } else {
+    await waitForStorefrontReady();
+    revealStorefrontShell();
+  }
+
+  scrollToInitialHashTarget();
+}
+
+function revealStorefrontShell() {
+  document.body.classList.remove("app-loading");
+  document.body.classList.add("app-ready");
+  qs("#app-loading-screen")?.remove();
+}
+
+function scrollToInitialHashTarget() {
+  const hash = window.location.hash;
+  if (!hash) return;
+
+  const targetId = hash.slice(1);
+  const target = document.getElementById(targetId) || qs(`[data-section-anchor="${targetId}"]`);
+  if (!target) return;
+
+  const headerHeight = qs(".site-header")?.offsetHeight || 0;
+  const navHeight = qs("#section-nav")?.offsetHeight || 0;
+  const targetTop = window.scrollY + target.getBoundingClientRect().top - headerHeight - navHeight - 16;
+
+  window.scrollTo({
+    top: Math.max(0, targetTop),
+    behavior: supportsReducedMotion() ? "auto" : "smooth"
+  });
 }
 
 function renderStoreFrame() {
@@ -449,8 +508,10 @@ function renderSectionCarouselShell({ label, railClassName, itemsHtml }) {
       >
         <span aria-hidden="true">‹</span>
       </button>
-      <div class="${railClassName}" data-carousel-rail>
-        ${itemsHtml}
+      <div class="section-carousel-viewport" data-carousel-viewport>
+        <div class="${railClassName}" data-carousel-rail>
+          ${itemsHtml}
+        </div>
       </div>
       <button
         class="carousel-nav carousel-nav--next is-hidden"
@@ -474,28 +535,30 @@ function setupSectionCarousels() {
   }
 
   const cleanupFns = [];
-  const desktopQuery = window.matchMedia("(min-width: 1024px)");
+  const navigationQuery = window.matchMedia("(min-width: 720px)");
 
   shells.forEach((shell) => {
+    const viewport = shell.querySelector("[data-carousel-viewport]");
     const rail = shell.querySelector("[data-carousel-rail]");
     const prevButton = shell.querySelector("[data-carousel-prev]");
     const nextButton = shell.querySelector("[data-carousel-next]");
+    const scroller = viewport || rail;
 
-    if (!rail || !prevButton || !nextButton) return;
+    if (!rail || !scroller || !prevButton || !nextButton) return;
 
     const updateButtons = () => {
-      const maxScrollLeft = Math.max(0, rail.scrollWidth - rail.clientWidth);
-      const canScroll = desktopQuery.matches && maxScrollLeft > 6;
-      const atStart = rail.scrollLeft <= 6;
-      const atEnd = rail.scrollLeft >= maxScrollLeft - 6;
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const canScroll = navigationQuery.matches && maxScrollLeft > 6;
+      const atStart = scroller.scrollLeft <= 6;
+      const atEnd = scroller.scrollLeft >= maxScrollLeft - 6;
 
       prevButton.classList.toggle("is-hidden", !canScroll || atStart);
       nextButton.classList.toggle("is-hidden", !canScroll || atEnd);
     };
 
     const scrollByPage = (direction) => {
-      const distance = Math.max(rail.clientWidth * 0.82, 260) * direction;
-      rail.scrollBy({
+      const distance = Math.max(scroller.clientWidth * 0.82, 260) * direction;
+      scroller.scrollBy({
         left: distance,
         behavior: supportsReducedMotion() ? "auto" : "smooth"
       });
@@ -506,29 +569,33 @@ function setupSectionCarousels() {
 
     prevButton.addEventListener("click", handlePrev);
     nextButton.addEventListener("click", handleNext);
-    rail.addEventListener("scroll", updateButtons, { passive: true });
+    scroller.addEventListener("scroll", updateButtons, { passive: true });
     window.addEventListener("resize", updateButtons);
 
     let resizeObserver = null;
     if ("ResizeObserver" in window) {
       resizeObserver = new ResizeObserver(() => updateButtons());
-      resizeObserver.observe(rail);
+      resizeObserver.observe(scroller);
+      if (rail !== scroller) {
+        resizeObserver.observe(rail);
+      }
     }
 
-    if (typeof desktopQuery.addEventListener === "function") {
-      desktopQuery.addEventListener("change", updateButtons);
+    if (typeof navigationQuery.addEventListener === "function") {
+      navigationQuery.addEventListener("change", updateButtons);
     }
 
     window.requestAnimationFrame(updateButtons);
+    window.setTimeout(updateButtons, 120);
 
     cleanupFns.push(() => {
       prevButton.removeEventListener("click", handlePrev);
       nextButton.removeEventListener("click", handleNext);
-      rail.removeEventListener("scroll", updateButtons);
+      scroller.removeEventListener("scroll", updateButtons);
       window.removeEventListener("resize", updateButtons);
       resizeObserver?.disconnect();
-      if (typeof desktopQuery.removeEventListener === "function") {
-        desktopQuery.removeEventListener("change", updateButtons);
+      if (typeof navigationQuery.removeEventListener === "function") {
+        navigationQuery.removeEventListener("change", updateButtons);
       }
     });
   });
@@ -608,6 +675,14 @@ function setupSectionNavigation() {
         behavior: supportsReducedMotion() ? "auto" : "smooth"
       });
     }
+
+    const href =
+      anchor === "favorites"
+        ? "#favorites-section"
+        : anchor === "all-products"
+          ? "#all-products-section"
+          : `#section-${anchor}`;
+    window.history.replaceState(null, "", href);
   };
 
   const updateActiveAnchor = () => {
@@ -657,7 +732,6 @@ function setupSectionNavigation() {
     const targetTop = window.scrollY + target.getBoundingClientRect().top - headerHeight - navHeight - 16;
 
     setActiveAnchor(anchor);
-    window.history.replaceState(null, "", href);
     window.scrollTo({
       top: Math.max(0, targetTop),
       behavior: supportsReducedMotion() ? "auto" : "smooth"
@@ -759,6 +833,9 @@ async function loadCatalogProducts({ reset }) {
     toggleResetFiltersButton();
 
     loadMoreButton.classList.toggle("is-hidden", !appState.pagination.hasMore);
+    if (reset && appState.filters.search) {
+      scrollCatalogIntoView();
+    }
   } catch (error) {
     console.error(error);
     productsGrid.innerHTML = "";
@@ -769,6 +846,20 @@ async function loadCatalogProducts({ reset }) {
     emptyState.classList.remove("is-hidden");
     loadMoreButton.classList.add("is-hidden");
   }
+}
+
+function scrollCatalogIntoView() {
+  const target = qs("#all-products-section");
+  if (!target) return;
+
+  const headerHeight = qs(".site-header")?.offsetHeight || 0;
+  const top = window.scrollY + target.getBoundingClientRect().top - headerHeight - 12;
+  window.requestAnimationFrame(() => {
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: supportsReducedMotion() ? "auto" : "smooth"
+    });
+  });
 }
 
 function renderCatalogProducts() {
@@ -1099,6 +1190,7 @@ function openFiltersSheet() {
   const sheet = qs("#filters-sheet");
   sheet.classList.remove("is-hidden");
   sheet.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
   syncFilterForm();
 }
 
@@ -1106,6 +1198,7 @@ function closeFiltersSheet() {
   const sheet = qs("#filters-sheet");
   sheet.classList.add("is-hidden");
   sheet.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
 }
 
 function syncFilterForm() {
@@ -1283,17 +1376,17 @@ function humanizeStock(product) {
   return "Disponível";
 }
 
-function maybeShowIntro() {
+function prepareIntroOverlay() {
   const overlay = qs("#intro-overlay");
   const introMode = appState.settings?.intro_mode || "logo";
   if (introMode === "disabled" || appState.isEmbeddedPreview) {
     overlay.classList.add("is-hidden");
-    return;
+    return false;
   }
 
   const logo = appState.store?.logo_url || "./assets/icons/icon-192.png";
-  const reducedMotion = supportsReducedMotion();
   overlay.classList.remove("is-hidden");
+  overlay.classList.remove("is-dismissing");
 
   if (introMode === "brand_carousel") {
     overlay.innerHTML = `
@@ -1331,9 +1424,51 @@ function maybeShowIntro() {
     `;
   }
 
-  delay(reducedMotion ? 400 : 1700).then(() => {
-    overlay.classList.add("is-hidden");
-    overlay.innerHTML = "";
+  return true;
+}
+
+async function finishIntroOverlay() {
+  const overlay = qs("#intro-overlay");
+  const reducedMotion = supportsReducedMotion();
+
+  await delay(reducedMotion ? 250 : 2000);
+  await waitForStorefrontReady();
+  revealStorefrontShell();
+  await delay(reducedMotion ? 0 : 320);
+  overlay.classList.add("is-dismissing");
+  await delay(reducedMotion ? 0 : 560);
+  overlay.classList.add("is-hidden");
+  overlay.innerHTML = "";
+  return true;
+}
+
+async function waitForStorefrontReady() {
+  const criticalImages = [
+    qs("#store-logo"),
+    qs("#hero-section img"),
+    ...qsa("#dynamic-sections img, #products-grid img").slice(0, 6)
+  ].filter(Boolean);
+
+  await Promise.race([
+    Promise.all(criticalImages.map(waitForImageReady)),
+    delay(1800)
+  ]);
+}
+
+function waitForImageReady(image) {
+  if (image.complete && image.naturalWidth > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const finish = () => {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      resolve();
+    };
+
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
   });
 }
 

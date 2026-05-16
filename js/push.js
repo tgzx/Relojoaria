@@ -1,6 +1,11 @@
 import { APP_CONFIG } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 import { qs, showToast } from "./utils.js";
+import { isStandalone, showInstallPrompt } from "./pwa.js";
+
+const PUSH_REMINDER_KEY = "vz_push_prompt_dismissed_at";
+const PUSH_REMINDER_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+const PUSH_AUTO_PROMPT_DELAY_MS = 2800;
 
 function setPushButtonLabel(button, isSubscribed) {
   if (!button) return;
@@ -11,6 +16,17 @@ function setPushButtonLabel(button, isSubscribed) {
   button.dataset.fullLabel = fullLabel;
   button.dataset.compactLabel = compactLabel;
   button.textContent = fullLabel;
+  window.dispatchEvent(new CustomEvent("vitrinezap:header-actions-update"));
+}
+
+function setPushButtonBlocked(button) {
+  if (!button) return;
+
+  button.dataset.fullLabel = "Notificações bloqueadas";
+  button.dataset.compactLabel = "Bloqueadas";
+  button.textContent = button.dataset.fullLabel;
+  button.title = "Libere notificações nas permissões do navegador para receber novidades.";
+  button.disabled = true;
   window.dispatchEvent(new CustomEvent("vitrinezap:header-actions-update"));
 }
 
@@ -38,6 +54,24 @@ export function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 }
 
+function uint8ArrayToUrlBase64(bytes) {
+  const binary = Array.from(bytes)
+    .map((byte) => String.fromCharCode(byte))
+    .join("");
+
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function subscriptionUsesApplicationServerKey(subscription, applicationServerKey) {
+  const subscriptionKey = subscription?.options?.applicationServerKey;
+  if (!subscriptionKey) return true;
+
+  return (
+    uint8ArrayToUrlBase64(new Uint8Array(subscriptionKey)) ===
+    uint8ArrayToUrlBase64(new Uint8Array(applicationServerKey))
+  );
+}
+
 export async function saveSubscriptionToSupabase(subscription, storeId) {
   const { error } = await supabase.rpc("public_upsert_push_subscription", {
     target_store_id: storeId,
@@ -61,15 +95,20 @@ export async function subscribeUserToPush(storeId) {
   await requestNotificationPermission();
   const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
+  const applicationServerKey = urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY);
 
   if (existing) {
-    await saveSubscriptionToSupabase(existing, storeId);
-    return existing;
+    if (subscriptionUsesApplicationServerKey(existing, applicationServerKey)) {
+      await saveSubscriptionToSupabase(existing, storeId);
+      return existing;
+    }
+
+    await existing.unsubscribe();
   }
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY)
+    applicationServerKey
   });
 
   await saveSubscriptionToSupabase(subscription, storeId);
@@ -103,11 +142,24 @@ export async function registerPushButton(storeId, options = {}) {
     return;
   }
 
+  if (Notification.permission === "denied") {
+    button.classList.remove("is-hidden");
+    setPushButtonBlocked(button);
+    return;
+  }
+
   const registration = await navigator.serviceWorker.ready.catch(() => null);
   const existing = registration ? await registration.pushManager.getSubscription() : null;
+  const applicationServerKey = APP_CONFIG.PUBLIC_VAPID_KEY
+    ? urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY)
+    : null;
+  const isCurrentSubscription =
+    existing && applicationServerKey
+      ? subscriptionUsesApplicationServerKey(existing, applicationServerKey)
+      : Boolean(existing);
 
   button.classList.remove("is-hidden");
-  setPushButtonLabel(button, Boolean(existing));
+  setPushButtonLabel(button, Boolean(isCurrentSubscription));
 
   button.addEventListener("click", async () => {
     button.disabled = true;
@@ -115,8 +167,9 @@ export async function registerPushButton(storeId, options = {}) {
     try {
       const liveRegistration = await navigator.serviceWorker.ready;
       const current = await liveRegistration.pushManager.getSubscription();
+      const liveApplicationServerKey = urlBase64ToUint8Array(APP_CONFIG.PUBLIC_VAPID_KEY);
 
-      if (current) {
+      if (current && subscriptionUsesApplicationServerKey(current, liveApplicationServerKey)) {
         await unsubscribeFromPush();
         setPushButtonLabel(button, false);
         showToast("Notificações desativadas neste dispositivo.", "warning");
@@ -127,9 +180,66 @@ export async function registerPushButton(storeId, options = {}) {
       }
     } catch (error) {
       console.error(error);
+      if (Notification.permission === "denied") {
+        setPushButtonBlocked(button);
+      }
       showToast(error.message || "Não foi possível alterar o status das notificações.", "danger");
     } finally {
-      button.disabled = false;
+      button.disabled = Notification.permission === "denied";
     }
   });
+}
+
+function canShowPushReminder() {
+  const dismissedAt = Number(window.localStorage.getItem(PUSH_REMINDER_KEY) || 0);
+  return !dismissedAt || Date.now() - dismissedAt >= PUSH_REMINDER_COOLDOWN_MS;
+}
+
+function storePushReminderCooldown() {
+  window.localStorage.setItem(PUSH_REMINDER_KEY, String(Date.now()));
+}
+
+export async function registerPushReminder(storeId, options = {}) {
+  if (!options.enabled || !isPushSupported() || Notification.permission === "granted" || Notification.permission === "denied") return;
+  if (!canShowPushReminder()) return;
+
+  window.setTimeout(() => {
+    if (!isStandalone()) {
+      showInstallPrompt("push-install-required", {
+        title: "Instale o app para ativar novidades",
+        copy: "No celular, as notificações ficam disponíveis depois que a vitrine é instalada como app.",
+        confirmLabel: "Entendi"
+      });
+      storePushReminderCooldown();
+      return;
+    }
+
+    showInstallPrompt("push", {
+      allowStandalone: true,
+      title: "Ative as novidades da loja",
+      copy: "Receba avisos de promoções, lançamentos e campanhas direto no celular.",
+      confirmLabel: "Ativar notificações"
+    });
+
+    const confirmButton = qs("#confirm-install-prompt");
+    const dismissButton = qs("#dismiss-install-prompt");
+    const closeButton = qs("#close-install-prompt");
+    const subscribe = async () => {
+      confirmButton.disabled = true;
+      try {
+        await subscribeUserToPush(storeId);
+        showToast("Notificações ativadas com sucesso.", "success");
+        qs("#install-prompt")?.classList.add("is-hidden");
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || "Não foi possível ativar notificações.", "danger");
+      } finally {
+        confirmButton.disabled = false;
+      }
+    };
+
+    confirmButton?.addEventListener("click", subscribe, { once: true });
+    dismissButton?.addEventListener("click", storePushReminderCooldown, { once: true });
+    closeButton?.addEventListener("click", storePushReminderCooldown, { once: true });
+  }, PUSH_AUTO_PROMPT_DELAY_MS);
 }

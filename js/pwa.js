@@ -14,7 +14,7 @@ function isEmbeddedPreview() {
   return window.self !== window.top || params.has("embedded_preview");
 }
 
-function isStandalone() {
+export function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
@@ -54,8 +54,8 @@ function hideInstallPrompt({ storeCooldown = false } = {}) {
   }
 }
 
-function showInstallPrompt(mode) {
-  if (isStandalone()) return;
+export function showInstallPrompt(mode, options = {}) {
+  if (isStandalone() && !options.allowStandalone) return;
 
   const shell = qs("#install-prompt");
   const title = qs("#install-prompt-title");
@@ -67,7 +67,12 @@ function showInstallPrompt(mode) {
 
   promptMode = mode;
 
-  if (mode === "ios") {
+  if (options.title || options.copy || options.confirmLabel) {
+    title.textContent = options.title || "Instale a vitrine no seu celular";
+    copy.textContent = options.copy || "Abra a loja mais rápido, com experiência de aplicativo e acesso direto pela tela inicial.";
+    steps.classList.toggle("is-hidden", !options.showIosSteps);
+    confirmButton.textContent = options.confirmLabel || "Entendi";
+  } else if (mode === "ios") {
     title.textContent = "Adicione a vitrine à sua tela inicial";
     copy.textContent = "No iPhone e no iPad, a instalação é manual. Leva poucos toques e deixa a vitrine com cara de app.";
     steps.classList.remove("is-hidden");

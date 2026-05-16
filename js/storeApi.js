@@ -687,14 +687,42 @@ export async function adminSaveNotification(payload) {
 }
 
 export async function adminSendNotification(notificationId) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+
+  if (sessionError || !accessToken) {
+    throw new Error("Sessao administrativa expirada. Entre novamente para enviar a notificacao.");
+  }
+
   const result = await supabase.functions.invoke("send-push", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
     body: {
       notification_id: notificationId
     }
   });
 
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw new Error(await getFunctionErrorMessage(result.error, "Nao foi possivel enviar a notificacao."));
+  }
+
   return result.data;
+}
+
+async function getFunctionErrorMessage(error, fallbackMessage) {
+  const context = error?.context;
+
+  if (context && typeof context.json === "function") {
+    try {
+      const payload = await context.json();
+      return payload?.error || payload?.message || error.message || fallbackMessage;
+    } catch {
+      return error.message || fallbackMessage;
+    }
+  }
+
+  return error?.message || fallbackMessage;
 }
 
 export async function adminListPushSubscriptionsSummary(storeId) {

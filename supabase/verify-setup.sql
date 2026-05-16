@@ -34,6 +34,16 @@ select store_id, user_id, role, created_at
 from public.store_members
 order by created_at desc;
 
+select store_id, is_active, count(*) as total
+from public.push_subscriptions
+group by store_id, is_active
+order by total desc;
+
+select id, store_id, title, status, sent_at, created_at
+from public.notifications
+order by created_at desc
+limit 10;
+
 select id, email
 from auth.users
 order by created_at desc
