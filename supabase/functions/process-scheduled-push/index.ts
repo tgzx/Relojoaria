@@ -32,14 +32,30 @@ serve(async (request) => {
   });
   const nowIso = new Date().toISOString();
 
-  const { data: notifications, error: notificationsError } = await supabaseAdmin
+  // Busca notificações agendadas simples e recorrentes vencidas
+  // Divide em duas queries para evitar problemas com .or() e interpolação de string
+  const { data: simpleNotifications, error: simpleError } = await supabaseAdmin
     .from("notifications")
     .select("*")
     .eq("status", "scheduled")
-    .or(`and(recurrence_rule.is.null,scheduled_at.lte.${nowIso}),and(recurrence_rule.not.is.null,recurrence_next_at.lte.${nowIso})`)
+    .is("recurrence_rule", null)
+    .lte("scheduled_at", nowIso)
     .limit(25);
 
-  if (notificationsError) return jsonResponse({ error: notificationsError.message }, 500);
+  const { data: recurrentNotifications, error: recurrentError } = await supabaseAdmin
+    .from("notifications")
+    .select("*")
+    .eq("status", "scheduled")
+    .not("recurrence_rule", "is", null)
+    .lte("recurrence_next_at", nowIso)
+    .limit(25);
+
+  if (simpleError || recurrentError) {
+    const error = simpleError || recurrentError;
+    return jsonResponse({ error: error?.message }, 500);
+  }
+
+  const notifications = [...(simpleNotifications || []), ...(recurrentNotifications || [])];
 
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
@@ -107,14 +123,29 @@ async function sendScheduledNotification(supabaseAdmin: ReturnType<typeof create
 
 function getNextRecurrenceDate(rule?: string, fromDate?: string) {
   if (!rule) return null;
+  
   const next = fromDate ? new Date(fromDate) : new Date();
   const now = new Date();
+  
+  // Incrementa uma vez a partir da data base
+  if (rule === "daily") {
+    next.setDate(next.getDate() + 1);
+  } else if (rule === "weekly") {
+    next.setDate(next.getDate() + 7);
+  } else if (rule === "monthly") {
+    next.setMonth(next.getMonth() + 1);
+  } else {
+    return null;
+  }
+  
+  // Se ainda assim estiver no passado, incrementa até o futuro
+  // (para casos onde a loja ficou offline ou cron atrasou muito)
   while (next <= now) {
     if (rule === "daily") next.setDate(next.getDate() + 1);
     else if (rule === "weekly") next.setDate(next.getDate() + 7);
     else if (rule === "monthly") next.setMonth(next.getMonth() + 1);
-    else return null;
   }
+  
   return next.toISOString();
 }
 
