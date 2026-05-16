@@ -113,11 +113,13 @@ a {
 .section-form {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .admin-field {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .admin-field .muted-copy {
@@ -137,6 +139,8 @@ a {
 .admin-field input,
 .admin-field select,
 .admin-field textarea {
+  width: 100%;
+  min-width: 0;
   min-height: 50px;
   border-radius: 12px;
   border: 1px solid var(--admin-border);
@@ -388,6 +392,7 @@ a {
 .empty-card,
 .editor-shell,
 .drawer-panel {
+  min-width: 0;
   border-radius: var(--admin-radius-lg);
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
@@ -547,6 +552,7 @@ th {
 .inline-grid {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .inline-grid--2 {
@@ -862,11 +868,23 @@ th {
 
 .hours-editor-shell {
   max-width: 980px;
+  top: clamp(16px, 4vh, 28px);
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  width: min(calc(100% - 32px), 980px);
+  max-height: min(90vh, 760px);
+  transform: translateX(-50%);
+  border-radius: 22px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .hours-editor-shell .editor-footer {
-  padding-top: 22px;
-  padding-bottom: 22px;
+  position: static;
+  padding-top: 18px;
+  padding-bottom: 18px;
 }
 
 .hours-editor-shell .editor-footer-actions {
@@ -874,6 +892,8 @@ th {
   flex-wrap: wrap;
   align-items: center;
   gap: 16px;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .hours-editor-shell .editor-footer-actions .btn {
@@ -884,6 +904,8 @@ th {
 .hours-editor-body {
   display: grid;
   gap: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .hours-editor-grid {
@@ -920,6 +942,17 @@ th {
   color: var(--admin-text-soft);
 }
 
+.hours-day-toggle input,
+.hours-day-split input {
+  order: 2;
+  flex-shrink: 0;
+}
+
+.hours-day-toggle span,
+.hours-day-split span {
+  order: 1;
+}
+
 .hours-day-card__body {
   display: grid;
   gap: 12px;
@@ -931,8 +964,9 @@ th {
 
 .hours-time-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 100px));
+  justify-content: start;
 }
 
 .hours-time-grid--split {
@@ -941,6 +975,15 @@ th {
 
 .hours-day-card.has-split .hours-time-grid--split {
   display: grid;
+}
+
+.hours-editor-shell .admin-field {
+  gap: 6px;
+}
+
+.hours-editor-shell .admin-field input[type="time"] {
+  min-height: 44px;
+  padding-inline: 12px;
 }
 
 .upload-chip,
@@ -1030,7 +1073,7 @@ th {
   }
 
   .inline-grid--2 {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .toolbar-filters {
@@ -1040,6 +1083,10 @@ th {
   .editor-shell {
     inset: 30px;
     border-radius: 22px;
+  }
+
+  .hours-editor-shell {
+    inset: clamp(16px, 4vh, 28px) auto auto 50%;
   }
 
   .editor-content {
@@ -1053,11 +1100,19 @@ th {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     display: grid;
     gap: 12px;
+    width: 100%;
+    margin-left: 0;
   }
 
   .hours-editor-shell .editor-footer-actions .btn {
     width: 100%;
     min-width: 0;
+  }
+
+  .hours-editor-shell {
+    top: 12px;
+    width: min(calc(100% - 16px), 980px);
+    max-height: calc(100vh - 24px);
   }
 
   .business-hours-card__header,
@@ -1069,13 +1124,15 @@ th {
   .hours-day-card__header,
   .hours-day-toggle,
   .hours-day-split {
-    display: grid;
-    justify-content: stretch;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .hours-time-grid,
   .hours-day-card.has-split .hours-time-grid--split {
     grid-template-columns: 1fr;
+    justify-content: stretch;
   }
 
   .business-hours-summary__row {

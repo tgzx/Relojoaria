@@ -135,6 +135,8 @@ const adminState = {
   productSaveMode: null
 };
 
+const openAdminModalKeys = new Set();
+
 let globalDebugHandlersRegistered = false;
 
 function registerGlobalDebugHandlers() {
@@ -165,6 +167,25 @@ function resetAdminSessionState() {
   adminState.hasUnsavedAdminFormChanges = false;
   adminState.dirtyAdminTab = null;
   adminState.pendingBackgroundRender = false;
+  openAdminModalKeys.clear();
+  syncAdminModalBodyScroll();
+}
+
+function syncAdminModalBodyScroll() {
+  const shouldLockScroll = openAdminModalKeys.size > 0;
+  document.documentElement.style.overflow = shouldLockScroll ? "hidden" : "";
+  document.body.style.overflow = shouldLockScroll ? "hidden" : "";
+}
+
+function setAdminModalOpen(modalKey, isOpen) {
+  if (!modalKey) return;
+  if (isOpen) {
+    openAdminModalKeys.add(modalKey);
+  } else {
+    openAdminModalKeys.delete(modalKey);
+  }
+
+  syncAdminModalBodyScroll();
 }
 
 function markAdminFormDirty(tabId = adminState.currentAdminTab) {
@@ -1837,6 +1858,7 @@ function openProductEditor(productId = null) {
     ? structuredClone(adminState.products.find((product) => product.id === productId))
     : createEmptyProductDraft();
 
+  setAdminModalOpen("product-editor", true);
   renderProductEditor();
 }
 
@@ -2251,6 +2273,7 @@ function closeProductEditor(force = false) {
   adminState.isSavingProduct = false;
   adminState.productSaveMode = null;
   qs("#admin-modal-root").innerHTML = "";
+  setAdminModalOpen("product-editor", false);
 }
 
 async function saveProduct(publish) {
@@ -3069,6 +3092,7 @@ function openBusinessHoursEditor() {
   const hoursField = qs("#settings-form textarea[name='business_hours']");
   if (!hoursField) return;
 
+  setAdminModalOpen("hours-editor", true);
   const normalized = normalizeBusinessHours(hoursField.value);
   let modalRoot = qs("#admin-hours-modal-root");
   if (!modalRoot) {
@@ -3237,6 +3261,7 @@ function applyBusinessHoursEditor() {
 
 function closeBusinessHoursEditor() {
   qs("#admin-hours-modal-root")?.remove();
+  setAdminModalOpen("hours-editor", false);
 }
 
 initAdmin();
