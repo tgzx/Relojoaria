@@ -58,7 +58,6 @@ const TABS = [
   { id: "brands", label: "Marcas" },
   { id: "appearance", label: "Banners" },
   { id: "notifications", label: "Notificações" },
-  { id: "automations", label: "Automações" },
   { id: "settings", label: "Configurações" },
   { id: "preview", label: "Pré-visualizar" }
 ];
@@ -94,6 +93,8 @@ const BUSINESS_HOURS_DAYS = [
   { key: "sunday", label: "Domingo" }
 ];
 
+const NOTIFICATION_PAGE_SIZE = 5;
+
 const adminState = {
   session: null,
   profile: null,
@@ -116,6 +117,11 @@ const adminState = {
   productEditorStep: 1,
   pendingProductFiles: [],
   pendingBannerFile: null,
+  isNotificationHistoryOpen: false,
+  notificationHistoryPage: 1,
+  notificationPlanningModalType: "",
+  notificationPlanningPage: 1,
+  editingNotificationId: null,
   selectedProductIds: [],
   productFilters: {
     search: "",
@@ -528,6 +534,8 @@ function renderAdminLayout() {
   `;
 
   bindAdminLayoutEvents();
+  renderNotificationHistoryModal();
+  renderNotificationPlanningModal();
 }
 
 function renderTabButtons() {
@@ -558,8 +566,6 @@ function renderCurrentTab() {
       return renderAppearanceManager();
     case "notifications":
       return renderNotifications();
-    case "automations":
-      return renderAutomations();
     case "settings":
       return renderSettings();
     case "preview":
@@ -1327,24 +1333,36 @@ function renderAppearanceManager() {
 
 function renderNotifications() {
   const targetOptions = getNotificationTargetOptions();
+  const recentNotifications = getRegularNotifications().slice(0, 5);
+  const scheduledNotifications = getScheduledNotifications();
+  const recurringNotifications = getRecurringNotifications();
+  const editingNotification = adminState.editingNotificationId
+    ? adminState.notifications.find((item) => item.id === adminState.editingNotificationId)
+    : null;
+  const titleValue = editingNotification?.title || "";
+  const bodyValue = editingNotification?.body || "";
+  const targetValue = editingNotification?.target_url || "";
+  const scheduledValue = toDateTimeLocalValue(editingNotification?.scheduled_at || "");
+  const recurrenceValue = editingNotification?.recurrence_rule || "";
+  const submitLabel = scheduledValue || recurrenceValue ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
   return `
     <section class="settings-grid">
       <article class="panel-card">
         <span class="section-kicker">Push notifications</span>
-        <h2>Criar notificação</h2>
+        <h2>${editingNotification ? "Editar notificação" : "Criar notificação"}</h2>
         <p>${adminState.settings?.enable_notifications ? "O recurso está habilitado para a loja." : "As notificações estão desativadas na configuração pública da loja."}</p>
         <form id="notification-form" class="notification-form">
           <label class="admin-field">
             <span>Título</span>
-            <input type="text" name="title" required placeholder="Novidades na vitrine" />
+            <input type="text" name="title" required placeholder="Novidades na vitrine" value="${escapeHtml(titleValue)}" />
           </label>
           <label class="admin-field">
             <span>Mensagem</span>
-            <textarea name="body" required placeholder="Confira os itens que acabaram de entrar."></textarea>
+            <textarea name="body" required placeholder="Confira os itens que acabaram de entrar.">${escapeHtml(bodyValue)}</textarea>
           </label>
           <label class="admin-field">
             <span>URL alvo</span>
-            <input type="text" name="target_url" list="notification-target-options" placeholder="URL completa, ./index.html ou seção da vitrine" />
+            <input type="text" name="target_url" list="notification-target-options" placeholder="URL completa, ./index.html ou seção da vitrine" value="${escapeHtml(targetValue)}" />
             <datalist id="notification-target-options">
               ${targetOptions
                 .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
@@ -1352,45 +1370,287 @@ function renderNotifications() {
             </datalist>
             <p class="muted-copy">Deixe em branco para abrir a página inicial. As seções abaixo são carregadas da vitrine atual.</p>
           </label>
-          <label class="admin-field">
-            <span>Imagem opcional</span>
-            <input type="url" name="image_url" placeholder="https://..." />
-          </label>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field">
+              <span>Agendar envio</span>
+              <input type="datetime-local" name="scheduled_at" value="${escapeHtml(scheduledValue)}" />
+            </label>
+            <label class="admin-field">
+              <span>Recorrência</span>
+              <select name="recurrence_rule">
+                <option value="" ${recurrenceValue ? "" : "selected"}>Não repetir</option>
+                <option value="daily" ${recurrenceValue === "daily" ? "selected" : ""}>Diariamente</option>
+                <option value="weekly" ${recurrenceValue === "weekly" ? "selected" : ""}>Semanalmente</option>
+                <option value="monthly" ${recurrenceValue === "monthly" ? "selected" : ""}>Mensalmente</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted-copy">Sem agendamento, a notificação fica em rascunho para envio manual. Com recorrência, ela reaparece em Agendadas após cada disparo.</p>
           <div class="notification-actions">
-            <button class="btn btn-primary" type="submit">Salvar notificação</button>
+            <button class="btn btn-primary" type="submit" id="notification-submit-button">${escapeHtml(submitLabel)}</button>
+            ${
+              editingNotification
+                ? `<button class="btn btn-secondary" type="button" id="cancel-notification-edit">Cancelar edição</button>`
+                : ""
+            }
           </div>
         </form>
       </article>
 
-      <article class="panel-card">
-        <span class="section-kicker">Base instalada</span>
-        <h2>${adminState.pushSummary.count} dispositivo(s) inscrito(s)</h2>
-        <p>O pedido de permissão é progressivo e só aparece quando o cliente clicar no botão da vitrine.</p>
-        <div class="list-stack">
-          ${adminState.notifications
-            .map(
-              (item) => `
-                <article class="list-item">
-                  <div class="list-item-header">
-                    <div>
-                      <strong class="list-item-title">${escapeHtml(item.title)}</strong>
-                      <span class="list-item-subtitle">${escapeHtml(item.body)}</span>
-                    </div>
-                    <span class="badge ${
-                      item.status === "sent" ? "badge--success" : item.status === "draft" ? "badge--muted" : "badge--warning"
-                    }">${escapeHtml(item.status)}</span>
-                  </div>
-                  <div class="list-item-footer">
-                    <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}">Enviar</button>
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+      <article class="panel-card notification-side-card">
+        <div class="notification-side-summary">
+          <span class="section-kicker">Base instalada</span>
+          <div class="notification-install-base">
+            <strong>${adminState.pushSummary.count}</strong>
+            <span>dispositivo(s) inscrito(s)</span>
+          </div>
+          <p>Dispositivos aptos a receber novidades.</p>
+        </div>
+        <div class="notification-planning-grid">
+          ${renderNotificationBucket("Agendadas", scheduledNotifications, "Nenhum envio agendado.", "scheduled")}
+          ${renderNotificationBucket("Recorrentes", recurringNotifications, "Nenhuma recorrência ativa.", "recurring")}
         </div>
       </article>
+
+      <article class="panel-card">
+        <div class="section-card__header">
+          <div>
+            <span class="section-kicker">Histórico recente</span>
+            <h2>${adminState.notifications.length} notificação(ões)</h2>
+          </div>
+          <button class="btn btn-secondary" type="button" id="open-notification-history">Mostrar todos</button>
+        </div>
+        <div class="list-stack">
+          ${recentNotifications.length
+            ? recentNotifications.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">Nenhuma notificação criada ainda.</span></article>`}
+        </div>
+      </article>
+
     </section>
   `;
+}
+
+function renderNotificationBucket(title, items, emptyMessage, type) {
+  return `
+    <div class="notification-bucket">
+      <div class="notification-bucket__header">
+        <strong>${escapeHtml(title)}</strong>
+        <div class="notification-bucket__actions">
+          <span class="badge badge--muted">${items.length}</span>
+          ${
+            items.length > 3
+              ? `<button class="btn btn-secondary btn-sm" type="button" data-open-planning-modal="${escapeHtml(type)}">Mostrar todos</button>`
+              : ""
+          }
+        </div>
+      </div>
+      <div class="list-stack">
+        ${items.length
+          ? items.slice(0, 3).map((item) => renderNotificationListItem(item, { compact: true })).join("")
+          : `<article class="list-item"><span class="list-item-subtitle">${escapeHtml(emptyMessage)}</span></article>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderNotificationListItem(item, options = {}) {
+  const target = item.target_url ? `Destino: ${item.target_url}` : "Sem destino";
+  const sentAt = item.sent_at ? `Enviada em ${formatDateTime(item.sent_at, adminState.settings?.locale || "pt-BR")}` : "";
+  const scheduledAt = item.scheduled_at ? `Agendada para ${formatDateTime(item.scheduled_at, adminState.settings?.locale || "pt-BR")}` : "";
+  const recurrence = item.recurrence_rule ? `Recorrência: ${getNotificationRecurrenceLabel(item.recurrence_rule)}` : "";
+  const meta = [target, scheduledAt || sentAt, recurrence].filter(Boolean).join(" · ");
+  const canEdit = ["draft", "scheduled", "failed"].includes(item.status);
+  const canCancelSchedule = Boolean(item.scheduled_at && !item.recurrence_rule && item.status === "scheduled");
+  const canStopRecurrence = Boolean(item.recurrence_rule);
+
+  return `
+    <article class="list-item ${options.compact ? "list-item--compact" : ""}">
+      <div class="list-item-header">
+        <div>
+          <strong class="list-item-title">${escapeHtml(item.title)}</strong>
+          <span class="list-item-subtitle">${escapeHtml(item.body)}</span>
+          ${meta ? `<small class="list-item-subtitle">${escapeHtml(meta)}</small>` : ""}
+        </div>
+        <span class="badge ${getNotificationStatusClass(item.status)}">${escapeHtml(getNotificationStatusLabel(item.status))}</span>
+      </div>
+      <div class="list-item-footer">
+        ${
+          canEdit
+            ? `<button class="btn btn-secondary" type="button" data-edit-notification="${escapeHtml(item.id)}">Editar</button>`
+            : ""
+        }
+        ${
+          canStopRecurrence
+            ? `<button class="btn btn-secondary" type="button" data-stop-recurrence="${escapeHtml(item.id)}">Encerrar recorrência</button>`
+            : ""
+        }
+        ${
+          canCancelSchedule
+            ? `<button class="btn btn-secondary" type="button" data-cancel-schedule="${escapeHtml(item.id)}">Cancelar agendamento</button>`
+            : ""
+        }
+        <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}">Enviar agora</button>
+      </div>
+    </article>
+  `;
+}
+
+function getNotificationStatusLabel(status) {
+  const labels = {
+    draft: "Rascunho",
+    scheduled: "Agendada",
+    sent: "Enviada",
+    failed: "Falhou"
+  };
+  return labels[status] || "Rascunho";
+}
+
+function getNotificationRecurrenceLabel(rule) {
+  const labels = {
+    daily: "diária",
+    weekly: "semanal",
+    monthly: "mensal"
+  };
+  return labels[rule] || rule;
+}
+
+function getNotificationStatusClass(status) {
+  if (status === "sent") return "badge--success";
+  if (status === "draft" || status === "scheduled") return "badge--muted";
+  if (status === "failed") return "badge--warning";
+  return "badge--muted";
+}
+
+function getScheduledNotifications() {
+  return adminState.notifications.filter((item) => item.scheduled_at && !item.recurrence_rule && item.status !== "sent");
+}
+
+function getRecurringNotifications() {
+  return adminState.notifications.filter((item) => item.recurrence_rule || item.recurrence_interval || item.is_recurring);
+}
+
+function getRegularNotifications() {
+  return adminState.notifications.filter(
+    (item) => !getScheduledNotifications().includes(item) && !getRecurringNotifications().includes(item)
+  );
+}
+
+function toDateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
+function renderNotificationHistoryModal() {
+  let root = qs("#admin-notification-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-notification-modal-root";
+    document.body.appendChild(root);
+  }
+
+  if (!adminState.isNotificationHistoryOpen) {
+    root.innerHTML = "";
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(adminState.notifications.length / NOTIFICATION_PAGE_SIZE));
+  adminState.notificationHistoryPage = Math.min(Math.max(adminState.notificationHistoryPage, 1), totalPages);
+  const start = (adminState.notificationHistoryPage - 1) * NOTIFICATION_PAGE_SIZE;
+  const pageItems = adminState.notifications.slice(start, start + NOTIFICATION_PAGE_SIZE);
+
+  root.innerHTML = `
+    <div class="editor-backdrop" id="notification-history-backdrop"></div>
+    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-history-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">Histórico completo</span>
+          <h2 id="notification-history-title">Notificações</h2>
+          <p class="muted-copy">${adminState.notifications.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-notification-history">Fechar</button>
+      </header>
+      <div class="editor-body">
+        <div class="list-stack">
+          ${pageItems.length
+            ? pageItems.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">Nenhuma notificação encontrada.</span></article>`}
+        </div>
+      </div>
+      <footer class="editor-footer notification-pagination">
+        <button class="btn btn-secondary" type="button" data-notification-page="${adminState.notificationHistoryPage - 1}" ${adminState.notificationHistoryPage <= 1 ? "disabled" : ""}>‹</button>
+        <div class="notification-pagination__pages">
+          ${Array.from({ length: totalPages }, (_, index) => {
+            const page = index + 1;
+            return `<button class="btn ${page === adminState.notificationHistoryPage ? "btn-primary" : "btn-secondary"}" type="button" data-notification-page="${page}">${page}</button>`;
+          }).join("")}
+        </div>
+        <button class="btn btn-secondary" type="button" data-notification-page="${adminState.notificationHistoryPage + 1}" ${adminState.notificationHistoryPage >= totalPages ? "disabled" : ""}>›</button>
+      </footer>
+    </section>
+  `;
+
+  bindNotificationHistoryModal();
+}
+
+function renderNotificationPlanningModal() {
+  let root = qs("#admin-notification-planning-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-notification-planning-modal-root";
+    document.body.appendChild(root);
+  }
+
+  if (!adminState.notificationPlanningModalType) {
+    root.innerHTML = "";
+    return;
+  }
+
+  const isRecurring = adminState.notificationPlanningModalType === "recurring";
+  const items = isRecurring ? getRecurringNotifications() : getScheduledNotifications();
+  const title = isRecurring ? "Notificações recorrentes" : "Notificações agendadas";
+  const kicker = isRecurring ? "Recorrentes" : "Agendadas";
+  const emptyMessage = isRecurring ? "Nenhuma recorrência ativa." : "Nenhum envio agendado.";
+  const totalPages = Math.max(1, Math.ceil(items.length / NOTIFICATION_PAGE_SIZE));
+  adminState.notificationPlanningPage = Math.min(Math.max(adminState.notificationPlanningPage, 1), totalPages);
+  const start = (adminState.notificationPlanningPage - 1) * NOTIFICATION_PAGE_SIZE;
+  const pageItems = items.slice(start, start + NOTIFICATION_PAGE_SIZE);
+
+  root.innerHTML = `
+    <div class="editor-backdrop" id="notification-planning-backdrop"></div>
+    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-planning-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">${escapeHtml(kicker)}</span>
+          <h2 id="notification-planning-title">${escapeHtml(title)}</h2>
+          <p class="muted-copy">${items.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
+        </div>
+        <button class="btn btn-ghost" type="button" id="close-notification-planning">Fechar</button>
+      </header>
+      <div class="editor-body">
+        <div class="list-stack">
+          ${pageItems.length
+            ? pageItems.map((item) => renderNotificationListItem(item)).join("")
+            : `<article class="list-item"><span class="list-item-subtitle">${escapeHtml(emptyMessage)}</span></article>`}
+        </div>
+      </div>
+      <footer class="editor-footer notification-pagination">
+        <button class="btn btn-secondary" type="button" data-planning-page="${adminState.notificationPlanningPage - 1}" ${adminState.notificationPlanningPage <= 1 ? "disabled" : ""}>‹</button>
+        <div class="notification-pagination__pages">
+          ${Array.from({ length: totalPages }, (_, index) => {
+            const page = index + 1;
+            return `<button class="btn ${page === adminState.notificationPlanningPage ? "btn-primary" : "btn-secondary"}" type="button" data-planning-page="${page}">${page}</button>`;
+          }).join("")}
+        </div>
+        <button class="btn btn-secondary" type="button" data-planning-page="${adminState.notificationPlanningPage + 1}" ${adminState.notificationPlanningPage >= totalPages ? "disabled" : ""}>›</button>
+      </footer>
+    </section>
+  `;
+
+  bindNotificationPlanningModal();
 }
 
 function getNotificationTargetOptions() {
@@ -1689,7 +1949,6 @@ function bindAdminLayoutEvents() {
   bindAppearanceTab();
   bindNotificationsTab();
   bindSettingsTab();
-  bindAutomationTab();
 }
 
 function bindProductsTab() {
@@ -1843,10 +2102,141 @@ function bindAppearanceTab() {
 }
 
 function bindNotificationsTab() {
+  const notificationForm = qs("#notification-form");
   bindDirtyFormState("#notification-form", "notifications");
-  qs("#notification-form")?.addEventListener("submit", saveNotification);
+  notificationForm?.addEventListener("submit", saveNotification);
+  notificationForm?.addEventListener("input", updateNotificationSubmitLabel);
+  notificationForm?.addEventListener("change", updateNotificationSubmitLabel);
+  updateNotificationSubmitLabel();
+  qs("#cancel-notification-edit")?.addEventListener("click", () => {
+    clearAdminFormDirty("notifications");
+    adminState.editingNotificationId = null;
+    renderAdminLayout();
+  });
+  qs("#open-notification-history")?.addEventListener("click", () => {
+    adminState.isNotificationHistoryOpen = true;
+    adminState.notificationHistoryPage = 1;
+    renderNotificationHistoryModal();
+  });
+  qsa("[data-open-planning-modal]").forEach((button) =>
+    button.addEventListener("click", () => {
+      adminState.notificationPlanningModalType = button.dataset.openPlanningModal;
+      adminState.notificationPlanningPage = 1;
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("[data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => editNotification(button.dataset.editNotification))
+  );
+  qsa("[data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", () => stopNotificationRecurrence(button.dataset.stopRecurrence))
+  );
+  qsa("[data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", () => cancelNotificationSchedule(button.dataset.cancelSchedule))
+  );
   qsa("[data-send-notification]").forEach((button) =>
     button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
+  );
+}
+
+function updateNotificationSubmitLabel() {
+  const form = qs("#notification-form");
+  const button = qs("#notification-submit-button");
+  if (!form || !button) return;
+
+  const scheduledAt = parseDateTimeLocalValue(String(new FormData(form).get("scheduled_at") || ""));
+  const recurrenceRule = String(new FormData(form).get("recurrence_rule") || "");
+  if (scheduledAt || recurrenceRule) {
+    button.textContent = "Agendar";
+    return;
+  }
+
+  button.textContent = adminState.editingNotificationId ? "Atualizar rascunho" : "Salvar rascunho";
+}
+
+function editNotification(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification) return;
+  adminState.editingNotificationId = notificationId;
+  renderAdminLayout();
+  qs("#notification-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function bindNotificationHistoryModal() {
+  const close = () => {
+    adminState.isNotificationHistoryOpen = false;
+    renderNotificationHistoryModal();
+  };
+
+  qs("#notification-history-backdrop")?.addEventListener("click", close);
+  qs("#close-notification-history")?.addEventListener("click", close);
+  qsa("[data-notification-page]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.dataset.notificationPage);
+      if (!Number.isFinite(nextPage)) return;
+      adminState.notificationHistoryPage = nextPage;
+      renderNotificationHistoryModal();
+    })
+  );
+  qsa("#admin-notification-modal-root [data-send-notification]").forEach((button) =>
+    button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
+  );
+  qsa("#admin-notification-modal-root [data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => {
+      close();
+      editNotification(button.dataset.editNotification);
+    })
+  );
+  qsa("#admin-notification-modal-root [data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await stopNotificationRecurrence(button.dataset.stopRecurrence);
+      renderNotificationHistoryModal();
+    })
+  );
+  qsa("#admin-notification-modal-root [data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await cancelNotificationSchedule(button.dataset.cancelSchedule);
+      renderNotificationHistoryModal();
+    })
+  );
+}
+
+function bindNotificationPlanningModal() {
+  const close = () => {
+    adminState.notificationPlanningModalType = "";
+    renderNotificationPlanningModal();
+  };
+
+  qs("#notification-planning-backdrop")?.addEventListener("click", close);
+  qs("#close-notification-planning")?.addEventListener("click", close);
+  qsa("[data-planning-page]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.dataset.planningPage);
+      if (!Number.isFinite(nextPage)) return;
+      adminState.notificationPlanningPage = nextPage;
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-send-notification]").forEach((button) =>
+    button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
+  );
+  qsa("#admin-notification-planning-modal-root [data-edit-notification]").forEach((button) =>
+    button.addEventListener("click", () => {
+      close();
+      editNotification(button.dataset.editNotification);
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-stop-recurrence]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await stopNotificationRecurrence(button.dataset.stopRecurrence);
+      renderNotificationPlanningModal();
+    })
+  );
+  qsa("#admin-notification-planning-modal-root [data-cancel-schedule]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      await cancelNotificationSchedule(button.dataset.cancelSchedule);
+      renderNotificationPlanningModal();
+    })
   );
 }
 
@@ -1855,10 +2245,6 @@ function bindSettingsTab() {
   qs("#settings-form")?.addEventListener("submit", saveSettings);
   mountBusinessHoursEditor();
   qs("#open-business-hours-editor")?.addEventListener("click", openBusinessHoursEditor);
-}
-
-function bindAutomationTab() {
-  qs("#refresh-stale-sections")?.addEventListener("click", () => refreshStaleSections(false));
 }
 
 async function refreshProducts() {
@@ -2716,22 +3102,121 @@ async function saveNotification(event) {
   const form = event.currentTarget;
   const data = new FormData(form);
   const targetUrl = String(data.get("target_url") || "").trim();
+  const scheduledAt = parseDateTimeLocalValue(String(data.get("scheduled_at") || ""));
+  const recurrenceRule = String(data.get("recurrence_rule") || "");
+  const recurrenceNextAt = recurrenceRule ? scheduledAt || new Date().toISOString() : null;
+  const status = scheduledAt || recurrenceRule ? "scheduled" : "draft";
+  const isEditing = Boolean(adminState.editingNotificationId);
 
-  await adminSaveNotification({
-    store_id: adminState.store.id,
-    title: String(data.get("title") || "").trim(),
-    body: String(data.get("body") || "").trim(),
-    target_url: targetUrl || "./index.html",
-    image_url: String(data.get("image_url") || ""),
-    status: "draft",
-    created_by: adminState.profile.id
-  });
-  showToast("Notificação salva em rascunho.", "success");
-  adminState.notifications = await adminListNotifications(adminState.store.id);
-  renderAdminLayout();
+  try {
+    const payload = {
+      store_id: adminState.store.id,
+      title: String(data.get("title") || "").trim(),
+      body: String(data.get("body") || "").trim(),
+      target_url: targetUrl || "./index.html",
+      image_url: "",
+      status,
+      scheduled_at: scheduledAt,
+      recurrence_rule: recurrenceRule || null,
+      recurrence_next_at: recurrenceNextAt,
+      created_by: adminState.profile.id
+    };
+
+    if (isEditing) {
+      payload.id = adminState.editingNotificationId;
+      delete payload.created_by;
+    }
+
+    const savedNotification = await adminSaveNotification(payload);
+    const shouldSendNow =
+      status === "scheduled" && scheduledAt && !recurrenceRule && new Date(scheduledAt).getTime() <= Date.now();
+    let immediateSendResult = null;
+    let immediateSendError = null;
+    if (shouldSendNow) {
+      try {
+        immediateSendResult = await sendNotification(savedNotification.id, { silentRefresh: true });
+      } catch (error) {
+        immediateSendError = error;
+      }
+    }
+
+    adminState.editingNotificationId = null;
+    if (immediateSendError) {
+      showToast(immediateSendError.message || "Agendamento salvo, mas o envio imediato falhou.", "danger");
+    } else if (shouldSendNow && immediateSendResult?.sent > 0) {
+      showToast(`Horário já atingido. Notificação enviada para ${immediateSendResult.sent} dispositivo(s).`, "success");
+    } else if (shouldSendNow) {
+      showToast(immediateSendResult?.message || "Agendamento salvo, mas nenhum dispositivo recebeu agora.", "warning");
+    } else {
+      showToast(
+        status === "scheduled" ? "Notificação agendada." : isEditing ? "Rascunho atualizado." : "Notificação salva em rascunho.",
+        "success"
+      );
+    }
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível salvar a notificação.", "danger");
+  }
 }
 
-async function sendNotification(notificationId) {
+function parseDateTimeLocalValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function stopNotificationRecurrence(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification?.recurrence_rule) return;
+  if (!window.confirm("Encerrar a recorrência desta notificação? Ela ficará como rascunho e não será disparada automaticamente.")) return;
+
+  try {
+    await adminSaveNotification({
+      id: notificationId,
+      status: "draft",
+      recurrence_rule: null,
+      recurrence_next_at: null,
+      scheduled_at: null
+    });
+    if (adminState.editingNotificationId === notificationId) {
+      adminState.editingNotificationId = null;
+    }
+    showToast("Recorrência encerrada. A notificação voltou para rascunho.", "success");
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível encerrar a recorrência.", "danger");
+  }
+}
+
+async function cancelNotificationSchedule(notificationId) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  if (!notification?.scheduled_at || notification.recurrence_rule || notification.status !== "scheduled") return;
+  if (!window.confirm("Cancelar o agendamento desta notificação? Ela ficará como rascunho e não será disparada automaticamente.")) return;
+
+  try {
+    await adminSaveNotification({
+      id: notificationId,
+      status: "draft",
+      scheduled_at: null,
+      recurrence_next_at: null
+    });
+    if (adminState.editingNotificationId === notificationId) {
+      adminState.editingNotificationId = null;
+    }
+    showToast("Agendamento cancelado. A notificação voltou para rascunho.", "success");
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível cancelar o agendamento.", "danger");
+  }
+}
+
+async function sendNotification(notificationId, options = {}) {
   if (!adminState.settings?.enable_notifications) {
     showToast("Ative notificações nas configurações da loja antes de enviar.", "warning");
     return;
@@ -2739,10 +3224,12 @@ async function sendNotification(notificationId) {
 
   try {
     const result = await adminSendNotification(notificationId);
-    if (result?.sent > 0) {
-      showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
-    } else {
-      showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+    if (!options.silentRefresh) {
+      if (result?.sent > 0) {
+        showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
+      } else {
+        showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+      }
     }
   } catch (error) {
     console.error(error);
@@ -2751,11 +3238,17 @@ async function sendNotification(notificationId) {
       status: "failed",
       sent_at: null
     }).catch((updateError) => console.warn("Não foi possível marcar a notificação como falha.", updateError));
-    showToast(error.message || "Não foi possível enviar a notificação.", "danger");
+    if (!options.silentRefresh) {
+      showToast(error.message || "Não foi possível enviar a notificação.", "danger");
+    }
+    if (options.silentRefresh) throw error;
   }
 
-  adminState.notifications = await adminListNotifications(adminState.store.id);
-  renderAdminLayout();
+  if (!options.silentRefresh) {
+    adminState.notifications = await adminListNotifications(adminState.store.id);
+    renderAdminLayout();
+  }
+  return result;
 }
 
 async function saveSettings(event) {

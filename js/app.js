@@ -7,7 +7,7 @@ import {
   incrementProductView
 } from "./storeApi.js";
 import { registerPwa } from "./pwa.js";
-import { registerPushButton } from "./push.js";
+import { registerPushButton, registerPushReminder } from "./push.js";
 import { getFutureCartFeatureState, renderAddToCartButton, createFutureCartNotice } from "./cartFuture.js";
 import {
   buildWhatsAppLink,
@@ -103,9 +103,17 @@ function bindShellEvents() {
     "input",
     debounceSearch(async (event) => {
       appState.filters.search = event.target.value.trim();
+      if (appState.filters.search) {
+        scrollCatalogIntoView();
+      }
       await loadCatalogProducts({ reset: true });
     })
   );
+  searchInput?.addEventListener("focus", () => {
+    if (searchInput.value.trim()) {
+      scrollCatalogIntoView();
+    }
+  });
 
   filtersForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -203,6 +211,9 @@ function hydrateHomeState(home, usingCachedData) {
 
   if (!appState.isEmbeddedPreview) {
     registerPushButton(appState.store.id, {
+      enabled: Boolean(appState.settings?.enable_notifications)
+    }).catch(() => {});
+    registerPushReminder(appState.store.id, {
       enabled: Boolean(appState.settings?.enable_notifications)
     }).catch(() => {});
   }
@@ -822,6 +833,9 @@ async function loadCatalogProducts({ reset }) {
     toggleResetFiltersButton();
 
     loadMoreButton.classList.toggle("is-hidden", !appState.pagination.hasMore);
+    if (reset && appState.filters.search) {
+      scrollCatalogIntoView();
+    }
   } catch (error) {
     console.error(error);
     productsGrid.innerHTML = "";
@@ -832,6 +846,20 @@ async function loadCatalogProducts({ reset }) {
     emptyState.classList.remove("is-hidden");
     loadMoreButton.classList.add("is-hidden");
   }
+}
+
+function scrollCatalogIntoView() {
+  const target = qs("#all-products-section");
+  if (!target) return;
+
+  const headerHeight = qs(".site-header")?.offsetHeight || 0;
+  const top = window.scrollY + target.getBoundingClientRect().top - headerHeight - 12;
+  window.requestAnimationFrame(() => {
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: supportsReducedMotion() ? "auto" : "smooth"
+    });
+  });
 }
 
 function renderCatalogProducts() {
@@ -1162,6 +1190,7 @@ function openFiltersSheet() {
   const sheet = qs("#filters-sheet");
   sheet.classList.remove("is-hidden");
   sheet.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
   syncFilterForm();
 }
 
@@ -1169,6 +1198,7 @@ function closeFiltersSheet() {
   const sheet = qs("#filters-sheet");
   sheet.classList.add("is-hidden");
   sheet.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
 }
 
 function syncFilterForm() {

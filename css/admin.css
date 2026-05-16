@@ -214,6 +214,12 @@ a {
   border: 1px solid transparent;
 }
 
+.btn-sm {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.86rem;
+}
+
 .btn:focus-visible,
 .tab-button:focus-visible,
 .editor-stepper button:focus-visible,
@@ -379,6 +385,7 @@ a {
 .catalog-grid {
   display: grid;
   gap: 16px;
+  align-items: start;
 }
 
 .stat-grid {
@@ -552,6 +559,87 @@ th {
   gap: 10px;
 }
 
+.list-item--compact {
+  padding: 14px;
+}
+
+.notification-install-base {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.notification-install-base strong {
+  font-family: var(--admin-font-serif);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.notification-install-base span {
+  color: var(--admin-text-soft);
+}
+
+.notification-planning-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.notification-side-card {
+  display: grid;
+  gap: 18px;
+}
+
+.notification-side-summary p {
+  margin-bottom: 0;
+}
+
+.notification-bucket {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.notification-bucket__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notification-bucket__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.notification-history-shell {
+  width: min(100%, 860px);
+}
+
+.notification-pagination {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid var(--admin-border);
+}
+
+.notification-pagination__pages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.notification-pagination .btn {
+  min-width: 42px;
+}
+
 .preview-frame {
   width: 100%;
   min-height: 340px;
@@ -568,6 +656,16 @@ th {
 
 .inline-grid--2 {
   grid-template-columns: 1fr;
+}
+
+@media (min-width: 760px) {
+  .notification-planning-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .notification-side-card .notification-planning-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .editor-backdrop {

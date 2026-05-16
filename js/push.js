@@ -1,6 +1,11 @@
 import { APP_CONFIG } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 import { qs, showToast } from "./utils.js";
+import { isStandalone, showInstallPrompt } from "./pwa.js";
+
+const PUSH_REMINDER_KEY = "vz_push_prompt_dismissed_at";
+const PUSH_REMINDER_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+const PUSH_AUTO_PROMPT_DELAY_MS = 2800;
 
 function setPushButtonLabel(button, isSubscribed) {
   if (!button) return;
@@ -183,4 +188,58 @@ export async function registerPushButton(storeId, options = {}) {
       button.disabled = Notification.permission === "denied";
     }
   });
+}
+
+function canShowPushReminder() {
+  const dismissedAt = Number(window.localStorage.getItem(PUSH_REMINDER_KEY) || 0);
+  return !dismissedAt || Date.now() - dismissedAt >= PUSH_REMINDER_COOLDOWN_MS;
+}
+
+function storePushReminderCooldown() {
+  window.localStorage.setItem(PUSH_REMINDER_KEY, String(Date.now()));
+}
+
+export async function registerPushReminder(storeId, options = {}) {
+  if (!options.enabled || !isPushSupported() || Notification.permission === "granted" || Notification.permission === "denied") return;
+  if (!canShowPushReminder()) return;
+
+  window.setTimeout(() => {
+    if (!isStandalone()) {
+      showInstallPrompt("push-install-required", {
+        title: "Instale o app para ativar novidades",
+        copy: "No celular, as notificações ficam disponíveis depois que a vitrine é instalada como app.",
+        confirmLabel: "Entendi"
+      });
+      storePushReminderCooldown();
+      return;
+    }
+
+    showInstallPrompt("push", {
+      allowStandalone: true,
+      title: "Ative as novidades da loja",
+      copy: "Receba avisos de promoções, lançamentos e campanhas direto no celular.",
+      confirmLabel: "Ativar notificações"
+    });
+
+    const confirmButton = qs("#confirm-install-prompt");
+    const dismissButton = qs("#dismiss-install-prompt");
+    const closeButton = qs("#close-install-prompt");
+    const subscribe = async () => {
+      confirmButton.disabled = true;
+      try {
+        await subscribeUserToPush(storeId);
+        showToast("Notificações ativadas com sucesso.", "success");
+        qs("#install-prompt")?.classList.add("is-hidden");
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || "Não foi possível ativar notificações.", "danger");
+      } finally {
+        confirmButton.disabled = false;
+      }
+    };
+
+    confirmButton?.addEventListener("click", subscribe, { once: true });
+    dismissButton?.addEventListener("click", storePushReminderCooldown, { once: true });
+    closeButton?.addEventListener("click", storePushReminderCooldown, { once: true });
+  }, PUSH_AUTO_PROMPT_DELAY_MS);
 }

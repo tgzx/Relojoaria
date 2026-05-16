@@ -150,7 +150,6 @@ self.addEventListener("push", (event) => {
     body: payload.body,
     icon: payload.icon || "./assets/icons/icon-192.png",
     badge: payload.badge || "./assets/icons/icon-192.png",
-    image: payload.image,
     data: {
       target_url: payload.target_url || "./index.html"
     }
