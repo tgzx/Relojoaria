@@ -14,6 +14,17 @@ function setPushButtonLabel(button, isSubscribed) {
   window.dispatchEvent(new CustomEvent("vitrinezap:header-actions-update"));
 }
 
+function setPushButtonBlocked(button) {
+  if (!button) return;
+
+  button.dataset.fullLabel = "Notificações bloqueadas";
+  button.dataset.compactLabel = "Bloqueadas";
+  button.textContent = button.dataset.fullLabel;
+  button.title = "Libere notificações nas permissões do navegador para receber novidades.";
+  button.disabled = true;
+  window.dispatchEvent(new CustomEvent("vitrinezap:header-actions-update"));
+}
+
 export function isPushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
@@ -103,6 +114,12 @@ export async function registerPushButton(storeId, options = {}) {
     return;
   }
 
+  if (Notification.permission === "denied") {
+    button.classList.remove("is-hidden");
+    setPushButtonBlocked(button);
+    return;
+  }
+
   const registration = await navigator.serviceWorker.ready.catch(() => null);
   const existing = registration ? await registration.pushManager.getSubscription() : null;
 
@@ -127,9 +144,12 @@ export async function registerPushButton(storeId, options = {}) {
       }
     } catch (error) {
       console.error(error);
+      if (Notification.permission === "denied") {
+        setPushButtonBlocked(button);
+      }
       showToast(error.message || "Não foi possível alterar o status das notificações.", "danger");
     } finally {
-      button.disabled = false;
+      button.disabled = Notification.permission === "denied";
     }
   });
 }

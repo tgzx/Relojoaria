@@ -2707,12 +2707,23 @@ async function sendNotification(notificationId) {
     return;
   }
 
-  const result = await adminSendNotification(notificationId);
-  if (result?.sent > 0) {
-    showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
-  } else {
-    showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+  try {
+    const result = await adminSendNotification(notificationId);
+    if (result?.sent > 0) {
+      showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
+    } else {
+      showToast(result?.message || "Nenhum dispositivo inscrito para receber notificações.", "warning");
+    }
+  } catch (error) {
+    console.error(error);
+    await adminSaveNotification({
+      id: notificationId,
+      status: "failed",
+      sent_at: null
+    }).catch((updateError) => console.warn("Não foi possível marcar a notificação como falha.", updateError));
+    showToast(error.message || "Não foi possível enviar a notificação.", "danger");
   }
+
   adminState.notifications = await adminListNotifications(adminState.store.id);
   renderAdminLayout();
 }

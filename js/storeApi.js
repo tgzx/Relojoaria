@@ -687,7 +687,17 @@ export async function adminSaveNotification(payload) {
 }
 
 export async function adminSendNotification(notificationId) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+
+  if (sessionError || !accessToken) {
+    throw new Error("Sessao administrativa expirada. Entre novamente para enviar a notificacao.");
+  }
+
   const result = await supabase.functions.invoke("send-push", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
     body: {
       notification_id: notificationId
     }
