@@ -35,7 +35,7 @@ jobs:
             SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
             SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",
             STORE_SLUG: "${{ secrets.STORE_SLUG }}",
-            PUBLIC_VAPID_KEY: "${{ secrets.PUBLIC_VAPID_KEY }}",
+            PUBLIC_VAPID_KEY: "BFhPlzcIuTMz130E7gjMXwmXOqrIXvEVYdZhR9YyyJZjT87s4bsQQertxPWNDR7gPt4YOTNm7k5rmuPvZOx6QKQ",
             APP_NAME: "${{ secrets.APP_NAME }}"
           };
           EOF

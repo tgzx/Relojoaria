@@ -2707,11 +2707,6 @@ async function sendNotification(notificationId) {
     return;
   }
 
-  if (!adminState.pushSummary?.count) {
-    showToast("Nenhum dispositivo inscrito. Abra a vitrine e ative as notificações antes de enviar.", "warning");
-    return;
-  }
-
   try {
     const result = await adminSendNotification(notificationId);
     if (result?.sent > 0) {

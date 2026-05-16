@@ -128,14 +128,15 @@ serve(async (request) => {
       sent += 1;
     } catch (error) {
       failed += 1;
-      const { statusCode, message } = getPushErrorInfo(error);
+      const { statusCode, message, body } = getPushErrorInfo(error);
       if (isInvalidSubscriptionStatus(statusCode)) {
         invalidSubscriptionIds.push(item.id);
       }
       console.error("Falha ao enviar push", {
         endpoint: item.endpoint,
         statusCode,
-        message
+        message,
+        body
       });
     }
   }
@@ -170,21 +171,23 @@ serve(async (request) => {
 });
 
 function isInvalidSubscriptionStatus(statusCode: number) {
-  return [400, 403, 404, 410].includes(statusCode);
+  return [404, 410].includes(statusCode);
 }
 
 function getPushErrorInfo(error: unknown) {
   if (typeof error === "object" && error !== null) {
-    const record = error as { statusCode?: number; status?: number; message?: string };
+    const record = error as { statusCode?: number; status?: number; message?: string; body?: unknown };
     return {
       statusCode: record.statusCode ?? record.status ?? 500,
-      message: record.message ?? "Erro desconhecido"
+      message: record.message ?? "Erro desconhecido",
+      body: typeof record.body === "string" ? record.body : record.body ? JSON.stringify(record.body) : undefined
     };
   }
 
   return {
     statusCode: 500,
-    message: String(error)
+    message: String(error),
+    body: undefined
   };
 }
 
