@@ -79,6 +79,7 @@ async function initApp() {
   updateHeaderOffset();
 
   if (APP_CONFIG.SUPABASE_URL.startsWith("COLE_AQUI") || APP_CONFIG.SUPABASE_ANON_KEY.startsWith("COLE_AQUI")) {
+    revealStorefrontShell();
     renderSetupRequired();
     return;
   }
@@ -86,8 +87,10 @@ async function initApp() {
   try {
     await loadHomeData();
     await loadCatalogProducts({ reset: true });
+    runInitialReveal();
   } catch (error) {
     console.error(error);
+    revealStorefrontShell();
     renderFatalState(error);
   }
 }
@@ -197,13 +200,38 @@ function hydrateHomeState(home, usingCachedData) {
   renderSectionNavigation();
   renderFilterOptions();
   renderFavoritesSection();
-  maybeShowIntro();
 
   if (!appState.isEmbeddedPreview) {
     registerPushButton(appState.store.id, {
       enabled: Boolean(appState.settings?.enable_notifications)
     }).catch(() => {});
   }
+}
+
+async function runInitialReveal() {
+  const loadingScreen = qs("#app-loading-screen");
+  const reducedMotion = supportsReducedMotion();
+  const introReady = prepareIntroOverlay();
+
+  if (loadingScreen) {
+    await delay(reducedMotion ? 0 : 320);
+    loadingScreen.classList.add("is-dismissing");
+    await delay(reducedMotion ? 0 : 560);
+    loadingScreen.remove();
+  }
+
+  if (introReady) {
+    await finishIntroOverlay();
+  } else {
+    await waitForStorefrontReady();
+    revealStorefrontShell();
+  }
+}
+
+function revealStorefrontShell() {
+  document.body.classList.remove("app-loading");
+  document.body.classList.add("app-ready");
+  qs("#app-loading-screen")?.remove();
 }
 
 function renderStoreFrame() {
@@ -1291,17 +1319,17 @@ function humanizeStock(product) {
   return "Disponível";
 }
 
-function maybeShowIntro() {
+function prepareIntroOverlay() {
   const overlay = qs("#intro-overlay");
   const introMode = appState.settings?.intro_mode || "logo";
   if (introMode === "disabled" || appState.isEmbeddedPreview) {
     overlay.classList.add("is-hidden");
-    return;
+    return false;
   }
 
   const logo = appState.store?.logo_url || "./assets/icons/icon-192.png";
-  const reducedMotion = supportsReducedMotion();
   overlay.classList.remove("is-hidden");
+  overlay.classList.remove("is-dismissing");
 
   if (introMode === "brand_carousel") {
     overlay.innerHTML = `
@@ -1339,9 +1367,51 @@ function maybeShowIntro() {
     `;
   }
 
-  delay(reducedMotion ? 400 : 1700).then(() => {
-    overlay.classList.add("is-hidden");
-    overlay.innerHTML = "";
+  return true;
+}
+
+async function finishIntroOverlay() {
+  const overlay = qs("#intro-overlay");
+  const reducedMotion = supportsReducedMotion();
+
+  await delay(reducedMotion ? 250 : 2000);
+  await waitForStorefrontReady();
+  revealStorefrontShell();
+  await delay(reducedMotion ? 0 : 320);
+  overlay.classList.add("is-dismissing");
+  await delay(reducedMotion ? 0 : 560);
+  overlay.classList.add("is-hidden");
+  overlay.innerHTML = "";
+  return true;
+}
+
+async function waitForStorefrontReady() {
+  const criticalImages = [
+    qs("#store-logo"),
+    qs("#hero-section img"),
+    ...qsa("#dynamic-sections img, #products-grid img").slice(0, 6)
+  ].filter(Boolean);
+
+  await Promise.race([
+    Promise.all(criticalImages.map(waitForImageReady)),
+    delay(1800)
+  ]);
+}
+
+function waitForImageReady(image) {
+  if (image.complete && image.naturalWidth > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const finish = () => {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      resolve();
+    };
+
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
   });
 }
 

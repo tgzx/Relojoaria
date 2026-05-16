@@ -17,7 +17,14 @@
     <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
     <link rel="stylesheet" href="./css/styles.css" />
   </head>
-  <body>
+  <body class="app-loading">
+    <div id="app-loading-screen" class="app-loading-screen" role="status" aria-live="polite">
+      <span class="sr-only">Carregando vitrine</span>
+      <div class="app-loading-mark" aria-hidden="true">
+        <span></span>
+      </div>
+    </div>
+
     <div id="intro-overlay" class="intro-overlay is-hidden" aria-hidden="true"></div>
 
     <header class="site-header">

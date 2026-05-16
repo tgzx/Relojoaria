@@ -77,6 +77,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.app-loading {
+  overflow: hidden;
+}
+
+body.app-loading .site-header,
+body.app-loading main,
+body.app-loading .site-footer {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.app-ready .site-header,
+body.app-ready main,
+body.app-ready .site-footer {
+  animation: storefront-reveal 760ms ease both;
+}
+
 body.theme-dark {
   --color-premium-gold: #d4b27b;
   --color-premium-gold-soft: rgba(212, 178, 123, 0.14);
@@ -114,6 +131,62 @@ a {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.app-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08), transparent 28%),
+    #0f0f0f;
+  color: #f7f3eb;
+  transition:
+    opacity 520ms ease,
+    visibility 520ms ease;
+}
+
+.app-loading-screen.is-dismissing {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.app-loading-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(247, 243, 235, 0.18);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.app-loading-mark span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(247, 243, 235, 0.2);
+  border-top-color: #f7f3eb;
+  border-radius: 50%;
+  animation: loading-spin 780ms linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes storefront-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .site-header {
@@ -1484,6 +1557,14 @@ body.theme-dark .product-badge--warning {
     radial-gradient(circle at top, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 28%),
     linear-gradient(180deg, rgba(10, 10, 10, 0.98), rgba(16, 16, 16, 0.98));
   color: #fff;
+  transition:
+    opacity 520ms ease,
+    visibility 520ms ease;
+}
+
+.intro-overlay.is-dismissing {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .intro-card {
