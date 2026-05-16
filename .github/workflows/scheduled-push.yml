@@ -1,0 +1,20 @@
+name: Process scheduled push notifications
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke scheduled push processor
+        run: |
+          curl --fail --show-error --silent \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "apikey: sb_publishable_kGcUw_N1d81KNEEJGDapoQ_VxFjYfEw" \
+            --header "Authorization: Bearer sb_publishable_kGcUw_N1d81KNEEJGDapoQ_VxFjYfEw" \
+            --data '{}' \
+            "https://xchqcpnmynwlodbkgmzy.supabase.co/functions/v1/process-scheduled-push"
