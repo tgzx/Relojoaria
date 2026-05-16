@@ -532,6 +532,17 @@ th {
   justify-content: space-between;
   gap: 12px;
   align-items: start;
+  min-width: 0;
+}
+
+.list-item-header > div {
+  min-width: 0;
+}
+
+.list-item-title,
+.list-item-subtitle {
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .section-card__footer,
