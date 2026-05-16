@@ -1326,6 +1326,7 @@ function renderAppearanceManager() {
 }
 
 function renderNotifications() {
+  const targetOptions = getNotificationTargetOptions();
   return `
     <section class="settings-grid">
       <article class="panel-card">
@@ -1343,8 +1344,13 @@ function renderNotifications() {
           </label>
           <label class="admin-field">
             <span>URL alvo</span>
-            <input type="url" name="target_url" placeholder="https://... ou #section-promocoes" />
-            <p class="muted-copy">Deixe em branco para abrir a página inicial. Use URL completa ou apenas o hash da seção.</p>
+            <input type="text" name="target_url" list="notification-target-options" placeholder="URL completa, ./index.html ou seção da vitrine" />
+            <datalist id="notification-target-options">
+              ${targetOptions
+                .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
+                .join("")}
+            </datalist>
+            <p class="muted-copy">Deixe em branco para abrir a página inicial. As seções abaixo são carregadas da vitrine atual.</p>
           </label>
           <label class="admin-field">
             <span>Imagem opcional</span>
@@ -1385,6 +1391,27 @@ function renderNotifications() {
       </article>
     </section>
   `;
+}
+
+function getNotificationTargetOptions() {
+  const options = [{ value: "./index.html", label: "Página inicial" }];
+
+  if (adminState.settings?.enable_favorites) {
+    options.push({ value: "#favorites-section", label: "Favoritos" });
+  }
+
+  adminState.sections
+    .filter((section) => section?.slug && section.is_active !== false)
+    .forEach((section) => {
+      options.push({
+        value: `#section-${section.slug}`,
+        label: section.title || section.slug
+      });
+    });
+
+  options.push({ value: "#all-products-section", label: "Todos os produtos" });
+
+  return options;
 }
 
 function renderAutomations() {
@@ -2688,11 +2715,13 @@ async function saveNotification(event) {
   clearAdminFormDirty("notifications");
   const form = event.currentTarget;
   const data = new FormData(form);
+  const targetUrl = String(data.get("target_url") || "").trim();
+
   await adminSaveNotification({
     store_id: adminState.store.id,
     title: String(data.get("title") || "").trim(),
     body: String(data.get("body") || "").trim(),
-    target_url: String(data.get("target_url") || ""),
+    target_url: targetUrl || "./index.html",
     image_url: String(data.get("image_url") || ""),
     status: "draft",
     created_by: adminState.profile.id

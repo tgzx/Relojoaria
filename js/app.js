@@ -664,6 +664,14 @@ function setupSectionNavigation() {
         behavior: supportsReducedMotion() ? "auto" : "smooth"
       });
     }
+
+    const href =
+      anchor === "favorites"
+        ? "#favorites-section"
+        : anchor === "all-products"
+          ? "#all-products-section"
+          : `#section-${anchor}`;
+    window.history.replaceState(null, "", href);
   };
 
   const updateActiveAnchor = () => {
@@ -713,7 +721,6 @@ function setupSectionNavigation() {
     const targetTop = window.scrollY + target.getBoundingClientRect().top - headerHeight - navHeight - 16;
 
     setActiveAnchor(anchor);
-    window.history.replaceState(null, "", href);
     window.scrollTo({
       top: Math.max(0, targetTop),
       behavior: supportsReducedMotion() ? "auto" : "smooth"
