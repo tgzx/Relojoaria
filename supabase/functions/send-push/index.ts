@@ -110,7 +110,7 @@ serve(async (request) => {
   const payload = JSON.stringify({
     title: notification.title,
     body: notification.body,
-    target_url: notification.target_url || "/index.html",
+    target_url: notification.target_url || "./index.html",
     image: notification.image_url || undefined,
     icon: "/assets/icons/icon-192.png",
     badge: "/assets/icons/icon-192.png"

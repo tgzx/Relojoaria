@@ -1343,7 +1343,8 @@ function renderNotifications() {
           </label>
           <label class="admin-field">
             <span>URL alvo</span>
-            <input type="url" name="target_url" placeholder="https://..." />
+            <input type="url" name="target_url" placeholder="https://... ou #section-promocoes" />
+            <p class="muted-copy">Deixe em branco para abrir a página inicial. Use URL completa ou apenas o hash da seção.</p>
           </label>
           <label class="admin-field">
             <span>Imagem opcional</span>

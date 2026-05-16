@@ -226,12 +226,32 @@ async function runInitialReveal() {
     await waitForStorefrontReady();
     revealStorefrontShell();
   }
+
+  scrollToInitialHashTarget();
 }
 
 function revealStorefrontShell() {
   document.body.classList.remove("app-loading");
   document.body.classList.add("app-ready");
   qs("#app-loading-screen")?.remove();
+}
+
+function scrollToInitialHashTarget() {
+  const hash = window.location.hash;
+  if (!hash) return;
+
+  const targetId = hash.slice(1);
+  const target = document.getElementById(targetId) || qs(`[data-section-anchor="${targetId}"]`);
+  if (!target) return;
+
+  const headerHeight = qs(".site-header")?.offsetHeight || 0;
+  const navHeight = qs("#section-nav")?.offsetHeight || 0;
+  const targetTop = window.scrollY + target.getBoundingClientRect().top - headerHeight - navHeight - 16;
+
+  window.scrollTo({
+    top: Math.max(0, targetTop),
+    behavior: supportsReducedMotion() ? "auto" : "smooth"
+  });
 }
 
 function renderStoreFrame() {
