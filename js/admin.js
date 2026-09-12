@@ -104,6 +104,7 @@ const adminState = {
   store: null,
   settings: null,
   products: [],
+  filteredProducts: [],
   categories: [],
   brands: [],
   sections: [],
@@ -379,7 +380,8 @@ async function loadAdminData() {
     adminState.store = membership.store;
 
     const settingsPromise = withTimeout(getStoreSettings(membership.store.id).catch(() => null), 10000, "getStoreSettings");
-    const productsPromise = withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListProducts");
+    const productsPromise = withTimeout(adminListProducts(membership.store.id, {}), 10000, "adminListProducts");
+    const filteredProductsPromise = withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListFilteredProducts");
     const categoriesPromise = withTimeout(adminListCategories(membership.store.id), 10000, "adminListCategories");
     const brandsPromise = withTimeout(adminListBrands(membership.store.id), 10000, "adminListBrands");
     const sectionsPromise = withTimeout(adminListSections(membership.store.id), 10000, "adminListSections");
@@ -387,9 +389,10 @@ async function loadAdminData() {
     const notificationsPromise = withTimeout(adminListNotifications(membership.store.id), 10000, "adminListNotifications");
     const pushSummaryPromise = withTimeout(adminListPushSubscriptionsSummary(membership.store.id), 10000, "adminListPushSubscriptionsSummary");
 
-    const [settings, productsRes, categories, brands, sections, banners, notifications, pushSummary] = await Promise.all([
+    const [settings, productsRes, filteredProductsRes, categories, brands, sections, banners, notifications, pushSummary] = await Promise.all([
       settingsPromise,
       productsPromise,
+      filteredProductsPromise,
       categoriesPromise,
       brandsPromise,
       sectionsPromise,
@@ -400,6 +403,7 @@ async function loadAdminData() {
 
     adminState.settings = settings;
     adminState.products = productsRes.data || [];
+    adminState.filteredProducts = filteredProductsRes.data || productsRes.data || [];
     adminState.categories = categories || [];
     adminState.brands = brands || [];
     adminState.sections = sections || [];
@@ -942,6 +946,7 @@ function renderDashboard() {
 
 function renderProducts() {
   const products = getVisibleProducts();
+  const hasProducts = products.length > 0;
 
   return `
     <section class="panel-card toolbar">
@@ -1015,23 +1020,24 @@ function renderProducts() {
         <span class="section-kicker">Lista operacional</span>
         <h2>${products.length} produto(s)</h2>
       </header>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="select-all-products" ${products.length && adminState.selectedProductIds.length === products.length ? "checked" : ""} /></th>
-              <th>Produto</th>
-              <th>Preço</th>
-              <th>Status</th>
-              <th>Flags</th>
-              <th>Atualizado</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              products.length
-                ? products
+      ${
+        hasProducts
+          ? `
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="select-all-products" ${adminState.selectedProductIds.length === products.length ? "checked" : ""} /></th>
+                    <th>Produto</th>
+                    <th>Preço</th>
+                    <th>Status</th>
+                    <th>Flags</th>
+                    <th>Atualizado</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${products
                     .map(
                       (product) => `
                         <tr>
@@ -1061,22 +1067,19 @@ function renderProducts() {
                         </tr>
                       `
                     )
-                    .join("")
-                : `
-                  <tr>
-                    <td colspan="7">
-                      <div class="empty-card">
-                        <span class="section-kicker">Catálogo vazio</span>
-                        <h2>Nenhum produto encontrado</h2>
-                        <p>Revise os filtros ou crie seu primeiro item agora.</p>
-                      </div>
-                    </td>
-                  </tr>
-                `
-            }
-          </tbody>
-        </table>
-      </div>
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          `
+          : `
+            <div class="empty-card empty-card--standalone">
+              <span class="section-kicker">Catálogo vazio</span>
+              <h2>Nenhum produto encontrado</h2>
+              <p>Revise os filtros ou crie seu primeiro item agora.</p>
+            </div>
+          `
+      }
     </section>
   `;
 }
@@ -1229,7 +1232,7 @@ function renderSectionsManager() {
           <label class="admin-field">
             <span>Produtos manuais</span>
             <div class="selection-list">
-              ${adminState.products
+              ${getManualSectionProductOptions()
                 .slice(0, 30)
                 .map((product) => {
                   const selectedIds = (section.section_products || []).map((item) => item.product_id);
@@ -1267,6 +1270,9 @@ function renderCategoriesManager() {
       <article class="panel-card">
         <span class="section-kicker">Organização</span>
         <h2>Categorias</h2>
+        <div class="mobile-quick-actions">
+          <button class="btn btn-primary" type="button" data-scroll-to-quick-form="category-form">Nova categoria</button>
+        </div>
         <div class="list-stack">
           ${adminState.categories
             .map(
@@ -1339,6 +1345,9 @@ function renderBrandsManager() {
       <article class="panel-card">
         <span class="section-kicker">Identidade comercial</span>
         <h2>Marcas</h2>
+        <div class="mobile-quick-actions">
+          <button class="btn btn-primary" type="button" data-scroll-to-quick-form="brand-form">Nova marca</button>
+        </div>
         <div class="list-stack">
           ${adminState.brands
             .map(
@@ -1702,6 +1711,8 @@ function renderNotificationListItem(item, options = {}) {
   const canEdit = ["draft", "scheduled", "failed"].includes(item.status);
   const canCancelSchedule = Boolean(item.scheduled_at && !item.recurrence_rule && item.status === "scheduled");
   const canStopRecurrence = Boolean(item.recurrence_rule);
+  const isSent = item.status === "sent";
+  const sendActionLabel = isSent ? "Reenviar" : "Enviar agora";
 
   return `
     <article class="list-item ${options.compact ? "list-item--compact" : ""}">
@@ -1729,7 +1740,7 @@ function renderNotificationListItem(item, options = {}) {
             ? `<button class="btn btn-secondary" type="button" data-cancel-schedule="${escapeHtml(item.id)}">Cancelar agendamento</button>`
             : ""
         }
-        <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}">Enviar agora</button>
+        <button class="btn btn-secondary" type="button" data-send-notification="${escapeHtml(item.id)}" data-send-notification-status="${escapeHtml(item.status || "draft")}">${escapeHtml(sendActionLabel)}</button>
       </div>
     </article>
   `;
@@ -2294,6 +2305,7 @@ function bindAdminLayoutEvents() {
       adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.adminTab;
       renderAdminLayout();
+      scrollAdminMainToTop();
     });
   });
 
@@ -2312,6 +2324,7 @@ function bindAdminLayoutEvents() {
       adminState.pendingBackgroundRender = false;
       adminState.currentAdminTab = button.dataset.goTab;
       renderAdminLayout();
+      scrollAdminMainToTop();
     })
   );
 
@@ -2322,7 +2335,77 @@ function bindAdminLayoutEvents() {
   bindAppearanceTab();
   bindNotificationsTab();
   bindSettingsTab();
+  bindQuickFormScrollActions();
 }
+function scrollAdminMainToTop() {
+  const main = qs(".admin-main");
+  window.requestAnimationFrame(() => {
+    if (main && typeof main.scrollTo === "function") {
+      main.scrollTo({ top: 0, behavior: "auto" });
+    }
+    window.scrollTo({ top: 0, behavior: "auto" });
+  });
+}
+
+function bindQuickFormScrollActions() {
+  qsa("[data-scroll-to-quick-form]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const target = qs(`#${button.dataset.scrollToQuickForm}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstInput = target.querySelector("input:not([type='hidden']), textarea, select");
+      window.setTimeout(() => firstInput?.focus(), 240);
+    })
+  );
+}
+
+function hasActiveProductFilters() {
+  return Object.values(adminState.productFilters || {}).some(Boolean);
+}
+
+function findProductById(productId) {
+  return (
+    adminState.products.find((product) => product.id === productId) ||
+    adminState.filteredProducts.find((product) => product.id === productId) ||
+    null
+  );
+}
+
+function getManualSectionProductOptions() {
+  return [...adminState.products].sort((left, right) =>
+    String(left.name || "").localeCompare(String(right.name || ""), adminState.settings?.locale || "pt-BR")
+  );
+}
+
+function buildDuplicatedSku(sourceSku) {
+  const normalized = String(sourceSku || "").trim();
+  if (!normalized) return "";
+  const suffix = String(Date.now()).slice(-6);
+  return `${normalized}-COPY-${suffix}`.slice(0, 64);
+}
+
+function productMatchesAdminFilters(product, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  const productName = String(product.name || "").toLowerCase();
+  if (search && !productName.includes(search)) return false;
+
+  if (filters.status === "active" && (!product.is_active || product.is_archived)) return false;
+  if (filters.status === "inactive" && (product.is_active || product.is_archived)) return false;
+  if (filters.status === "archived" && !product.is_archived) return false;
+  if (filters.categoryId && product.category_id !== filters.categoryId) return false;
+  if (filters.brandId && product.brand_id !== filters.brandId) return false;
+
+  return true;
+}
+
+function prependUniqueProductState(product) {
+  if (!product?.id) return;
+  adminState.products = [product, ...adminState.products.filter((item) => item.id !== product.id)];
+  if (productMatchesAdminFilters(product, adminState.productFilters)) {
+    adminState.filteredProducts = [product, ...adminState.filteredProducts.filter((item) => item.id !== product.id)];
+  }
+}
+
 function bindProductsTab() {
   const filterForm = qs("#products-filter-form");
   filterForm?.addEventListener("input", debounceAdmin(async () => {
@@ -2622,27 +2705,28 @@ function bindSettingsTab() {
 
 async function refreshProducts() {
   const response = await adminListProducts(adminState.store.id, adminState.productFilters);
-  adminState.products = response.data || [];
+  adminState.filteredProducts = response.data || [];
   adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.products.some((product) => product.id === id)
+    adminState.filteredProducts.some((product) => product.id === id)
   );
   renderAdminLayout();
 }
 
 function getVisibleProducts() {
   const sectionId = adminState.productFilters.sectionId;
-  if (!sectionId) return adminState.products;
+  const productSource = adminState.filteredProducts.length || hasActiveProductFilters() ? adminState.filteredProducts : adminState.products;
+  if (!sectionId) return productSource;
   const productIds = (adminState.sections.find((section) => section.id === sectionId)?.section_products || []).map(
     (item) => item.product_id
   );
-  return adminState.products.filter((product) => productIds.includes(product.id));
+  return productSource.filter((product) => productIds.includes(product.id));
 }
 
 function openProductEditor(productId = null) {
   adminState.productEditorStep = 1;
   adminState.pendingProductFiles = [];
   adminState.editingProduct = productId
-    ? structuredClone(adminState.products.find((product) => product.id === productId))
+    ? structuredClone(findProductById(productId))
     : createEmptyProductDraft();
 
   setAdminModalOpen("product-editor", true);
@@ -2805,7 +2889,7 @@ function renderProductEditor() {
                                     ${escapeHtml(formatFileSize(file.size))}
                                     ${
                                       !(draft.images || []).some((image) => image.is_primary) && index === 0
-                                        ? " · Sera a principal se nao houver outra definida."
+                                        ? " · Será a principal se não houver outra definida."
                                         : ""
                                     }
                                   </span>
@@ -2825,7 +2909,7 @@ function renderProductEditor() {
                         .join("")}
                     </div>
                   `
-                  : `<span class="list-item-subtitle">Nenhum arquivo selecionado ainda. As imagens serao enviadas quando voce salvar o produto.</span>`
+                  : `<span class="list-item-subtitle">Nenhum arquivo selecionado ainda. As imagens serão enviadas quando você salvar o produto.</span>`
               }
               <div class="list-stack">
                 ${(draft.images || [])
@@ -2998,11 +3082,11 @@ function getProductImageUploadErrorMessage(error, fileName = "") {
   }
 
   if (message.includes("mime") || message.includes("content type")) {
-    return `O arquivo ${fileName || "selecionado"} nao foi aceito pelo Supabase.`;
+    return `O arquivo ${fileName || "selecionado"} não foi aceito pelo Supabase.`;
   }
 
   if (message.includes("product_images") || message.includes("foreign key")) {
-    return `A imagem subiu, mas nao foi vinculada ao produto${fileName ? ` (${fileName})` : ""}. Revise a tabela product_images e as policies.`;
+    return `A imagem subiu, mas não foi vinculada ao produto${fileName ? ` (${fileName})` : ""}. Revise a tabela product_images e as policies.`;
   }
 
   return fileName ? `Falha ao enviar ${fileName}: ${rawMessage}` : rawMessage;
@@ -3128,6 +3212,7 @@ async function saveProduct(publish) {
     closeProductEditor(true);
     notifyStorefrontChanged("product-save");
     await refreshProductsData();
+    renderAdminLayout();
   } catch (error) {
     console.error(error);
     if (savedProduct?.id) {
@@ -3251,6 +3336,7 @@ async function duplicateProduct(productId) {
       id: undefined,
       name: `${source.name} (Cópia)`,
       slug: `${source.slug}-copia-${Date.now()}`,
+      sku: buildDuplicatedSku(source.sku),
       is_active: false
     });
 
@@ -3268,9 +3354,16 @@ async function duplicateProduct(productId) {
       )
     );
 
+    const duplicatedForState = {
+      ...duplicated,
+      images: duplicated.images?.length ? duplicated.images : source.images || []
+    };
+    prependUniqueProductState(duplicatedForState);
     showToast("Produto duplicado como rascunho.", "success");
     notifyStorefrontChanged("product-duplicate");
     await refreshProductsData();
+    prependUniqueProductState(duplicatedForState);
+    renderAdminLayout();
   } catch (error) {
     console.error(error);
     showToast(error.message || "Não foi possível duplicar o produto.", "danger");
@@ -3613,13 +3706,22 @@ async function cancelNotificationSchedule(notificationId) {
 }
 
 async function sendNotification(notificationId, options = {}) {
+  const notification = adminState.notifications.find((item) => item.id === notificationId);
+  const isResend = notification?.status === "sent";
+  if (isResend && !options.silentRefresh) {
+    const proceed = window.confirm("Reenviar esta notificação para os dispositivos inscritos?");
+    if (!proceed) return null;
+  }
+
   if (!adminState.settings?.enable_notifications) {
     showToast("Ative notificações nas configurações da loja antes de enviar.", "warning");
     return;
   }
 
+  let result = null;
+
   try {
-    const result = await adminSendNotification(notificationId);
+    result = await adminSendNotification(notificationId);
     if (!options.silentRefresh) {
       if (result?.sent > 0) {
         showToast(`Notificação enviada para ${result.sent} dispositivo(s).`, "success");
@@ -3693,10 +3795,14 @@ async function saveSettings(event) {
 }
 
 async function refreshProductsData() {
-  const productsRes = await adminListProducts(adminState.store.id, adminState.productFilters);
-  adminState.products = productsRes.data || [];
+  const [allProductsRes, filteredProductsRes] = await Promise.all([
+    adminListProducts(adminState.store.id, {}),
+    adminListProducts(adminState.store.id, adminState.productFilters)
+  ]);
+  adminState.products = allProductsRes.data || [];
+  adminState.filteredProducts = filteredProductsRes.data || [];
   adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.products.some((product) => product.id === id)
+    adminState.filteredProducts.some((product) => product.id === id)
   );
 }
 
@@ -3705,14 +3811,16 @@ async function refreshSectionsData() {
 }
 
 async function refreshProductsAndSectionsData() {
-  const [productsRes, sections] = await Promise.all([
+  const [allProductsRes, filteredProductsRes, sections] = await Promise.all([
+    adminListProducts(adminState.store.id, {}),
     adminListProducts(adminState.store.id, adminState.productFilters),
     adminListSections(adminState.store.id)
   ]);
-  adminState.products = productsRes.data || [];
+  adminState.products = allProductsRes.data || [];
+  adminState.filteredProducts = filteredProductsRes.data || [];
   adminState.sections = sections || [];
   adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.products.some((product) => product.id === id)
+    adminState.filteredProducts.some((product) => product.id === id)
   );
 }
 function renderOptions(options, selectedValue) {
@@ -3953,7 +4061,7 @@ function getBusinessHoursDayDraft(periods = []) {
 
 function formatBusinessHoursPeriods(periods = []) {
   if (!periods.length) return "Fechado";
-  return periods.map((period) => `${period.start} as ${period.end}`).join(" • ");
+  return periods.map((period) => `${period.start} às ${period.end}`).join(" • ");
 }
 
 function renderBusinessHoursSummary(hours) {
@@ -3972,7 +4080,7 @@ function renderBusinessHoursSummary(hours) {
 function buildBusinessHoursCompactLabel(hours) {
   const normalized = normalizeBusinessHours(hours);
   const openDays = BUSINESS_HOURS_DAYS.filter((day) => normalized[day.key]?.length);
-  if (!openDays.length) return "Nenhum horario definido";
+  if (!openDays.length) return "Nenhum horário definido";
   return `${openDays.length} dia(s) com expediente definido`;
 }
 
@@ -3999,7 +4107,7 @@ function mountBusinessHoursEditor() {
 
   const label = wrapper.querySelector("span");
   if (label) {
-    label.textContent = "Horarios de funcionamento";
+    label.textContent = "Horários de funcionamento";
   }
 
   let card = wrapper.querySelector(".business-hours-card");
@@ -4013,9 +4121,9 @@ function mountBusinessHoursEditor() {
     <div class="business-hours-card__header">
       <div>
         <strong class="list-item-title">Expediente da loja</strong>
-        <p class="muted-copy">Defina um turno simples ou dois turnos com pausa para almoco.</p>
+        <p class="muted-copy">Defina um turno simples ou dois turnos com pausa para almoço.</p>
       </div>
-      <button class="btn btn-secondary" type="button" id="open-business-hours-editor">Editar horarios</button>
+      <button class="btn btn-secondary" type="button" id="open-business-hours-editor">Editar horários</button>
     </div>
     <div id="business-hours-summary" class="business-hours-summary">
       ${renderBusinessHoursSummary(normalized)}
@@ -4042,12 +4150,12 @@ function openBusinessHoursEditor() {
       <header class="editor-header">
         <div>
           <span class="section-kicker">Atendimento da loja</span>
-          <h2 id="hours-editor-title">Horarios de funcionamento</h2>
+          <h2 id="hours-editor-title">Horários de funcionamento</h2>
         </div>
         <button class="btn btn-ghost" type="button" id="close-hours-editor">Fechar</button>
       </header>
       <div class="editor-body hours-editor-body">
-        <p class="muted-copy">Escolha um horario continuo ou ative a pausa de almoco para cadastrar dois turnos no mesmo dia.</p>
+        <p class="muted-copy">Escolha um horário contínuo ou ative a pausa de almoço para cadastrar dois turnos no mesmo dia.</p>
         <div class="hours-editor-grid">
           ${BUSINESS_HOURS_DAYS.map((day) => {
             const draft = getBusinessHoursDayDraft(normalized[day.key]);
@@ -4063,11 +4171,11 @@ function openBusinessHoursEditor() {
                 <div class="hours-day-card__body">
                   <label class="hours-day-split">
                     <input type="checkbox" data-hours-split ${draft.split ? "checked" : ""} ${draft.closed ? "disabled" : ""} />
-                    <span>Com pausa para almoco</span>
+                    <span>Com pausa para almoço</span>
                   </label>
                   <div class="hours-time-grid">
                     <label class="admin-field">
-                      <span>Inicio</span>
+                      <span>Início</span>
                       <input type="time" data-hours-morning-start value="${escapeHtml(draft.morningStart)}" ${draft.closed ? "disabled" : ""} />
                     </label>
                     <label class="admin-field">
@@ -4094,7 +4202,7 @@ function openBusinessHoursEditor() {
       <footer class="editor-footer">
         <div class="editor-footer-actions">
           <button class="btn btn-secondary" type="button" id="cancel-hours-editor">Cancelar</button>
-          <button class="btn btn-primary" type="button" id="apply-hours-editor">Aplicar horarios</button>
+          <button class="btn btn-primary" type="button" id="apply-hours-editor">Aplicar horários</button>
         </div>
       </footer>
     </section>
@@ -4173,7 +4281,7 @@ function applyBusinessHoursEditor() {
       }
 
       if (timeToMinutes(afternoonStart) <= timeToMinutes(morningEnd)) {
-        showToast(`A pausa de ${day.label} precisa comecar depois do primeiro turno.`, "warning");
+        showToast(`A pausa de ${day.label} precisa começar depois do primeiro turno.`, "warning");
         return;
       }
 

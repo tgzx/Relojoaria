@@ -1523,3 +1523,27 @@ th {
     transition-duration: 0.01ms !important;
   }
 }
+
+.empty-card--standalone {
+  margin: 0 20px 20px;
+  box-shadow: none;
+}
+
+.mobile-quick-actions {
+  display: none;
+  margin: 12px 0 14px;
+}
+
+@media (max-width: 759px) {
+  .mobile-quick-actions {
+    display: flex;
+  }
+
+  .mobile-quick-actions .btn {
+    width: 100%;
+  }
+
+  .empty-card--standalone {
+    margin: 0 14px 14px;
+  }
+}
