@@ -2,7 +2,7 @@ name: Process scheduled push notifications
 
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -10,11 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Invoke scheduled push processor
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl --fail --show-error --silent \
             --request POST \
             --header "Content-Type: application/json" \
-            --header "apikey: sb_publishable_kGcUw_N1d81KNEEJGDapoQ_VxFjYfEw" \
-            --header "Authorization: Bearer sb_publishable_kGcUw_N1d81KNEEJGDapoQ_VxFjYfEw" \
+            --header "apikey: ${SUPABASE_ANON_KEY}" \
+            --header "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            --header "x-cron-secret: ${CRON_SECRET}" \
             --data '{}' \
-            "https://xchqcpnmynwlodbkgmzy.supabase.co/functions/v1/process-scheduled-push"
+            "${SUPABASE_URL}/functions/v1/process-scheduled-push"
