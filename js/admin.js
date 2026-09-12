@@ -751,7 +751,7 @@ function renderAdminLayout() {
       </aside>
 
       <main class="admin-main">
-        <header class="admin-topbar">
+        <header class="admin-topbar" id="admin-topbar">
           <div class="topbar-meta">
             <span class="section-kicker">Loja ativa</span>
             <h1>${escapeHtml(getTabLabel(adminState.currentAdminTab))}</h1>
@@ -766,7 +766,20 @@ function renderAdminLayout() {
         </header>
 
         <section class="admin-content">
-          <section class="panel-card">
+          <section class="panel-card bottom-nav" aria-label="Navegação do painel">
+            <div class="mobile-nav-compact">
+              <div class="mobile-nav-store">
+                <span class="section-kicker">Loja ativa</span>
+                <strong>${escapeHtml(adminState.store.name)}</strong>
+                <small>${escapeHtml(getTabLabel(adminState.currentAdminTab))}</small>
+              </div>
+              <div class="mobile-nav-actions" aria-label="Ações rápidas">
+                <button class="compact-action-button" type="button" data-mobile-admin-action="new-product" aria-label="Novo produto">+</button>
+                <button class="compact-action-button" type="button" data-mobile-admin-action="open-site" aria-label="Abrir site">Site</button>
+                <button class="compact-action-button" type="button" data-mobile-admin-action="password" aria-label="Alterar senha">Senha</button>
+                <button class="compact-action-button" type="button" data-mobile-admin-action="logout" aria-label="Sair">Sair</button>
+              </div>
+            </div>
             <div class="toolbar-actions">${renderTabButtons()}</div>
           </section>
           ${renderCurrentTab()}
@@ -1814,14 +1827,14 @@ function renderNotificationHistoryModal() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="notification-history-backdrop"></div>
-    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-history-title">
+    <section class="editor-shell admin-modal-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-history-title">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Histórico completo</span>
           <h2 id="notification-history-title">Notificações</h2>
           <p class="muted-copy">${adminState.notifications.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
         </div>
-        <button class="btn btn-ghost" type="button" id="close-notification-history">Fechar</button>
+        <button class="modal-close-button" type="button" id="close-notification-history" aria-label="Fechar histórico de notificações">×</button>
       </header>
       <div class="editor-body">
         <div class="list-stack">
@@ -1871,14 +1884,14 @@ function renderNotificationPlanningModal() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="notification-planning-backdrop"></div>
-    <section class="editor-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-planning-title">
+    <section class="editor-shell admin-modal-shell notification-history-shell" role="dialog" aria-modal="true" aria-labelledby="notification-planning-title">
       <header class="editor-header">
         <div>
           <span class="section-kicker">${escapeHtml(kicker)}</span>
           <h2 id="notification-planning-title">${escapeHtml(title)}</h2>
           <p class="muted-copy">${items.length} registro(s), ${NOTIFICATION_PAGE_SIZE} por página.</p>
         </div>
-        <button class="btn btn-ghost" type="button" id="close-notification-planning">Fechar</button>
+        <button class="modal-close-button" type="button" id="close-notification-planning" aria-label="Fechar lista de notificações">×</button>
       </header>
       <div class="editor-body">
         <div class="list-stack">
@@ -2245,14 +2258,14 @@ function renderPasswordChangeModal() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="password-change-backdrop"></div>
-    <section class="editor-shell password-change-shell" role="dialog" aria-modal="true" aria-labelledby="password-change-title">
+    <section class="editor-shell admin-modal-shell password-change-shell" role="dialog" aria-modal="true" aria-labelledby="password-change-title">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Segurança da conta</span>
           <h2 id="password-change-title">Alterar senha</h2>
           <p class="muted-copy">Conta: ${escapeHtml(accountEmail)}</p>
         </div>
-        <button class="icon-button" type="button" id="close-password-change" aria-label="Fechar alteração de senha">×</button>
+        <button class="modal-close-button" type="button" id="close-password-change" aria-label="Fechar alteração de senha">×</button>
       </header>
       <form id="password-change-form" class="panel-form">
         <input class="visually-hidden" type="email" name="username" autocomplete="username" value="${escapeHtml(accountEmail)}" tabindex="-1" aria-hidden="true" readonly />
@@ -2313,6 +2326,8 @@ function bindAdminLayoutEvents() {
   qs("#change-password-button")?.addEventListener("click", openPasswordChangeModal);
   qs("#quick-new-product")?.addEventListener("click", () => openProductEditor());
   qs("#open-preview-tab")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
+  bindMobileAdminActions();
+  bindMobileAdminChrome();
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());
   qs("#reload-preview-iframe")?.addEventListener("click", () => refreshPreviewFrame());
   qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
@@ -2337,6 +2352,51 @@ function bindAdminLayoutEvents() {
   bindSettingsTab();
   bindQuickFormScrollActions();
 }
+
+function bindMobileAdminActions() {
+  qsa("[data-mobile-admin-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.mobileAdminAction;
+      if (action === "new-product") {
+        openProductEditor();
+        return;
+      }
+      if (action === "open-site") {
+        window.open("./index.html", "_blank", "noopener");
+        return;
+      }
+      if (action === "password") {
+        openPasswordChangeModal();
+        return;
+      }
+      if (action === "logout") {
+        handleLogout();
+      }
+    });
+  });
+}
+
+function bindMobileAdminChrome() {
+  const shell = qs(".admin-shell");
+  if (!shell) return;
+
+  if (window.__adminMobileChromeCleanup) {
+    window.__adminMobileChromeCleanup();
+  }
+
+  const controller = new AbortController();
+  const update = () => {
+    const isMobileChrome = window.matchMedia("(max-width: 1119px)").matches;
+    const shouldCondense = isMobileChrome && window.scrollY > 96;
+    shell.classList.toggle("is-mobile-condensed", shouldCondense);
+  };
+
+  window.addEventListener("scroll", update, { passive: true, signal: controller.signal });
+  window.addEventListener("resize", update, { signal: controller.signal });
+  window.__adminMobileChromeCleanup = () => controller.abort();
+  update();
+}
+
 function scrollAdminMainToTop() {
   const main = qs(".admin-main");
   window.requestAnimationFrame(() => {
@@ -2748,13 +2808,13 @@ function renderProductEditor() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="editor-backdrop"></div>
-    <section class="editor-shell ${isSavingProduct ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isSavingProduct ? "true" : "false"}">
+    <section class="editor-shell product-editor-shell ${isSavingProduct ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isSavingProduct ? "true" : "false"}">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Cadastro em etapas</span>
           <h2 id="product-editor-title">${draft.id ? "Editar produto" : "Novo produto"}</h2>
         </div>
-        <button class="btn btn-ghost" type="button" id="close-editor-button" ${isSavingProduct ? "disabled" : ""}>Fechar</button>
+        <button class="modal-close-button" type="button" id="close-editor-button" aria-label="Fechar editor de produto" ${isSavingProduct ? "disabled" : ""}>×</button>
       </header>
       <div class="editor-body">
         <div class="editor-progress">
@@ -4146,13 +4206,13 @@ function openBusinessHoursEditor() {
 
   modalRoot.innerHTML = `
     <div class="editor-backdrop" id="hours-editor-backdrop"></div>
-    <section class="editor-shell hours-editor-shell" role="dialog" aria-modal="true" aria-labelledby="hours-editor-title">
+    <section class="editor-shell admin-modal-shell hours-editor-shell" role="dialog" aria-modal="true" aria-labelledby="hours-editor-title">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Atendimento da loja</span>
           <h2 id="hours-editor-title">Horários de funcionamento</h2>
         </div>
-        <button class="btn btn-ghost" type="button" id="close-hours-editor">Fechar</button>
+        <button class="modal-close-button" type="button" id="close-hours-editor" aria-label="Fechar horários de funcionamento">×</button>
       </header>
       <div class="editor-body hours-editor-body">
         <p class="muted-copy">Escolha um horário contínuo ou ative a pausa de almoço para cadastrar dois turnos no mesmo dia.</p>
