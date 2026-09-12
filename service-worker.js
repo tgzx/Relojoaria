@@ -1,4 +1,4 @@
-const STATIC_CACHE = "vitrinezap-static-v5.8";
+const STATIC_CACHE = "vitrinezap-static-v5.9";
 const HTML_CACHE = "vitrinezap-html-v6.5";
 const OFFLINE_URL = "./offline.html";
 
@@ -9,6 +9,7 @@ const STATIC_ASSETS = [
   "./manifest.json",
   "./css/styles.css",
   "./js/app.js",
+  "./js/dataCache.js",
   "./js/storeApi.js",
   "./js/supabaseClient.js",
   "./js/utils.js",

@@ -1205,6 +1205,120 @@ th {
 }
 
 @media (max-width: 759px) {
+  .admin-content > .panel-card:first-child {
+    padding: 10px;
+    position: sticky;
+    top: var(--admin-header-height);
+    z-index: 18;
+  }
+
+  .admin-content > .panel-card:first-child .toolbar-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .admin-content > .panel-card:first-child .toolbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-content > .panel-card:first-child .tab-button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding-inline: 14px;
+  }
+  .table-card .table-scroll {
+    overflow: visible;
+  }
+
+  .table-card table,
+  .table-card tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .table-card thead {
+    display: none;
+  }
+
+  .table-card tbody {
+    padding: 0 14px 14px;
+  }
+
+  .table-card tbody tr {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--admin-border);
+    border-radius: 16px;
+    background: var(--admin-surface-strong);
+  }
+
+  .table-card tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .table-card tbody td {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .table-card tbody td:first-child {
+    width: auto;
+  }
+
+  .table-card tbody td:nth-child(3),
+  .table-card tbody td:nth-child(4),
+  .table-card tbody td:nth-child(5),
+  .table-card tbody td:nth-child(6) {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+  }
+
+  .table-card tbody td:nth-child(3)::before { content: "Preço"; }
+  .table-card tbody td:nth-child(4)::before { content: "Status"; }
+  .table-card tbody td:nth-child(5)::before { content: "Flags"; }
+  .table-card tbody td:nth-child(6)::before { content: "Atualizado"; }
+
+  .table-card tbody td:nth-child(3)::before,
+  .table-card tbody td:nth-child(4)::before,
+  .table-card tbody td:nth-child(5)::before,
+  .table-card tbody td:nth-child(6)::before {
+    color: var(--admin-text-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .table-card tbody td:last-child .inline-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .table-card tbody td:last-child .btn {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .table-card .product-line {
+    align-items: flex-start;
+  }
+
+  .table-card .product-line__copy {
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 759px) {
   .hours-editor-shell .editor-footer-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     display: grid;

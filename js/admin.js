@@ -1,4 +1,5 @@
 import { APP_CONFIG } from "./config.js";
+import { invalidateStorefrontCache } from "./dataCache.js";
 import { supabase } from "./supabaseClient.js";
 import {
   adminBulkUpdateProducts,
@@ -137,6 +138,9 @@ const adminState = {
   hasUnsavedAdminFormChanges: false,
   dirtyAdminTab: null,
   pendingBackgroundRender: false,
+  previewNeedsRefresh: false,
+  previewReady: false,
+  previewRefreshTimer: 0,
   isSavingProduct: false,
   productSaveMode: null
 };
@@ -163,6 +167,7 @@ function registerGlobalDebugHandlers() {
       reason: event.reason?.message || String(event.reason)
     });
   }, 0);
+  window.addEventListener("message", handlePreviewBridgeMessage);
 }
 
 function resetAdminSessionState() {
@@ -329,10 +334,10 @@ async function loadAdminData() {
       ]);
     };
 
-    const profilePromise = withTimeout(getCurrentUserProfile(), 10000, "getCurrentUserProfile");
+    const profilePromise = withTimeout(getCurrentUserProfile(sessionUserId), 10000, "getCurrentUserProfile");
     const profile = await profilePromise;
 
-    const membershipsPromise = withTimeout(getMyStoreMemberships(), 10000, "getMyStoreMemberships");
+    const membershipsPromise = withTimeout(getMyStoreMemberships(sessionUserId), 10000, "getMyStoreMemberships");
     const memberships = await membershipsPromise;
 
     const membership = memberships.find((item) => ["owner", "manager"].includes(item.role) && item.store?.is_active);
@@ -379,6 +384,11 @@ async function loadAdminData() {
 
     setThemeVariables(settings || {}, { context: "admin" });
     renderAdminLayoutFromBackground();
+    refreshStaleSections(true)
+      .then((refreshedCount) => {
+        if (refreshedCount > 0) notifyStorefrontChanged("automatic-sections-stale-refresh");
+      })
+      .catch((error) => console.warn("Falha ao reprocessar seções automáticas vencidas.", error));
   } catch (error) {
     console.error(error);
     renderLoadError(
@@ -492,7 +502,16 @@ async function handleLogout() {
 
 function renderAdminLayout() {
   const root = qs("#admin-root");
-  root.innerHTML = `
+  if (adminState.currentAdminTab === "preview" && root?.querySelector(".preview-frame")) {
+    syncPreviewStatus();
+    return;
+  }
+  if (adminState.currentAdminTab === "preview") {
+    window.clearTimeout(adminState.previewRefreshTimer);
+    adminState.previewRefreshTimer = 0;
+    adminState.previewNeedsRefresh = false;
+    adminState.previewReady = false;
+  }  root.innerHTML = `
     <div class="admin-shell">
       <aside class="admin-sidebar">
         <div class="sidebar-copy">
@@ -1888,12 +1907,84 @@ function renderPreview() {
     <section class="preview-card">
       <span class="section-kicker">Validação visual</span>
       <h2>Pré-visualizar site</h2>
-      <p>Use este iframe para revisar rapidamente a home pública enquanto cadastra produtos e banners.</p>
-      <iframe class="preview-frame" src="./index.html" title="Prévia do site público"></iframe>
+      <p>A prévia fica estável enquanto você trabalha. Ela é atualizada por evento após alterações relevantes ou manualmente, sem polling e sem recriar o iframe em cada render.</p>
+      <div class="preview-actions">
+        <button class="btn btn-secondary" type="button" id="reload-preview-iframe">Atualizar prévia</button>
+        <button class="btn btn-primary" type="button" id="open-preview-external-inline">Abrir em nova aba</button>
+      </div>
+      <p class="muted-copy" id="preview-status" aria-live="polite">Prévia sincronizada.</p>
+      <iframe class="preview-frame" src="./index.html?embedded_preview=1" loading="lazy" title="Prévia do site público"></iframe>
     </section>
   `;
 }
 
+function syncPreviewStatus(message = null) {
+  const status = qs("#preview-status");
+  if (!status) return;
+  status.textContent = message || (adminState.previewNeedsRefresh ? "Há alterações aguardando atualização da prévia." : "Prévia sincronizada.");
+}
+
+function refreshPreviewFrame({ hardReload = false } = {}) {
+  const previewFrame = qs(".preview-frame");
+  if (!previewFrame) {
+    adminState.previewNeedsRefresh = true;
+    adminState.previewReady = false;
+    return;
+  }
+
+  window.clearTimeout(adminState.previewRefreshTimer);
+  adminState.previewNeedsRefresh = true;
+
+  if (hardReload) {
+    adminState.previewReady = false;
+    syncPreviewStatus("Recarregando prévia…");
+    previewFrame.src = `./index.html?embedded_preview=1&t=${Date.now()}`;
+    return;
+  }
+
+  if (!adminState.previewReady || !previewFrame.contentWindow) {
+    syncPreviewStatus("Aguardando a prévia inicializar…");
+    return;
+  }
+
+  syncPreviewStatus("Atualizando prévia…");
+  previewFrame.contentWindow.postMessage({ type: "vitrinezap:refresh" }, window.location.origin);
+  adminState.previewRefreshTimer = window.setTimeout(() => {
+    if (adminState.previewNeedsRefresh) refreshPreviewFrame({ hardReload: true });
+  }, 5000);
+}
+
+function notifyStorefrontChanged(reason = "admin-save") {
+  invalidateStorefrontCache(adminState.store?.slug || APP_CONFIG.STORE_SLUG);
+  adminState.previewNeedsRefresh = true;
+
+  window.clearTimeout(adminState.previewRefreshTimer);
+  if (adminState.currentAdminTab !== "preview" || !qs(".preview-frame")) return;
+
+  adminState.previewRefreshTimer = window.setTimeout(() => {
+    refreshPreviewFrame();
+  }, 500);
+}
+
+function handlePreviewBridgeMessage(event) {
+  if (event.origin !== window.location.origin) return;
+
+  if (event.data?.type === "vitrinezap:preview-ready") {
+    adminState.previewReady = true;
+    if (adminState.previewNeedsRefresh) {
+      refreshPreviewFrame();
+    } else {
+      syncPreviewStatus("Prévia pronta.");
+    }
+    return;
+  }
+
+  if (event.data?.type !== "vitrinezap:preview-refreshed") return;
+  window.clearTimeout(adminState.previewRefreshTimer);
+  adminState.previewNeedsRefresh = false;
+  adminState.previewReady = true;
+  syncPreviewStatus("Prévia atualizada com os dados mais recentes.");
+}
 function bindAdminLayoutEvents() {
   qsa("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1908,30 +1999,9 @@ function bindAdminLayoutEvents() {
   qs("#quick-new-product")?.addEventListener("click", () => openProductEditor());
   qs("#open-preview-tab")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());
-
-  const previewFrame = qs(".preview-frame");
-  if (previewFrame) {
-    previewFrame.src = "./index.html?embedded_preview=1";
-    previewFrame.loading = "lazy";
-    const previewIntro = previewFrame.previousElementSibling;
-    if (previewIntro?.tagName === "P") {
-      previewIntro.textContent =
-        "A prévia embutida desativa os prompts de instalação para ficar mais estável enquanto você cadastra produtos e banners.";
-    }
-
-    const previewActions = document.createElement("div");
-    previewActions.className = "preview-actions";
-    previewActions.innerHTML = `
-      <button class="btn btn-secondary" type="button" id="reload-preview-iframe">Atualizar prévia</button>
-      <button class="btn btn-primary" type="button" id="open-preview-external-inline">Abrir em nova aba</button>
-    `;
-    previewFrame.parentElement?.insertBefore(previewActions, previewFrame);
-
-    qs("#reload-preview-iframe")?.addEventListener("click", () => {
-      previewFrame.src = "./index.html?embedded_preview=1&t=" + Date.now();
-    });
-    qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
-  }
+  qs("#reload-preview-iframe")?.addEventListener("click", () => refreshPreviewFrame());
+  qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
+  syncPreviewStatus();
 
   qsa("[data-go-tab]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -1950,7 +2020,6 @@ function bindAdminLayoutEvents() {
   bindNotificationsTab();
   bindSettingsTab();
 }
-
 function bindProductsTab() {
   const filterForm = qs("#products-filter-form");
   filterForm?.addEventListener("input", debounceAdmin(async () => {
@@ -2058,6 +2127,7 @@ function bindBrandTab() {
   qs("#reset-brand-form")?.addEventListener("click", () => {
     clearAdminFormDirty("brands");
     adminState.editingBrand = createEmptyBrandDraft();
+
     renderAdminLayout();
   });
   qsa("[data-edit-brand]").forEach((button) =>
@@ -2753,7 +2823,8 @@ async function saveProduct(publish) {
 
     showToast(publish ? "Produto salvo e publicado." : "Produto salvo como rascunho.", "success");
     closeProductEditor(true);
-    await refreshAllData();
+    notifyStorefrontChanged("product-save");
+    await refreshProductsData();
   } catch (error) {
     console.error(error);
     if (savedProduct?.id) {
@@ -2829,6 +2900,7 @@ async function setPrimaryProductImage(imageId) {
     is_primary: image.id === imageId
   }));
   showToast("Imagem principal atualizada.", "success");
+  notifyStorefrontChanged("product-image-primary");
   renderProductEditor();
 }
 
@@ -2857,11 +2929,12 @@ async function removeExistingProductImage(imageId) {
     }
 
     showToast("Imagem removida.", "warning");
+    notifyStorefrontChanged("product-image-remove");
   } catch (error) {
     console.error(error);
     adminState.editingProduct.images = currentImages;
     renderProductEditor();
-    showToast(error.message || "NÃ£o foi possÃ­vel remover a imagem.", "danger");
+    showToast(error.message || "Não foi possível remover a imagem.", "danger");
   }
 }
 
@@ -2893,7 +2966,8 @@ async function duplicateProduct(productId) {
     );
 
     showToast("Produto duplicado como rascunho.", "success");
-    await refreshAllData();
+    notifyStorefrontChanged("product-duplicate");
+    await refreshProductsData();
   } catch (error) {
     console.error(error);
     showToast(error.message || "Não foi possível duplicar o produto.", "danger");
@@ -2905,7 +2979,8 @@ async function deleteProduct(productId) {
   if (!proceed) return;
   await adminDeleteProduct(productId);
   showToast("Produto excluído.", "warning");
-  await refreshAllData();
+  notifyStorefrontChanged("product-delete");
+  await refreshProductsAndSectionsData();
 }
 
 async function applyBulkAction(action) {
@@ -2922,7 +2997,8 @@ async function applyBulkAction(action) {
   await adminBulkUpdateProducts(adminState.selectedProductIds, patchMap[action] || {});
   adminState.selectedProductIds = [];
   showToast("Ação em massa aplicada.", "success");
-  await refreshAllData();
+  notifyStorefrontChanged("product-bulk-update");
+  await refreshProductsData();
 }
 
 async function saveSection(event) {
@@ -2954,28 +3030,39 @@ async function saveSection(event) {
   await adminSaveSection(payload);
   showToast("Seção salva com sucesso.", "success");
   adminState.editingSection = createEmptySectionDraft();
-  await refreshAllData();
+  notifyStorefrontChanged("section-save");
+  await refreshSectionsData();
   adminState.currentAdminTab = "sections";
 }
 
 async function refreshSection(sectionId) {
   await adminRefreshAutomaticSection(sectionId);
   showToast("Seção automática atualizada.", "success");
-  await refreshAllData();
+  notifyStorefrontChanged("section-refresh");
+  await refreshSectionsData();
 }
 
 async function refreshStaleSections(silent) {
   const staleSections = adminState.sections.filter(isSectionStale);
-  if (!staleSections.length) return;
+  if (!staleSections.length) return 0;
 
+  let refreshedCount = 0;
   for (const section of staleSections) {
-    await adminRefreshAutomaticSection(section.id).catch(() => {});
+    try {
+      await adminRefreshAutomaticSection(section.id);
+      refreshedCount += 1;
+    } catch (error) {
+      console.warn(`Falha ao atualizar seção automática ${section.id}.`, error);
+    }
   }
+
+  if (!refreshedCount) return 0;
 
   if (!silent) showToast("Seções automáticas reprocessadas.", "success");
   const refreshedSections = await adminListSections(adminState.store.id);
   adminState.sections = refreshedSections;
   if (!silent) renderAdminLayout();
+  return refreshedCount;
 }
 
 function isSectionStale(section) {
@@ -3008,6 +3095,7 @@ async function saveCategory(event) {
   });
   showToast("Categoria salva.", "success");
   adminState.editingCategory = createEmptyCategoryDraft();
+  notifyStorefrontChanged("category-save");
   adminState.categories = await adminListCategories(adminState.store.id);
   renderAdminLayout();
 }
@@ -3015,6 +3103,7 @@ async function saveCategory(event) {
 async function removeCategory(categoryId) {
   if (!window.confirm("Excluir esta categoria?")) return;
   await adminDeleteCategory(categoryId);
+  notifyStorefrontChanged("category-delete");
   showToast("Categoria excluída.", "warning");
   adminState.categories = await adminListCategories(adminState.store.id);
   renderAdminLayout();
@@ -3036,6 +3125,7 @@ async function saveBrand(event) {
     sort_order: Number(data.get("sort_order") || 0)
   });
   showToast("Marca salva.", "success");
+  notifyStorefrontChanged("brand-save");
   adminState.editingBrand = createEmptyBrandDraft();
   adminState.brands = await adminListBrands(adminState.store.id);
   renderAdminLayout();
@@ -3044,6 +3134,7 @@ async function saveBrand(event) {
 async function removeBrand(brandId) {
   if (!window.confirm("Excluir esta marca?")) return;
   await adminDeleteBrand(brandId);
+  notifyStorefrontChanged("brand-delete");
   showToast("Marca excluída.", "warning");
   adminState.brands = await adminListBrands(adminState.store.id);
   renderAdminLayout();
@@ -3082,6 +3173,7 @@ async function saveBanner(event) {
   });
 
   showToast("Banner salvo com sucesso.", "success");
+  notifyStorefrontChanged("banner-save");
   adminState.pendingBannerFile = null;
   adminState.editingBanner = createEmptyBannerDraft();
   adminState.banners = await adminListBanners(adminState.store.id);
@@ -3091,6 +3183,7 @@ async function saveBanner(event) {
 async function removeBanner(bannerId) {
   if (!window.confirm("Excluir este banner?")) return;
   await adminDeleteBanner(bannerId);
+  notifyStorefrontChanged("banner-delete");
   showToast("Banner excluído.", "warning");
   adminState.banners = await adminListBanners(adminState.store.id);
   renderAdminLayout();
@@ -3291,33 +3384,34 @@ async function saveSettings(event) {
     ...storePayload
   };
   setThemeVariables(adminState.settings, { context: "admin" });
+  notifyStorefrontChanged("settings-save");
   showToast("Configurações salvas.", "success");
   renderAdminLayout();
 }
 
-async function refreshAllData() {
-  const [productsRes, categories, brands, sections, banners, notifications, pushSummary] = await Promise.all([
-    adminListProducts(adminState.store.id, adminState.productFilters),
-    adminListCategories(adminState.store.id),
-    adminListBrands(adminState.store.id),
-    adminListSections(adminState.store.id),
-    adminListBanners(adminState.store.id),
-    adminListNotifications(adminState.store.id),
-    adminListPushSubscriptionsSummary(adminState.store.id)
-  ]);
-
+async function refreshProductsData() {
+  const productsRes = await adminListProducts(adminState.store.id, adminState.productFilters);
   adminState.products = productsRes.data || [];
-  adminState.categories = categories || [];
-  adminState.brands = brands || [];
-  adminState.sections = sections || [];
-  adminState.banners = banners || [];
-  adminState.notifications = notifications || [];
-  adminState.pushSummary = pushSummary || { count: 0, data: [] };
-  adminState.pendingBackgroundRender = false;
-
-  renderAdminLayout();
+  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
+    adminState.products.some((product) => product.id === id)
+  );
 }
 
+async function refreshSectionsData() {
+  adminState.sections = (await adminListSections(adminState.store.id)) || [];
+}
+
+async function refreshProductsAndSectionsData() {
+  const [productsRes, sections] = await Promise.all([
+    adminListProducts(adminState.store.id, adminState.productFilters),
+    adminListSections(adminState.store.id)
+  ]);
+  adminState.products = productsRes.data || [];
+  adminState.sections = sections || [];
+  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
+    adminState.products.some((product) => product.id === id)
+  );
+}
 function renderOptions(options, selectedValue) {
   return options
     .map(

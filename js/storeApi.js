@@ -558,19 +558,27 @@ export async function adminRefreshAutomaticSection(sectionId) {
   return products;
 }
 
-export async function getCurrentUserProfile() {
-  const userRes = await supabase.auth.getUser();
-  const user = throwIfError(userRes, "Sessão inválida.").user;
-  if (!user) return null;
+export async function getCurrentUserProfile(userId = null) {
+  let resolvedUserId = userId;
+  if (!resolvedUserId) {
+    const userRes = await supabase.auth.getUser();
+    const user = throwIfError(userRes, "Sessão inválida.").user;
+    resolvedUserId = user?.id || null;
+  }
+  if (!resolvedUserId) return null;
 
-  const profileRes = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const profileRes = await supabase.from("profiles").select("*").eq("id", resolvedUserId).single();
   return throwIfError(profileRes, "Não foi possível carregar o perfil.");
 }
 
-export async function getMyStoreMemberships() {
-  const userRes = await supabase.auth.getUser();
-  const user = throwIfError(userRes, "Sessão inválida.").user;
-  if (!user) return [];
+export async function getMyStoreMemberships(userId = null) {
+  let resolvedUserId = userId;
+  if (!resolvedUserId) {
+    const userRes = await supabase.auth.getUser();
+    const user = throwIfError(userRes, "Sessão inválida.").user;
+    resolvedUserId = user?.id || null;
+  }
+  if (!resolvedUserId) return [];
 
   const membershipsRes = await supabase
     .from("store_members")
@@ -582,11 +590,10 @@ export async function getMyStoreMemberships() {
         store:stores(id,name,slug,slogan,description,logo_url,is_active)
       `
     )
-    .eq("user_id", user.id);
+    .eq("user_id", resolvedUserId);
 
   return throwIfError(membershipsRes, "Não foi possível carregar as lojas vinculadas.");
 }
-
 export async function adminListCategories(storeId) {
   const result = await supabase
     .from("categories")

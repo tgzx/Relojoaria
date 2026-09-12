@@ -1,7 +1,6 @@
 const STORAGE_KEYS = {
   favorites: "vz_favorites",
-  viewedProducts: "vz_viewed_products",
-  homeCache: "vz_home_cache"
+  viewedProducts: "vz_viewed_products"
 };
 
 const DAYS_MAP = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -227,16 +226,6 @@ export function getViewedProducts() {
   return getJSONStorage(STORAGE_KEYS.viewedProducts, []);
 }
 
-export function getHomeCache() {
-  return getJSONStorage(STORAGE_KEYS.homeCache, null);
-}
-
-export function setHomeCache(payload) {
-  setJSONStorage(STORAGE_KEYS.homeCache, {
-    cached_at: new Date().toISOString(),
-    payload
-  });
-}
 
 export function parseJsonSafe(value, fallback) {
   if (value === null || value === undefined || value === "") return fallback;

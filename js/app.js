@@ -8,6 +8,7 @@ import {
 } from "./storeApi.js";
 import { registerPwa } from "./pwa.js";
 import { registerPushButton, registerPushReminder } from "./push.js";
+import { buildCacheKey, cleanupLegacyDataCache, dedupeRequest, readDataCache, writeDataCache } from "./dataCache.js";
 import { getFutureCartFeatureState, renderAddToCartButton, createFutureCartNotice } from "./cartFuture.js";
 import {
   buildWhatsAppLink,
@@ -17,7 +18,6 @@ import {
   escapeHtml,
   formatCurrency,
   getFavorites,
-  getHomeCache,
   getPrimaryImage,
   isFavorite,
   parseJsonSafe,
@@ -25,7 +25,6 @@ import {
   qs,
   qsa,
   serializeForm,
-  setHomeCache,
   setThemeVariables,
   showToast,
   storeViewedProduct,
@@ -66,6 +65,8 @@ const appState = {
   isOffline: !navigator.onLine,
   usingCachedData: false,
   currentModalProduct: null,
+  lastModalTrigger: null,
+  lastFiltersTrigger: null,
   carouselCleanup: null,
   sectionNavCleanup: null,
   activeSectionAnchor: "",
@@ -74,7 +75,11 @@ const appState = {
 };
 
 async function initApp() {
+  cleanupLegacyDataCache();
   bindShellEvents();
+  if (appState.isEmbeddedPreview && window.parent !== window) {
+    window.parent.postMessage({ type: "vitrinezap:preview-ready" }, window.location.origin);
+  }
   await registerPwa();
   updateHeaderOffset();
 
@@ -155,11 +160,13 @@ function bindShellEvents() {
   });
 
   document.body.addEventListener("click", handleBodyClick);
+  document.addEventListener("keydown", handleGlobalKeydown);
 
   window.addEventListener("resize", updateHeaderOffset);
   window.addEventListener("online", handleConnectivityChange);
   window.addEventListener("offline", handleConnectivityChange);
   window.addEventListener("vitrinezap:header-actions-update", applyResponsiveHeaderActions);
+  window.addEventListener("message", handleEmbeddedPreviewMessage);
 
   const header = qs(".site-header");
   if (header && "ResizeObserver" in window && !appState.headerResizeObserver) {
@@ -176,19 +183,39 @@ function debounceSearch(callback) {
   };
 }
 
-async function loadHomeData() {
+async function loadHomeData({ forceNetwork = false } = {}) {
   const offlineBanner = qs("#offline-banner");
+  const cacheKey = buildCacheKey("public", APP_CONFIG.STORE_SLUG, "home");
+  const cached = readDataCache(cacheKey, { storage: "local" });
+
+  if (!forceNetwork && cached?.fresh) {
+    hydrateHomeState(cached.payload, false);
+    offlineBanner?.classList.toggle("is-hidden", navigator.onLine);
+    return cached.payload;
+  }
+
+  if (!forceNetwork && cached?.stale) {
+    hydrateHomeState(cached.payload, true);
+    offlineBanner?.classList.toggle("is-hidden", navigator.onLine);
+  }
 
   try {
-    const home = await getPublicHomeData(APP_CONFIG.STORE_SLUG);
+    const home = await dedupeRequest(cacheKey, () => getPublicHomeData(APP_CONFIG.STORE_SLUG));
     hydrateHomeState(home, false);
-    setHomeCache(home);
+    writeDataCache(cacheKey, home, {
+      storage: "local",
+      ttlMs: 5 * 60 * 1000,
+      staleMs: 24 * 60 * 60 * 1000,
+      maxEntries: 16
+    });
     offlineBanner?.classList.toggle("is-hidden", navigator.onLine);
+    return home;
   } catch (error) {
-    const cached = getHomeCache();
-    if (!cached?.payload) throw error;
-    hydrateHomeState(cached.payload, true);
+    const fallback = cached;
+    if (!fallback?.payload) throw error;
+    hydrateHomeState(fallback.payload, true);
     offlineBanner?.classList.remove("is-hidden");
+    return fallback.payload;
   }
 }
 
@@ -777,7 +804,7 @@ function renderFilterOptions() {
       .join("");
 }
 
-async function loadCatalogProducts({ reset }) {
+async function loadCatalogProducts({ reset, forceNetwork = false }) {
   if (!appState.store) return;
 
   const productsGrid = qs("#products-grid");
@@ -806,22 +833,50 @@ async function loadCatalogProducts({ reset }) {
     `;
   }
 
+  const requestParams = {
+    storeId: appState.store.id,
+    search: appState.filters.search,
+    categoryId: appState.filters.categoryId,
+    brandId: appState.filters.brandId,
+    flags: {
+      promotionOnly: appState.filters.promotionOnly,
+      newOnly: appState.filters.newOnly
+    },
+    priceMin: appState.filters.priceMin,
+    priceMax: appState.filters.priceMax,
+    sort: appState.filters.sort,
+    limit: appState.pagination.limit,
+    offset: appState.pagination.offset
+  };
+
+  const cacheKey = buildCacheKey(
+    "catalog",
+    APP_CONFIG.STORE_SLUG,
+    JSON.stringify(requestParams)
+  );
+  const cached = readDataCache(cacheKey, { storage: "session" });
+
   try {
-    const result = await getProducts({
-      storeId: appState.store.id,
-      search: appState.filters.search,
-      categoryId: appState.filters.categoryId,
-      brandId: appState.filters.brandId,
-      flags: {
-        promotionOnly: appState.filters.promotionOnly,
-        newOnly: appState.filters.newOnly
-      },
-      priceMin: appState.filters.priceMin,
-      priceMax: appState.filters.priceMax,
-      sort: appState.filters.sort,
-      limit: appState.pagination.limit,
-      offset: appState.pagination.offset
-    });
+    let result = !forceNetwork && cached?.fresh ? cached.payload : null;
+
+    if (!result) {
+      if (!navigator.onLine && cached?.payload) {
+        result = cached.payload;
+      } else {
+        try {
+          result = await dedupeRequest(cacheKey, () => getProducts(requestParams));
+          writeDataCache(cacheKey, result, {
+            storage: "session",
+            ttlMs: 2 * 60 * 1000,
+            staleMs: 6 * 60 * 60 * 1000
+          });
+        } catch (networkError) {
+          if (!cached?.payload) throw networkError;
+          console.warn("Falha ao revalidar catálogo; usando cache stale da sessão.", networkError);
+          result = cached.payload;
+        }
+      }
+    }
 
     appState.products = reset ? result.data : [...appState.products, ...result.data];
     appState.pagination.offset = appState.products.length;
@@ -861,7 +916,6 @@ function scrollCatalogIntoView() {
     });
   });
 }
-
 function renderCatalogProducts() {
   const productsGrid = qs("#products-grid");
   const emptyState = qs("#empty-products-state");
@@ -1018,9 +1072,11 @@ function renderProductCard(product, options = {}) {
 async function openProductModal(slug) {
   const modal = qs("#product-modal");
   const content = qs("#product-modal-content");
+  appState.lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modal.classList.remove("is-hidden");
   modal.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
+  window.requestAnimationFrame(() => qs("#close-product-modal")?.focus());
 
   content.innerHTML = `
     <div class="product-modal__grid">
@@ -1036,7 +1092,29 @@ async function openProductModal(slug) {
   `;
 
   try {
-    const product = await getProductBySlug(appState.store.id, slug);
+    const cacheKey = buildCacheKey("product", APP_CONFIG.STORE_SLUG, slug);
+    const cached = readDataCache(cacheKey, { storage: "session" });
+    let product = findLoadedProductBySlug(slug) || (cached?.fresh ? cached.payload : null);
+
+    if (!product) {
+      if (!navigator.onLine && cached?.payload) {
+        product = cached.payload;
+      } else {
+        try {
+          product = await dedupeRequest(cacheKey, () => getProductBySlug(appState.store.id, slug));
+          writeDataCache(cacheKey, product, {
+            storage: "session",
+            ttlMs: 5 * 60 * 1000,
+            staleMs: 6 * 60 * 60 * 1000
+          });
+        } catch (networkError) {
+          if (!cached?.payload) throw networkError;
+          console.warn("Falha ao revalidar produto; usando cache stale da sessão.", networkError);
+          product = cached.payload;
+        }
+      }
+    }
+
     appState.currentModalProduct = product;
     storeViewedProduct(product);
     renderProductModal(product);
@@ -1172,11 +1250,25 @@ function renderProductModal(product) {
   `;
 }
 
+function findLoadedProductBySlug(slug) {
+  const catalogProduct = appState.products.find((product) => product.slug === slug);
+  if (catalogProduct) return catalogProduct;
+
+  for (const section of appState.sections) {
+    const product = (section.products || []).find((item) => item.slug === slug);
+    if (product) return product;
+  }
+
+  return null;
+}
 function closeProductModal() {
   const modal = qs("#product-modal");
   modal.classList.add("is-hidden");
   modal.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
+  const trigger = appState.lastModalTrigger;
+  appState.lastModalTrigger = null;
+  if (trigger?.isConnected) window.requestAnimationFrame(() => trigger.focus());
 }
 
 function swapModalGalleryImage(imageUrl, altText) {
@@ -1188,10 +1280,12 @@ function swapModalGalleryImage(imageUrl, altText) {
 
 function openFiltersSheet() {
   const sheet = qs("#filters-sheet");
+  appState.lastFiltersTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   sheet.classList.remove("is-hidden");
   sheet.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
   syncFilterForm();
+  window.requestAnimationFrame(() => qs("#close-filters-button")?.focus());
 }
 
 function closeFiltersSheet() {
@@ -1199,8 +1293,38 @@ function closeFiltersSheet() {
   sheet.classList.add("is-hidden");
   sheet.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
+  const trigger = appState.lastFiltersTrigger;
+  appState.lastFiltersTrigger = null;
+  if (trigger?.isConnected) window.requestAnimationFrame(() => trigger.focus());
 }
 
+function handleGlobalKeydown(event) {
+  if (event.key !== "Escape") return;
+
+  const modal = qs("#product-modal");
+  if (modal && !modal.classList.contains("is-hidden")) {
+    closeProductModal();
+    return;
+  }
+
+  const sheet = qs("#filters-sheet");
+  if (sheet && !sheet.classList.contains("is-hidden")) {
+    closeFiltersSheet();
+  }
+}
+
+async function handleEmbeddedPreviewMessage(event) {
+  if (!appState.isEmbeddedPreview || event.origin !== window.location.origin) return;
+  if (event.data?.type !== "vitrinezap:refresh") return;
+
+  try {
+    await loadHomeData({ forceNetwork: true });
+    await loadCatalogProducts({ reset: true, forceNetwork: true });
+    event.source?.postMessage({ type: "vitrinezap:preview-refreshed" }, event.origin);
+  } catch (error) {
+    console.error("Falha ao atualizar preview embutido", error);
+  }
+}
 function syncFilterForm() {
   const form = qs("#filters-form");
   if (!form) return;
@@ -1531,23 +1655,52 @@ function renderSetupRequired() {
 }
 
 function renderFatalState(error) {
-  const missingSchema =
-    error?.code === "PGRST205" ||
-    String(error?.message || "").includes("schema cache") ||
-    String(error?.message || "").includes("public.stores");
+  console.error("Falha ao carregar vitrine", error);
+
+  const sloganElement = qs("#store-slogan");
+  if (sloganElement) sloganElement.textContent = "Catálogo temporariamente indisponível";
+
+  const statusElement = qs("#store-status");
+  if (statusElement) {
+    statusElement.textContent = "Temporariamente indisponível";
+    statusElement.dataset.fullLabel = "Temporariamente indisponível";
+    statusElement.dataset.compactLabel = "Indisponível";
+  }
+
+  const whatsappCta = qs("#whatsapp-cta");
+  if (whatsappCta) {
+    whatsappCta.disabled = true;
+    whatsappCta.setAttribute("aria-disabled", "true");
+    whatsappCta.classList.add("is-hidden");
+  }
+
+  const footerWhatsApp = qs("#footer-whatsapp");
+  if (footerWhatsApp) {
+    footerWhatsApp.removeAttribute("href");
+    footerWhatsApp.setAttribute("aria-disabled", "true");
+    footerWhatsApp.classList.add("is-hidden");
+    footerWhatsApp.hidden = true;
+    footerWhatsApp.tabIndex = -1;
+  }
+
+  qs("#global-search")?.setAttribute("disabled", "disabled");
+  qs("#open-filters-button")?.setAttribute("disabled", "disabled");
+  qs("#install-app-button")?.classList.add("is-hidden");
+  qs("#push-button")?.classList.add("is-hidden");
 
   qs("#hero-section").innerHTML = `
-    <div class="empty-state">
-      <h3>${missingSchema ? "Banco ainda não configurado" : "Não foi possível carregar a vitrine"}</h3>
-      <p>${
-        missingSchema
-          ? "O projeto Supabase respondeu, mas as tabelas da vitrine ainda não estão disponíveis. Rode o arquivo supabase/schema.sql e depois supabase/seed.sql no SQL Editor."
-          : escapeHtml(error.message || "Revise as credenciais do Supabase e o schema do projeto.")
-      }</p>
+    <div class="empty-state" role="status">
+      <h3>Não foi possível carregar a vitrine agora</h3>
+      <p>O catálogo está temporariamente indisponível. Tente novamente em alguns instantes.</p>
+      <button class="btn btn-primary" type="button" id="retry-storefront-button">Tentar novamente</button>
     </div>
   `;
   qs("#dynamic-sections").innerHTML = "";
   qs("#products-grid").innerHTML = "";
+  qs("#products-summary")?.replaceChildren(document.createTextNode("Vitrine temporariamente indisponível."));
+  qs("#load-more-button")?.classList.add("is-hidden");
+  qs("#retry-storefront-button")?.addEventListener("click", () => window.location.reload());
+  applyResponsiveHeaderActions();
 }
 
 initApp();

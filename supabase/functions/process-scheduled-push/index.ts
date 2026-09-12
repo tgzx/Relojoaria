@@ -13,7 +13,10 @@ serve(async (request) => {
   if (request.method !== "POST") return jsonResponse({ error: "Metodo nao permitido." }, 405);
 
   const cronSecret = Deno.env.get("CRON_SECRET");
-  if (cronSecret && request.headers.get("x-cron-secret") !== cronSecret) {
+  if (!cronSecret) {
+    return jsonResponse({ error: "CRON_SECRET nao configurado." }, 500);
+  }
+  if (request.headers.get("x-cron-secret") !== cronSecret) {
     return jsonResponse({ error: "Cron secret invalido." }, 401);
   }
 
