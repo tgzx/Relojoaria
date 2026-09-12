@@ -95,6 +95,7 @@ const BUSINESS_HOURS_DAYS = [
 ];
 
 const NOTIFICATION_PAGE_SIZE = 5;
+const PASSWORD_MIN_LENGTH = 8;
 
 const adminState = {
   session: null,
@@ -141,6 +142,8 @@ const adminState = {
   previewNeedsRefresh: false,
   previewReady: false,
   previewRefreshTimer: 0,
+  passwordRecoveryActive: false,
+  isPasswordChangeOpen: false,
   isSavingProduct: false,
   productSaveMode: null
 };
@@ -179,6 +182,8 @@ function resetAdminSessionState() {
   adminState.dirtyAdminTab = null;
   adminState.pendingBackgroundRender = false;
   openAdminModalKeys.clear();
+  adminState.passwordRecoveryActive = false;
+  adminState.isPasswordChangeOpen = false;
   syncAdminModalBodyScroll();
 }
 
@@ -266,9 +271,21 @@ async function initAdmin() {
 
   supabase.auth.onAuthStateChange((event, session) => {
     adminState.session = session;
+
+    if (event === "PASSWORD_RECOVERY") {
+      adminState.passwordRecoveryActive = true;
+      renderPasswordUpdate({ recovery: true });
+      return;
+    }
+
     if (!session || event === "SIGNED_OUT") {
       resetAdminSessionState();
       renderLogin();
+      return;
+    }
+
+    if (isPasswordRecoveryRoute() || adminState.passwordRecoveryActive) {
+      renderPasswordUpdate({ recovery: true });
       return;
     }
 
@@ -306,7 +323,17 @@ async function requireAuth() {
   adminState.session = data.session;
   if (!data.session) {
     resetAdminSessionState();
-    renderLogin();
+    if (isPasswordRecoveryRoute()) {
+      renderPasswordUpdate({ recovery: true, waitingForSession: true });
+    } else {
+      renderLogin();
+    }
+    return;
+  }
+
+  if (isPasswordRecoveryRoute() || adminState.passwordRecoveryActive) {
+    adminState.passwordRecoveryActive = true;
+    renderPasswordUpdate({ recovery: true });
     return;
   }
 
@@ -412,24 +439,30 @@ function renderSetupMessage() {
   `;
 }
 
-function renderLogin() {
+function renderLogin(options = {}) {
+  const message = options.message
+    ? `<p class="auth-status auth-status--success">${escapeHtml(options.message)}</p>`
+    : "";
+
   qs("#admin-root").innerHTML = `
     <div class="auth-screen">
       <section class="auth-card">
         <span class="section-kicker">VitrineZap Admin</span>
         <h1>Entrar no painel</h1>
         <p>Use seu email e senha cadastrados no Supabase Auth para acessar a gestão da loja.</p>
+        ${message}
         <form id="login-form">
           <label class="admin-field">
             <span>Email</span>
-            <input type="email" name="email" required autocomplete="email" placeholder="gerente@loja.com" />
+            <input type="email" name="email" required autocomplete="email" placeholder="gerente@loja.com" value="${escapeHtml(options.email || "")}" />
           </label>
           <label class="admin-field">
             <span>Senha</span>
             <input type="password" name="password" required autocomplete="current-password" placeholder="Sua senha" />
           </label>
-          <div class="auth-actions">
+          <div class="auth-actions auth-actions--split">
             <button class="btn btn-primary" type="submit">Entrar</button>
+            <button class="text-button" type="button" id="forgot-password-button">Esqueci minha senha</button>
           </div>
         </form>
       </section>
@@ -437,6 +470,85 @@ function renderLogin() {
   `;
 
   qs("#login-form")?.addEventListener("submit", handleLogin);
+  qs("#forgot-password-button")?.addEventListener("click", () =>
+    renderPasswordResetRequest({ email: qs("#login-form input[name='email']")?.value.trim() || "" })
+  );
+}
+
+function renderPasswordResetRequest(options = {}) {
+  const message = options.message
+    ? `<p class="auth-status auth-status--${escapeHtml(options.status || "success")}">${escapeHtml(options.message)}</p>`
+    : "";
+
+  qs("#admin-root").innerHTML = `
+    <div class="auth-screen">
+      <section class="auth-card">
+        <span class="section-kicker">Recuperação de acesso</span>
+        <h1>Esqueci minha senha</h1>
+        <p>Informe o e-mail do usuário administrador. Se ele estiver cadastrado, enviaremos um link para definir uma nova senha.</p>
+        ${message}
+        <form id="password-reset-form">
+          <label class="admin-field">
+            <span>Email</span>
+            <input type="email" name="email" required autocomplete="email" placeholder="gerente@loja.com" value="${escapeHtml(options.email || "")}" />
+          </label>
+          <div class="auth-actions auth-actions--split">
+            <button class="btn btn-primary" type="submit">Enviar link de recuperação</button>
+            <button class="text-button" type="button" id="back-to-login-button">Voltar para o login</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+
+  qs("#password-reset-form")?.addEventListener("submit", handlePasswordResetRequest);
+  qs("#back-to-login-button")?.addEventListener("click", () =>
+    renderLogin({ email: qs("#password-reset-form input[name='email']")?.value.trim() || "" })
+  );
+}
+
+function renderPasswordUpdate(options = {}) {
+  const waitingMessage = options.waitingForSession
+    ? `<p class="auth-status auth-status--warning">Estamos validando o link de recuperação. Se esta mensagem permanecer, solicite um novo link.</p>`
+    : "";
+  const helperCopy = options.recovery
+    ? "Digite uma nova senha para concluir a recuperação de acesso."
+    : "Digite a nova senha da sua conta administrativa.";
+
+  qs("#admin-root").innerHTML = `
+    <div class="auth-screen">
+      <section class="auth-card">
+        <span class="section-kicker">Segurança da conta</span>
+        <h1>Definir nova senha</h1>
+        <p>${helperCopy}</p>
+        ${waitingMessage}
+        <form id="password-update-form" data-password-context="${options.recovery ? "recovery" : "session"}">
+          <input class="visually-hidden" type="email" name="username" autocomplete="username" value="${escapeHtml(adminState.session?.user?.email || "")}" tabindex="-1" aria-hidden="true" readonly />
+          <label class="admin-field">
+            <span>Nova senha</span>
+            <input type="password" name="password" required minlength="${PASSWORD_MIN_LENGTH}" autocomplete="new-password" placeholder="Mínimo de ${PASSWORD_MIN_LENGTH} caracteres" />
+          </label>
+          <label class="admin-field">
+            <span>Confirmar nova senha</span>
+            <input type="password" name="confirmPassword" required minlength="${PASSWORD_MIN_LENGTH}" autocomplete="new-password" placeholder="Repita a nova senha" />
+          </label>
+          <p class="muted-copy password-requirements">Use pelo menos ${PASSWORD_MIN_LENGTH} caracteres. Evite senhas óbvias ou reutilizadas.</p>
+          <div class="auth-actions auth-actions--split">
+            <button class="btn btn-primary" type="submit">Salvar nova senha</button>
+            <button class="text-button" type="button" id="back-to-login-button">Voltar para o login</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+
+  qs("#password-update-form")?.addEventListener("submit", handlePasswordUpdate);
+  qs("#back-to-login-button")?.addEventListener("click", async () => {
+    adminState.passwordRecoveryActive = false;
+    clearPasswordRecoveryUrl();
+    await supabase.auth.signOut().catch(() => {});
+    renderLogin();
+  });
 }
 
 function renderAccessDenied() {
@@ -495,6 +607,112 @@ async function handleLogin(event) {
   }
 }
 
+async function handlePasswordResetRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  button.disabled = true;
+
+  const email = form.email.value.trim();
+  const genericMessage = "Se este e-mail estiver cadastrado, enviaremos um link para você definir uma nova senha.";
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getPasswordRecoveryRedirectUrl()
+    });
+    if (error) throw error;
+    renderPasswordResetRequest({ email, message: genericMessage, status: "success" });
+    showToast("Solicitação de recuperação enviada.", "success");
+  } catch (error) {
+    console.error(error);
+    renderPasswordResetRequest({
+      email,
+      message: error.message || "Não foi possível enviar o link de recuperação agora.",
+      status: "danger"
+    });
+    showToast(error.message || "Não foi possível enviar o link de recuperação.", "danger");
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+async function handlePasswordUpdate(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  const isRecovery = form.dataset.passwordContext === "recovery";
+  button.disabled = true;
+
+  try {
+    await updateAccountPasswordFromForm(form);
+    adminState.passwordRecoveryActive = false;
+    clearPasswordRecoveryUrl();
+    showToast("Senha atualizada com sucesso.", "success");
+
+    if (isRecovery) {
+      await supabase.auth.signOut().catch(() => {});
+      renderLogin({ message: "Senha atualizada. Entre novamente usando a nova senha." });
+    }
+  } catch (error) {
+    if (!isPasswordValidationError(error)) console.error(error);
+    showToast(error.message || "Não foi possível atualizar a senha.", "danger");
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+async function updateAccountPasswordFromForm(form) {
+  const password = String(form.password.value || "");
+  const confirmPassword = String(form.confirmPassword.value || "");
+
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    throw createPasswordValidationError(`A nova senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+  }
+
+  if (password !== confirmPassword) {
+    throw createPasswordValidationError("As senhas não conferem.");
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+function createPasswordValidationError(message) {
+  const error = new Error(message);
+  error.name = "PasswordValidationError";
+  return error;
+}
+
+function isPasswordValidationError(error) {
+  return error?.name === "PasswordValidationError";
+}
+
+function getPasswordRecoveryRedirectUrl() {
+  const url = new URL(window.location.href);
+  url.search = "?mode=recover";
+  url.hash = "";
+  return url.href;
+}
+
+function isPasswordRecoveryRoute() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return (
+    searchParams.get("mode") === "recover" ||
+    searchParams.get("type") === "recovery" ||
+    hashParams.get("type") === "recovery"
+  );
+}
+
+function clearPasswordRecoveryUrl() {
+  if (!isPasswordRecoveryRoute() && !window.location.hash) return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("mode");
+  url.searchParams.delete("type");
+  url.hash = "";
+  window.history.replaceState(null, document.title, `${url.pathname}${url.search}`);
+}
+
 async function handleLogout() {
   await supabase.auth.signOut();
   showToast("Sessão encerrada.", "warning");
@@ -538,6 +756,7 @@ function renderAdminLayout() {
           <div class="topbar-actions">
             <button class="btn btn-secondary" type="button" id="quick-new-product">Novo produto</button>
             <button class="btn btn-secondary" type="button" id="open-preview-tab">Abrir site</button>
+            <button class="btn btn-secondary" type="button" id="change-password-button">Alterar senha</button>
             <button class="btn btn-ghost" type="button" id="sign-out-button">Sair</button>
           </div>
         </header>
@@ -555,6 +774,7 @@ function renderAdminLayout() {
   bindAdminLayoutEvents();
   renderNotificationHistoryModal();
   renderNotificationPlanningModal();
+  renderPasswordChangeModal();
 }
 
 function renderTabButtons() {
@@ -1985,6 +2205,88 @@ function handlePreviewBridgeMessage(event) {
   adminState.previewReady = true;
   syncPreviewStatus("Prévia atualizada com os dados mais recentes.");
 }
+function openPasswordChangeModal() {
+  adminState.isPasswordChangeOpen = true;
+  renderPasswordChangeModal();
+}
+
+function closePasswordChangeModal() {
+  adminState.isPasswordChangeOpen = false;
+  renderPasswordChangeModal();
+}
+
+function renderPasswordChangeModal() {
+  let root = qs("#admin-password-modal-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "admin-password-modal-root";
+    document.body.appendChild(root);
+  }
+
+  if (!adminState.isPasswordChangeOpen) {
+    root.innerHTML = "";
+    setAdminModalOpen("password-change", false);
+    return;
+  }
+
+  setAdminModalOpen("password-change", true);
+  const accountEmail = adminState.session?.user?.email || "usuário atual";
+
+  root.innerHTML = `
+    <div class="editor-backdrop" id="password-change-backdrop"></div>
+    <section class="editor-shell password-change-shell" role="dialog" aria-modal="true" aria-labelledby="password-change-title">
+      <header class="editor-header">
+        <div>
+          <span class="section-kicker">Segurança da conta</span>
+          <h2 id="password-change-title">Alterar senha</h2>
+          <p class="muted-copy">Conta: ${escapeHtml(accountEmail)}</p>
+        </div>
+        <button class="icon-button" type="button" id="close-password-change" aria-label="Fechar alteração de senha">×</button>
+      </header>
+      <form id="password-change-form" class="panel-form">
+        <input class="visually-hidden" type="email" name="username" autocomplete="username" value="${escapeHtml(accountEmail)}" tabindex="-1" aria-hidden="true" readonly />
+        <label class="admin-field">
+          <span>Nova senha</span>
+          <input type="password" name="password" required minlength="${PASSWORD_MIN_LENGTH}" autocomplete="new-password" placeholder="Mínimo de ${PASSWORD_MIN_LENGTH} caracteres" />
+        </label>
+        <label class="admin-field">
+          <span>Confirmar nova senha</span>
+          <input type="password" name="confirmPassword" required minlength="${PASSWORD_MIN_LENGTH}" autocomplete="new-password" placeholder="Repita a nova senha" />
+        </label>
+        <p class="muted-copy password-requirements">A alteração vale para o próximo login deste usuário. Use uma senha forte e não reutilizada.</p>
+        <div class="editor-footer-actions">
+          <button class="btn btn-secondary" type="button" id="cancel-password-change">Cancelar</button>
+          <button class="btn btn-primary" type="submit">Salvar senha</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  qs("#password-change-backdrop")?.addEventListener("click", closePasswordChangeModal);
+  qs("#close-password-change")?.addEventListener("click", closePasswordChangeModal);
+  qs("#cancel-password-change")?.addEventListener("click", closePasswordChangeModal);
+  qs("#password-change-form")?.addEventListener("submit", handlePasswordChangeSubmit);
+  qs("#password-change-form input[name='password']")?.focus();
+}
+
+async function handlePasswordChangeSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  button.disabled = true;
+
+  try {
+    await updateAccountPasswordFromForm(form);
+    closePasswordChangeModal();
+    showToast("Senha alterada com sucesso.", "success");
+  } catch (error) {
+    if (!isPasswordValidationError(error)) console.error(error);
+    showToast(error.message || "Não foi possível alterar a senha.", "danger");
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
 function bindAdminLayoutEvents() {
   qsa("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1996,6 +2298,7 @@ function bindAdminLayoutEvents() {
   });
 
   qs("#sign-out-button")?.addEventListener("click", handleLogout);
+  qs("#change-password-button")?.addEventListener("click", openPasswordChangeModal);
   qs("#quick-new-product")?.addEventListener("click", () => openProductEditor());
   qs("#open-preview-tab")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());

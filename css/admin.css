@@ -273,6 +273,58 @@ a {
   color: var(--admin-text-soft);
 }
 
+.text-button {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.text-button:hover {
+  color: var(--admin-text);
+}
+
+.auth-actions--split {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auth-status {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--admin-border);
+  background: color-mix(in srgb, var(--admin-primary) 8%, transparent);
+  color: var(--admin-text);
+}
+
+.auth-status--success {
+  border-color: color-mix(in srgb, var(--admin-success) 24%, var(--admin-border));
+  background: color-mix(in srgb, var(--admin-success) 10%, transparent);
+}
+
+.auth-status--warning {
+  border-color: color-mix(in srgb, var(--admin-warning) 28%, var(--admin-border));
+  background: color-mix(in srgb, var(--admin-warning) 12%, transparent);
+}
+
+.auth-status--danger {
+  border-color: color-mix(in srgb, var(--admin-danger) 24%, var(--admin-border));
+  background: color-mix(in srgb, var(--admin-danger) 10%, transparent);
+}
+
+.password-requirements {
+  margin: 0;
+}
+
+.password-change-shell {
+  width: min(100%, 520px);
+}
+
 .btn-danger {
   background: rgba(185, 28, 28, 0.08);
   color: var(--admin-danger);
@@ -1168,6 +1220,18 @@ th {
   color: var(--admin-primary-contrast);
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .is-hidden {
   display: none !important;
 }
@@ -1205,6 +1269,14 @@ th {
 }
 
 @media (max-width: 759px) {
+  .auth-actions--split {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .auth-actions--split .text-button {
+    align-self: center;
+  }
   .admin-content > .panel-card:first-child {
     padding: 10px;
     position: sticky;
