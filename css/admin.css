@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   color-scheme: light;
   --admin-primary: #111111;
   --admin-primary-contrast: #fafaf8;
@@ -1548,7 +1548,7 @@ th {
   }
 }
 
-/* UI polish â€” shared modal surface and close affordance */
+/* UI polish — shared modal surface and close affordance */
 .editor-backdrop {
   background:
     radial-gradient(circle at top, rgba(188, 169, 139, 0.18), transparent 34%),

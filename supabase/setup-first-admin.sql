@@ -1,45 +1,60 @@
--- VitrineZap PWA
--- Use este arquivo depois de:
--- 1. rodar schema.sql
--- 2. rodar seed.sql (ou criar a loja manualmente)
--- 3. criar o usuario em Authentication > Users
+-- VitrineZap / Relojoaria — vincular primeiro administrador.
+-- Use depois de:
+-- 1. aplicar as migrations;
+-- 2. criar a loja real ou rodar um seed controlado;
+-- 3. criar o usuario em Authentication > Users.
 --
--- Este arquivo usa o slug da loja para evitar depender de um UUID fixo.
--- Se voce estiver usando o seed padrao, o slug esperado e: minha-loja.
+-- Troque os valores do CTE `params` antes de executar.
+-- Nao grave senhas/tokens neste arquivo.
 
-insert into public.profiles (id, full_name)
-values (
-  'be699091-9f12-4e92-bba8-d30dd94dac6c',
-  'Primeiro Gerente'
-)
-on conflict (id) do update set
-  full_name = excluded.full_name;
-
-with target_store as (
-  select id
-  from public.stores
-  where slug = 'minha-loja'
+with params as (
+  select
+    'COLE_AQUI_O_UUID_DO_AUTH_USER'::uuid as admin_user_id,
+    'COLE_AQUI_O_SLUG_DA_LOJA'::text as store_slug,
+    'Primeiro Administrador'::text as full_name,
+    'owner'::text as admin_role
+), upsert_profile as (
+  insert into public.profiles (id, full_name)
+  select
+    admin_user_id,
+    full_name
+  from params
+  on conflict (id) do update set
+    full_name = excluded.full_name
+  returning id
+), target_store as (
+  select
+    s.id as store_id,
+    p.admin_user_id,
+    p.admin_role
+  from public.stores s
+  join params p on p.store_slug = s.slug
   limit 1
+), upsert_membership as (
+  insert into public.store_members (store_id, user_id, role)
+  select
+    store_id,
+    admin_user_id,
+    admin_role
+  from target_store
+  on conflict (store_id, user_id) do update set
+    role = excluded.role
+  returning store_id, user_id, role
+), update_owner as (
+  update public.stores s
+  set owner_id = ts.admin_user_id
+  from target_store ts
+  where s.id = ts.store_id
+    and ts.admin_role = 'owner'
+  returning s.id, s.name, s.slug, s.owner_id
 )
-insert into public.store_members (store_id, user_id, role)
-select
-  target_store.id,
-  'be699091-9f12-4e92-bba8-d30dd94dac6c'::uuid,
-  'owner'
-from target_store
-on conflict (store_id, user_id) do update set
-  role = excluded.role;
-
-update public.stores
-set owner_id = 'be699091-9f12-4e92-bba8-d30dd94dac6c'
-where slug = 'minha-loja';
-
 select
   s.id as store_id,
   s.name as store_name,
   s.slug as store_slug,
   sm.user_id,
-  sm.role
+  sm.role,
+  s.owner_id
 from public.stores s
 left join public.store_members sm on sm.store_id = s.id
-where s.slug = 'minha-loja';
+where s.slug = (select store_slug from params);

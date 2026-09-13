@@ -9,6 +9,7 @@ js/config.js
 # Supabase local/CLI state
 supabase/.temp/
 supabase/.branches/
+supabase/generated/
 supabase/functions/.env*
 supabase/edge-functions/.env*
 # Deploy/platform local folders
