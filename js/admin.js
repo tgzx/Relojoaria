@@ -15,13 +15,21 @@ import {
   adminListCategories,
   adminListNotifications,
   adminListProducts,
+  adminListProductOptionGroups,
+  adminListProductOptionSelections,
+  adminListProductOptionValues,
   adminListPushSubscriptionsSummary,
   adminListSections,
   adminRefreshAutomaticSection,
+  adminDeactivateProductOptionGroup,
+  adminDeactivateProductOptionValue,
   adminSaveBanner,
   adminSaveBrand,
   adminSaveCategory,
   adminSaveNotification,
+  adminSaveProductOptionGroup,
+  adminSaveProductOptionSelections,
+  adminSaveProductOptionValue,
   adminSaveSection,
   adminSaveStoreSettings,
   adminSendNotification,
@@ -57,6 +65,7 @@ const TABS = [
   { id: "sections", label: "Seções" },
   { id: "categories", label: "Categorias" },
   { id: "brands", label: "Marcas" },
+  { id: "options", label: "Opções" },
   { id: "appearance", label: "Banners" },
   { id: "notifications", label: "Notificações" },
   { id: "settings", label: "Configurações" },
@@ -107,6 +116,8 @@ const adminState = {
   filteredProducts: [],
   categories: [],
   brands: [],
+  productOptionGroups: [],
+  productOptionValues: [],
   sections: [],
   banners: [],
   notifications: [],
@@ -115,6 +126,8 @@ const adminState = {
   editingSection: null,
   editingCategory: null,
   editingBrand: null,
+  editingOptionGroup: null,
+  editingOptionValue: null,
   editingBanner: null,
   currentAdminTab: "dashboard",
   productEditorStep: 1,
@@ -384,17 +397,21 @@ async function loadAdminData() {
     const filteredProductsPromise = withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListFilteredProducts");
     const categoriesPromise = withTimeout(adminListCategories(membership.store.id), 10000, "adminListCategories");
     const brandsPromise = withTimeout(adminListBrands(membership.store.id), 10000, "adminListBrands");
+    const optionGroupsPromise = withTimeout(adminListProductOptionGroups(membership.store.id), 10000, "adminListProductOptionGroups");
+    const optionValuesPromise = withTimeout(adminListProductOptionValues(membership.store.id), 10000, "adminListProductOptionValues");
     const sectionsPromise = withTimeout(adminListSections(membership.store.id), 10000, "adminListSections");
     const bannersPromise = withTimeout(adminListBanners(membership.store.id), 10000, "adminListBanners");
     const notificationsPromise = withTimeout(adminListNotifications(membership.store.id), 10000, "adminListNotifications");
     const pushSummaryPromise = withTimeout(adminListPushSubscriptionsSummary(membership.store.id), 10000, "adminListPushSubscriptionsSummary");
 
-    const [settings, productsRes, filteredProductsRes, categories, brands, sections, banners, notifications, pushSummary] = await Promise.all([
+    const [settings, productsRes, filteredProductsRes, categories, brands, optionGroups, optionValues, sections, banners, notifications, pushSummary] = await Promise.all([
       settingsPromise,
       productsPromise,
       filteredProductsPromise,
       categoriesPromise,
       brandsPromise,
+      optionGroupsPromise,
+      optionValuesPromise,
       sectionsPromise,
       bannersPromise,
       notificationsPromise,
@@ -406,6 +423,8 @@ async function loadAdminData() {
     adminState.filteredProducts = filteredProductsRes.data || productsRes.data || [];
     adminState.categories = categories || [];
     adminState.brands = brands || [];
+    adminState.productOptionGroups = optionGroups || [];
+    adminState.productOptionValues = optionValues || [];
     adminState.sections = sections || [];
     adminState.banners = banners || [];
     adminState.notifications = notifications || [];
@@ -818,6 +837,8 @@ function renderCurrentTab() {
       return renderCategoriesManager();
     case "brands":
       return renderBrandsManager();
+    case "options":
+      return renderProductOptionsManager();
     case "appearance":
       return renderAppearanceManager();
     case "notifications":
@@ -1273,6 +1294,141 @@ function renderSectionsManager() {
       </article>
     </section>
   `;
+}
+
+function renderProductOptionsManager() {
+  const groupDraft = adminState.editingOptionGroup || createEmptyOptionGroupDraft();
+  const valueDraft = adminState.editingOptionValue || createEmptyOptionValueDraft();
+  const groups = getSortedProductOptionGroups();
+  const values = getSortedProductOptionValues();
+
+  return `
+    <section class="manager-grid options-manager-grid">
+      <article class="panel-card">
+        <span class="section-kicker">Catálogo guiado</span>
+        <h2>Características e variações</h2>
+        <p class="muted-copy">Cadastre grupos e valores para o gerente selecionar no produto, sem editar JSON cru.</p>
+        <div class="mobile-quick-actions">
+          <button class="btn btn-primary" type="button" data-scroll-to-quick-form="option-group-form">Novo grupo</button>
+          <button class="btn btn-secondary" type="button" data-scroll-to-quick-form="option-value-form">Novo valor</button>
+        </div>
+        <div class="option-summary-grid">
+          <article><strong>${groups.filter((item) => item.type === "attribute").length}</strong><span>Características</span></article>
+          <article><strong>${groups.filter((item) => item.type === "variant").length}</strong><span>Variações</span></article>
+          <article><strong>${values.length}</strong><span>Valores</span></article>
+        </div>
+        <div class="list-stack">
+          ${groups.length ? groups.map(renderProductOptionGroupItem).join("") : `<p class="muted-copy">Nenhum grupo cadastrado ainda. Comece por Movimento, Pulseira, Cor ou Resistência à água.</p>`}
+        </div>
+      </article>
+
+      <article class="panel-card">
+        <span class="section-kicker">Grupo</span>
+        <h2>${groupDraft.id ? "Editar grupo" : "Novo grupo"}</h2>
+        <form id="option-group-form" class="grid-form">
+          <input type="hidden" name="id" value="${escapeHtml(groupDraft.id || "")}" />
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field"><span>Tipo</span><select name="type">${renderOptions([{ value: "attribute", label: "Característica" }, { value: "variant", label: "Variação" }], groupDraft.type || "attribute")}</select></label>
+            <label class="admin-field"><span>Formato</span><select name="input_type">${renderOptions([{ value: "select", label: "Seleção única" }, { value: "multi_select", label: "Múltipla seleção" }, { value: "text", label: "Texto livre" }], groupDraft.input_type || "select")}</select></label>
+          </div>
+          <label class="admin-field"><span>Nome</span><input type="text" name="name" value="${escapeHtml(groupDraft.name || "")}" required /></label>
+          <label class="admin-field"><span>Slug</span><input type="text" name="slug" value="${escapeHtml(groupDraft.slug || "")}" /></label>
+          <label class="admin-field"><span>Descrição</span><textarea name="description">${escapeHtml(groupDraft.description || "")}</textarea></label>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field"><span>Ordem</span><input type="number" name="sort_order" value="${escapeHtml(groupDraft.sort_order ?? 0)}" /></label>
+            <label class="admin-field admin-field--switch"><span>Grupo ativo</span><input type="checkbox" name="is_active" ${groupDraft.is_active !== false ? "checked" : ""} /></label>
+          </div>
+          <div class="option-switch-list">
+            <label class="admin-field admin-field--switch"><span>Mostrar no produto</span><input type="checkbox" name="show_on_product" ${groupDraft.show_on_product !== false ? "checked" : ""} /></label>
+            <label class="admin-field admin-field--switch"><span>Permitir valor livre</span><input type="checkbox" name="allow_custom_value" ${groupDraft.allow_custom_value ? "checked" : ""} /></label>
+            <label class="admin-field admin-field--switch"><span>Virar filtro no futuro</span><input type="checkbox" name="use_as_filter" ${groupDraft.use_as_filter ? "checked" : ""} /></label>
+            <label class="admin-field admin-field--switch"><span>Obrigatório</span><input type="checkbox" name="is_required" ${groupDraft.is_required ? "checked" : ""} /></label>
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" type="submit">Salvar grupo</button>
+            <button class="btn btn-secondary" type="button" id="reset-option-group-form">Novo</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="panel-card">
+        <span class="section-kicker">Valores</span>
+        <h2>Valores disponíveis</h2>
+        <div class="list-stack">${values.length ? values.map(renderProductOptionValueItem).join("") : `<p class="muted-copy">Nenhum valor cadastrado ainda.</p>`}</div>
+      </article>
+
+      <article class="panel-card">
+        <span class="section-kicker">Valor</span>
+        <h2>${valueDraft.id ? "Editar valor" : "Novo valor"}</h2>
+        <form id="option-value-form" class="grid-form">
+          <input type="hidden" name="id" value="${escapeHtml(valueDraft.id || "")}" />
+          <label class="admin-field"><span>Grupo</span><select name="group_id" required>${renderProductOptionGroupOptions(valueDraft.group_id || groups[0]?.id || "")}</select></label>
+          <label class="admin-field"><span>Rótulo</span><input type="text" name="label" value="${escapeHtml(valueDraft.label || "")}" required /></label>
+          <label class="admin-field"><span>Valor técnico</span><input type="text" name="value" value="${escapeHtml(valueDraft.value || "")}" /></label>
+          <label class="admin-field"><span>Descrição</span><textarea name="description">${escapeHtml(valueDraft.description || "")}</textarea></label>
+          <div class="inline-grid inline-grid--2">
+            <label class="admin-field"><span>Ordem</span><input type="number" name="sort_order" value="${escapeHtml(valueDraft.sort_order ?? 0)}" /></label>
+            <label class="admin-field admin-field--switch"><span>Valor ativo</span><input type="checkbox" name="is_active" ${valueDraft.is_active !== false ? "checked" : ""} /></label>
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" type="submit">Salvar valor</button>
+            <button class="btn btn-secondary" type="button" id="reset-option-value-form">Novo</button>
+          </div>
+        </form>
+      </article>
+    </section>
+  `;
+}
+
+function renderProductOptionGroupItem(group) {
+  const values = getSortedProductOptionValues(group.id);
+  return `
+    <article class="list-item option-list-item">
+      <div class="list-item-header">
+        <div>
+          <strong class="list-item-title">${escapeHtml(group.name)}</strong>
+          <span class="list-item-subtitle">${getProductOptionTypeLabel(group.type)} · ${escapeHtml(group.slug)} · ${values.length} valor(es)</span>
+        </div>
+        <span class="badge ${group.is_active ? "badge--success" : "badge--muted"}">${group.is_active ? "Ativo" : "Oculto"}</span>
+      </div>
+      <p class="muted-copy">${escapeHtml(group.description || (group.type === "attribute" ? "Característica do produto." : "Variação selecionável do produto."))}</p>
+      <div class="tag-list">
+        ${values.slice(0, 8).map((value) => `<span class="badge badge--muted">${escapeHtml(value.label)}</span>`).join("")}
+        ${values.length > 8 ? `<span class="badge badge--muted">+${values.length - 8}</span>` : ""}
+      </div>
+      <div class="list-item-footer">
+        <button class="btn btn-secondary" type="button" data-edit-option-group="${escapeHtml(group.id)}">Editar</button>
+        <button class="btn btn-danger" type="button" data-disable-option-group="${escapeHtml(group.id)}">Desativar</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderProductOptionValueItem(value) {
+  const group = getProductOptionGroup(value.group_id);
+  return `
+    <article class="list-item option-list-item">
+      <div class="list-item-header">
+        <div>
+          <strong class="list-item-title">${escapeHtml(value.label)}</strong>
+          <span class="list-item-subtitle">${escapeHtml(group?.name || "Grupo removido")} · ${escapeHtml(value.value)}</span>
+        </div>
+        <span class="badge ${value.is_active ? "badge--success" : "badge--muted"}">${value.is_active ? "Ativo" : "Oculto"}</span>
+      </div>
+      <div class="list-item-footer">
+        <button class="btn btn-secondary" type="button" data-edit-option-value="${escapeHtml(value.id)}">Editar</button>
+        <button class="btn btn-danger" type="button" data-disable-option-value="${escapeHtml(value.id)}">Desativar</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderProductOptionGroupOptions(selectedId = "") {
+  const groups = getSortedProductOptionGroups();
+  if (!groups.length) return `<option value="">Crie um grupo primeiro</option>`;
+  return groups
+    .map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === selectedId ? "selected" : ""}>${escapeHtml(getProductOptionTypeLabel(group.type))}: ${escapeHtml(group.name)}</option>`)
+    .join("");
 }
 
 function renderCategoriesManager() {
@@ -2347,6 +2503,7 @@ function bindAdminLayoutEvents() {
   bindSectionTab();
   bindCategoryTab();
   bindBrandTab();
+  bindProductOptionsTab();
   bindAppearanceTab();
   bindNotificationsTab();
   bindSettingsTab();
@@ -2590,6 +2747,71 @@ function bindBrandTab() {
   );
 }
 
+function bindProductOptionsTab() {
+  bindDirtyFormState("#option-group-form", "options");
+  bindDirtyFormState("#option-value-form", "options");
+
+  qs("#option-group-form")?.addEventListener("submit", saveProductOptionGroup);
+  qs("#option-value-form")?.addEventListener("submit", saveProductOptionValue);
+
+  qs("#reset-option-group-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("options");
+    adminState.editingOptionGroup = createEmptyOptionGroupDraft();
+    renderAdminLayout();
+  });
+
+  qs("#reset-option-value-form")?.addEventListener("click", () => {
+    clearAdminFormDirty("options");
+    adminState.editingOptionValue = createEmptyOptionValueDraft();
+    renderAdminLayout();
+  });
+
+  qs("#option-group-form [name='name']")?.addEventListener("input", (event) => {
+    const slugInput = qs("#option-group-form [name='slug']");
+    if (slugInput && !slugInput.value.trim()) slugInput.value = slugify(event.currentTarget.value);
+  });
+
+  qs("#option-value-form [name='label']")?.addEventListener("input", (event) => {
+    const valueInput = qs("#option-value-form [name='value']");
+    if (valueInput && !valueInput.value.trim()) valueInput.value = slugify(event.currentTarget.value);
+  });
+
+  qsa("[data-edit-option-group]").forEach((button) =>
+    button.addEventListener("click", () => {
+      clearAdminFormDirty("options");
+      adminState.editingOptionGroup = structuredClone(getProductOptionGroup(button.dataset.editOptionGroup) || createEmptyOptionGroupDraft());
+      renderAdminLayout();
+      qs("#option-group-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    })
+  );
+
+  qsa("[data-edit-option-value]").forEach((button) =>
+    button.addEventListener("click", () => {
+      clearAdminFormDirty("options");
+      adminState.editingOptionValue = structuredClone((adminState.productOptionValues || []).find((item) => item.id === button.dataset.editOptionValue) || createEmptyOptionValueDraft());
+      renderAdminLayout();
+      qs("#option-value-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    })
+  );
+
+  qsa("[data-disable-option-group]").forEach((button) =>
+    button.addEventListener("click", () => disableProductOptionGroup(button.dataset.disableOptionGroup))
+  );
+
+  qsa("[data-disable-option-value]").forEach((button) =>
+    button.addEventListener("click", () => disableProductOptionValue(button.dataset.disableOptionValue))
+  );
+}
+
+async function refreshProductOptionsData() {
+  const [groups, values] = await Promise.all([
+    adminListProductOptionGroups(adminState.store.id),
+    adminListProductOptionValues(adminState.store.id)
+  ]);
+  adminState.productOptionGroups = groups || [];
+  adminState.productOptionValues = values || [];
+}
+
 function bindAppearanceTab() {
   bindDirtyFormState("#banner-form", "appearance");
   qs("#banner-form")?.addEventListener("submit", saveBanner);
@@ -2793,6 +3015,242 @@ function openProductEditor(productId = null) {
   renderProductEditor();
 }
 
+function getProductOptionTypeLabel(type) {
+  return type === "variant" ? "Variação" : "Característica";
+}
+
+function getSortedProductOptionGroups(type = "") {
+  return [...(adminState.productOptionGroups || [])]
+    .filter((group) => !type || group.type === type)
+    .sort(
+      (left, right) =>
+        (left.sort_order ?? 0) - (right.sort_order ?? 0) ||
+        String(left.name || "").localeCompare(String(right.name || ""), adminState.settings?.locale || "pt-BR")
+    );
+}
+
+function getSortedProductOptionValues(groupId = "") {
+  return [...(adminState.productOptionValues || [])]
+    .filter((value) => !groupId || value.group_id === groupId)
+    .sort(
+      (left, right) =>
+        (left.sort_order ?? 0) - (right.sort_order ?? 0) ||
+        String(left.label || "").localeCompare(String(right.label || ""), adminState.settings?.locale || "pt-BR")
+    );
+}
+
+function getProductOptionGroup(groupId) {
+  return (adminState.productOptionGroups || []).find((group) => group.id === groupId) || null;
+}
+
+function getProductOptionValue(valueId) {
+  return (adminState.productOptionValues || []).find((value) => value.id === valueId) || null;
+}
+
+function getActiveProductOptionGroups(type) {
+  return getSortedProductOptionGroups(type).filter((group) => group.is_active !== false);
+}
+
+function getActiveProductOptionValues(groupId) {
+  return getSortedProductOptionValues(groupId).filter((value) => value.is_active !== false);
+}
+
+function getSelectionLabel(selection) {
+  const value = getProductOptionValue(selection.value_id) || selection.value;
+  if (value?.label) return value.label;
+  const custom = selection.custom_value;
+  if (custom && typeof custom === "object") return custom.label || custom.value || "";
+  if (custom) return String(custom);
+  return "";
+}
+
+function getDraftOptionSelections(draft, groupId = "") {
+  return [...(draft.option_selections || [])].filter((selection) => !groupId || selection.group_id === groupId);
+}
+
+function renderProductOptionPicker(type, draft) {
+  const groups = getActiveProductOptionGroups(type);
+  const title = type === "variant" ? "Variações" : "Características";
+  const description =
+    type === "variant"
+      ? "Escolha opções comerciais simples, sem controlar SKU/estoque por variação nesta fase."
+      : "Monte a ficha do produto com valores cadastrados, sem digitar JSON.";
+
+  if (!groups.length) {
+    return `
+      <section class="product-option-picker">
+        <div>
+          <strong>${title}</strong>
+          <p class="muted-copy">Nenhum grupo ativo cadastrado. Use a aba Opções para criar grupos e valores.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="product-option-picker">
+      <div>
+        <strong>${title}</strong>
+        <p class="muted-copy">${description}</p>
+      </div>
+      <div class="product-option-field-list">
+        ${groups.map((group) => renderProductOptionField(group, draft)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderProductOptionField(group, draft) {
+  const selected = getDraftOptionSelections(draft, group.id);
+  const selectedValueIds = selected.map((selection) => selection.value_id).filter(Boolean);
+  const customSelection = selected.find((selection) => selection.custom_value);
+  const customLabel = customSelection ? getSelectionLabel(customSelection) : "";
+  const values = getActiveProductOptionValues(group.id);
+
+  if (group.input_type === "text" || (!values.length && group.allow_custom_value)) {
+    return `
+      <fieldset class="product-option-field" data-product-option-group="${escapeHtml(group.id)}">
+        <legend>${escapeHtml(group.name)}${group.is_required ? " *" : ""}</legend>
+        <input type="text" data-product-option-custom value="${escapeHtml(customLabel)}" placeholder="Digite um valor para ${escapeHtml(group.name)}" />
+      </fieldset>
+    `;
+  }
+
+  if (group.input_type === "multi_select") {
+    return `
+      <fieldset class="product-option-field" data-product-option-group="${escapeHtml(group.id)}">
+        <legend>${escapeHtml(group.name)}${group.is_required ? " *" : ""}</legend>
+        <div class="option-chip-grid">
+          ${values
+            .map(
+              (value) => `
+                <label class="option-choice-chip">
+                  <input type="checkbox" value="${escapeHtml(value.id)}" data-product-option-checkbox ${selectedValueIds.includes(value.id) ? "checked" : ""} />
+                  <span>${escapeHtml(value.label)}</span>
+                </label>
+              `
+            )
+            .join("")}
+        </div>
+        ${group.allow_custom_value ? `<input type="text" data-product-option-custom value="${escapeHtml(customLabel)}" placeholder="Outro valor" />` : ""}
+      </fieldset>
+    `;
+  }
+
+  return `
+    <fieldset class="product-option-field" data-product-option-group="${escapeHtml(group.id)}">
+      <legend>${escapeHtml(group.name)}${group.is_required ? " *" : ""}</legend>
+      <select data-product-option-select>
+        <option value="">Não selecionado</option>
+        ${values.map((value) => `<option value="${escapeHtml(value.id)}" ${selectedValueIds.includes(value.id) ? "selected" : ""}>${escapeHtml(value.label)}</option>`).join("")}
+      </select>
+      ${group.allow_custom_value ? `<input type="text" data-product-option-custom value="${escapeHtml(customLabel)}" placeholder="Outro valor" />` : ""}
+    </fieldset>
+  `;
+}
+
+function readJsonTextarea(name, fallback) {
+  const field = qs(`#product-editor-form [name='${name}']`);
+  if (!field) return fallback;
+  return parseJsonSafe(String(field.value || ""), fallback);
+}
+
+function readProductOptionSelectionsFromDom(draft) {
+  const selections = [];
+  qsa("[data-product-option-group]").forEach((field, fieldIndex) => {
+    const groupId = field.dataset.productOptionGroup;
+    const group = getProductOptionGroup(groupId);
+    if (!group) return;
+
+    const checkboxValues = qsa("[data-product-option-checkbox]:checked", field).map((input) => input.value).filter(Boolean);
+    const selectValue = field.querySelector("[data-product-option-select]")?.value || "";
+    const customText = String(field.querySelector("[data-product-option-custom]")?.value || "").trim();
+    const valueIds = group.input_type === "multi_select" ? checkboxValues : selectValue ? [selectValue] : [];
+
+    valueIds.forEach((valueId, index) => {
+      selections.push({
+        store_id: adminState.store.id,
+        product_id: draft.id || null,
+        group_id: groupId,
+        value_id: valueId,
+        custom_value: null,
+        sort_order: fieldIndex * 100 + index
+      });
+    });
+
+    if (customText) {
+      selections.push({
+        store_id: adminState.store.id,
+        product_id: draft.id || null,
+        group_id: groupId,
+        value_id: null,
+        custom_value: { label: customText, value: customText },
+        sort_order: fieldIndex * 100 + valueIds.length
+      });
+    }
+  });
+
+  return selections;
+}
+
+function buildProductAttributesFromSelections(baseAttributes, selections) {
+  const attributes = { ...(baseAttributes && typeof baseAttributes === "object" && !Array.isArray(baseAttributes) ? baseAttributes : {}) };
+  getSortedProductOptionGroups("attribute").forEach((group) => {
+    delete attributes[group.slug];
+  });
+
+  getSortedProductOptionGroups("attribute").forEach((group) => {
+    const labels = selections
+      .filter((selection) => selection.group_id === group.id)
+      .map(getSelectionLabel)
+      .filter(Boolean);
+    if (!labels.length) return;
+    attributes[group.slug] = labels.length === 1 ? labels[0] : labels;
+  });
+
+  return attributes;
+}
+
+function buildProductVariantsFromSelections(selections) {
+  return getSortedProductOptionGroups("variant")
+    .map((group) => {
+      const options = selections
+        .filter((selection) => selection.group_id === group.id)
+        .map(getSelectionLabel)
+        .filter(Boolean);
+
+      if (!options.length) return null;
+      return {
+        name: group.name,
+        slug: group.slug,
+        options
+      };
+    })
+    .filter(Boolean);
+}
+
+async function hydrateProductOptionSelections(productId) {
+  try {
+    const selections = await adminListProductOptionSelections(adminState.store.id, productId);
+    if (!adminState.editingProduct || adminState.editingProduct.id !== productId) return;
+    adminState.editingProduct.option_selections = selections || [];
+    renderProductEditor();
+  } catch (error) {
+    console.warn("Não foi possível carregar opções do produto.", error);
+    showToast(error.message || "Não foi possível carregar opções do produto.", "warning");
+  }
+}
+
+function getProductOptionSelectionsForSave(draft) {
+  const selections = Array.isArray(draft.option_selections) ? draft.option_selections : [];
+  return selections.map((selection, index) => ({
+    group_id: selection.group_id,
+    value_id: selection.value_id || null,
+    custom_value: selection.custom_value || null,
+    sort_order: Number(selection.sort_order ?? index)
+  }));
+}
+
 function renderProductEditor() {
   const draft = adminState.editingProduct || createEmptyProductDraft();
   const isSavingProduct = adminState.isSavingProduct;
@@ -2915,14 +3373,20 @@ function renderProductEditor() {
                 <span>Tags (separadas por vírgula)</span>
                 <input type="text" name="tags" value="${escapeHtml((draft.tags || []).join(", "))}" />
               </label>
-              <label class="admin-field">
-                <span>Características (JSON)</span>
-                <textarea name="attributes">${escapeHtml(JSON.stringify(draft.attributes || {}, null, 2))}</textarea>
-              </label>
-              <label class="admin-field">
-                <span>Variações simples (JSON)</span>
-                <textarea name="variants">${escapeHtml(JSON.stringify(draft.variants || [], null, 2))}</textarea>
-              </label>
+              ${renderProductOptionPicker("attribute", draft)}
+              ${renderProductOptionPicker("variant", draft)}
+              <details class="option-advanced-json">
+                <summary>Editar JSON avançado</summary>
+                <p class="muted-copy">Modo técnico para compatibilidade. O caminho principal agora é selecionar grupos e valores cadastrados na aba Opções.</p>
+                <label class="admin-field">
+                  <span>Características (JSON)</span>
+                  <textarea name="attributes">${escapeHtml(JSON.stringify(draft.attributes || {}, null, 2))}</textarea>
+                </label>
+                <label class="admin-field">
+                  <span>Variações simples (JSON)</span>
+                  <textarea name="variants">${escapeHtml(JSON.stringify(draft.variants || [], null, 2))}</textarea>
+                </label>
+              </details>
               <label class="admin-field">
                 <span>Ordem</span>
                 <input type="number" name="sort_order" value="${escapeHtml(draft.sort_order ?? 0)}" />
@@ -3177,8 +3641,8 @@ function persistEditorDraftFromDom() {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
-    attributes: parseJsonSafe(String(data.get("attributes") || "{}"), {}),
-    variants: parseJsonSafe(String(data.get("variants") || "[]"), []),
+    attributes: readJsonTextarea("attributes", adminState.editingProduct?.attributes || {}),
+    variants: readJsonTextarea("variants", adminState.editingProduct?.variants || []),
     sort_order: Number(data.get("sort_order") || 0),
     is_active: form.querySelector("[name='is_active']")?.checked || false,
     is_featured: form.querySelector("[name='is_featured']")?.checked || false,
@@ -3188,6 +3652,11 @@ function persistEditorDraftFromDom() {
     allow_whatsapp_cta: form.querySelector("[name='allow_whatsapp_cta']")?.checked ?? true,
     images: adminState.editingProduct?.images || []
   };
+
+  const optionSelections = readProductOptionSelectionsFromDom(adminState.editingProduct);
+  adminState.editingProduct.option_selections = optionSelections;
+  adminState.editingProduct.attributes = buildProductAttributesFromSelections(adminState.editingProduct.attributes, optionSelections);
+  adminState.editingProduct.variants = buildProductVariantsFromSelections(optionSelections);
 }
 
 function changeProductEditorStep(delta) {
@@ -3247,9 +3716,16 @@ async function saveProduct(publish) {
       ? await adminUpdateProduct(draft.id, payload)
       : await adminCreateProduct(payload);
 
+    const savedOptionSelections = await adminSaveProductOptionSelections(
+      adminState.store.id,
+      savedProduct.id,
+      getProductOptionSelectionsForSave(draft)
+    );
+
     adminState.editingProduct = {
       ...draft,
       ...savedProduct,
+      option_selections: savedOptionSelections || draft.option_selections || [],
       images: Array.isArray(savedProduct.images) ? savedProduct.images : draft.images || []
     };
 
@@ -3532,6 +4008,90 @@ function isSectionStale(section) {
   if (section.refresh_frequency === "daily") return diffDays >= 1;
   if (section.refresh_frequency === "weekly") return diffDays >= 7;
   return false;
+}
+
+async function saveProductOptionGroup(event) {
+  event.preventDefault();
+  clearAdminFormDirty("options");
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const name = String(data.get("name") || "").trim();
+  if (!name) {
+    showToast("Informe o nome do grupo.", "warning");
+    return;
+  }
+
+  await adminSaveProductOptionGroup({
+    id: String(data.get("id") || "") || undefined,
+    store_id: adminState.store.id,
+    type: String(data.get("type") || "attribute"),
+    name,
+    slug: String(data.get("slug") || "").trim() || slugify(name),
+    description: String(data.get("description") || ""),
+    input_type: String(data.get("input_type") || "select"),
+    value_type: "text",
+    allow_custom_value: form.querySelector("[name='allow_custom_value']")?.checked || false,
+    show_on_product: form.querySelector("[name='show_on_product']")?.checked !== false,
+    use_as_filter: form.querySelector("[name='use_as_filter']")?.checked || false,
+    is_required: form.querySelector("[name='is_required']")?.checked || false,
+    is_active: form.querySelector("[name='is_active']")?.checked !== false,
+    sort_order: Number(data.get("sort_order") || 0)
+  });
+
+  adminState.editingOptionGroup = createEmptyOptionGroupDraft();
+  await refreshProductOptionsData();
+  showToast("Grupo salvo.", "success");
+  renderAdminLayout();
+}
+
+async function saveProductOptionValue(event) {
+  event.preventDefault();
+  clearAdminFormDirty("options");
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const label = String(data.get("label") || "").trim();
+  const groupId = String(data.get("group_id") || "");
+  if (!groupId) {
+    showToast("Crie ou selecione um grupo antes de salvar o valor.", "warning");
+    return;
+  }
+  if (!label) {
+    showToast("Informe o rótulo do valor.", "warning");
+    return;
+  }
+
+  await adminSaveProductOptionValue({
+    id: String(data.get("id") || "") || undefined,
+    store_id: adminState.store.id,
+    group_id: groupId,
+    label,
+    value: String(data.get("value") || "").trim() || slugify(label),
+    description: String(data.get("description") || ""),
+    metadata: {},
+    is_active: form.querySelector("[name='is_active']")?.checked !== false,
+    sort_order: Number(data.get("sort_order") || 0)
+  });
+
+  adminState.editingOptionValue = createEmptyOptionValueDraft();
+  await refreshProductOptionsData();
+  showToast("Valor salvo.", "success");
+  renderAdminLayout();
+}
+
+async function disableProductOptionGroup(groupId) {
+  if (!window.confirm("Desativar este grupo? Produtos existentes manterão os dados já salvos.")) return;
+  await adminDeactivateProductOptionGroup(groupId);
+  await refreshProductOptionsData();
+  showToast("Grupo desativado.", "warning");
+  renderAdminLayout();
+}
+
+async function disableProductOptionValue(valueId) {
+  if (!window.confirm("Desativar este valor? Produtos existentes manterão os dados já salvos.")) return;
+  await adminDeactivateProductOptionValue(valueId);
+  await refreshProductOptionsData();
+  showToast("Valor desativado.", "warning");
+  renderAdminLayout();
 }
 
 async function saveCategory(event) {
@@ -3986,6 +4546,39 @@ function createEmptyProductDraft() {
     variants: [],
     sort_order: 0,
     images: []
+  };
+}
+
+function createEmptyOptionGroupDraft() {
+  return {
+    id: null,
+    store_id: adminState.store?.id,
+    type: "attribute",
+    name: "",
+    slug: "",
+    description: "",
+    input_type: "select",
+    value_type: "text",
+    allow_custom_value: false,
+    show_on_product: true,
+    use_as_filter: false,
+    is_required: false,
+    is_active: true,
+    sort_order: 0
+  };
+}
+
+function createEmptyOptionValueDraft() {
+  return {
+    id: null,
+    store_id: adminState.store?.id,
+    group_id: adminState.productOptionGroups?.[0]?.id || "",
+    label: "",
+    value: "",
+    description: "",
+    metadata: {},
+    is_active: true,
+    sort_order: 0
   };
 }
 

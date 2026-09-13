@@ -316,6 +316,139 @@ export async function adminListProducts(storeId, filters = {}) {
   };
 }
 
+function sanitizeProductOptionGroupPayload(payload = {}) {
+  return {
+    store_id: payload.store_id,
+    type: payload.type === "variant" ? "variant" : "attribute",
+    name: String(payload.name || "").trim(),
+    slug: String(payload.slug || "").trim(),
+    description: payload.description || null,
+    input_type: payload.input_type || "select",
+    value_type: payload.value_type || "text",
+    allow_custom_value: Boolean(payload.allow_custom_value),
+    show_on_product: payload.show_on_product !== false,
+    use_as_filter: Boolean(payload.use_as_filter),
+    is_required: Boolean(payload.is_required),
+    is_active: payload.is_active !== false,
+    sort_order: Number(payload.sort_order || 0)
+  };
+}
+
+function sanitizeProductOptionValuePayload(payload = {}) {
+  return {
+    store_id: payload.store_id,
+    group_id: payload.group_id,
+    label: String(payload.label || "").trim(),
+    value: String(payload.value || "").trim(),
+    description: payload.description || null,
+    metadata: parseJsonSafe(payload.metadata, payload.metadata || {}),
+    is_active: payload.is_active !== false,
+    sort_order: Number(payload.sort_order || 0)
+  };
+}
+
+export async function adminListProductOptionGroups(storeId, type = "") {
+  let query = supabase
+    .from("product_option_groups")
+    .select("*")
+    .eq("store_id", storeId)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (type) query = query.eq("type", type);
+
+  return throwIfError(await query, "Não foi possível listar características e variações.");
+}
+
+export async function adminSaveProductOptionGroup(payload) {
+  const sanitized = sanitizeProductOptionGroupPayload(payload);
+  const result = payload.id
+    ? await supabase.from("product_option_groups").update(sanitized).eq("id", payload.id).select("*").single()
+    : await supabase.from("product_option_groups").insert(sanitized).select("*").single();
+
+  return throwIfError(result, "Não foi possível salvar o grupo de opção.");
+}
+
+export async function adminDeactivateProductOptionGroup(id) {
+  const result = await supabase
+    .from("product_option_groups")
+    .update({ is_active: false, updated_at: nowIso() })
+    .eq("id", id);
+  return throwIfError(result, "Não foi possível desativar o grupo de opção.");
+}
+
+export async function adminListProductOptionValues(storeId, groupId = "") {
+  let query = supabase
+    .from("product_option_values")
+    .select("*, group:product_option_groups(id,name,slug,type,input_type,allow_custom_value)")
+    .eq("store_id", storeId)
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true });
+
+  if (groupId) query = query.eq("group_id", groupId);
+
+  return throwIfError(await query, "Não foi possível listar valores de opção.");
+}
+
+export async function adminSaveProductOptionValue(payload) {
+  const sanitized = sanitizeProductOptionValuePayload(payload);
+  const result = payload.id
+    ? await supabase.from("product_option_values").update(sanitized).eq("id", payload.id).select("*").single()
+    : await supabase.from("product_option_values").insert(sanitized).select("*").single();
+
+  return throwIfError(result, "Não foi possível salvar o valor de opção.");
+}
+
+export async function adminDeactivateProductOptionValue(id) {
+  const result = await supabase
+    .from("product_option_values")
+    .update({ is_active: false, updated_at: nowIso() })
+    .eq("id", id);
+  return throwIfError(result, "Não foi possível desativar o valor de opção.");
+}
+
+export async function adminListProductOptionSelections(storeId, productId) {
+  if (!productId) return [];
+  const result = await supabase
+    .from("product_option_selections")
+    .select("*, group:product_option_groups(id,name,slug,type,input_type,allow_custom_value), value:product_option_values(id,label,value,description)")
+    .eq("store_id", storeId)
+    .eq("product_id", productId)
+    .order("sort_order", { ascending: true });
+
+  return throwIfError(result, "Não foi possível listar as opções do produto.");
+}
+
+export async function adminSaveProductOptionSelections(storeId, productId, selections = []) {
+  const deleteResult = await supabase
+    .from("product_option_selections")
+    .delete()
+    .eq("store_id", storeId)
+    .eq("product_id", productId);
+
+  throwIfError(deleteResult, "Não foi possível limpar as opções antigas do produto.");
+
+  const payload = selections
+    .filter((selection) => selection?.group_id && (selection.value_id || selection.custom_value))
+    .map((selection, index) => ({
+      store_id: storeId,
+      product_id: productId,
+      group_id: selection.group_id,
+      value_id: selection.value_id || null,
+      custom_value: selection.custom_value || null,
+      sort_order: Number(selection.sort_order ?? index)
+    }));
+
+  if (!payload.length) return [];
+
+  const result = await supabase
+    .from("product_option_selections")
+    .insert(payload)
+    .select("*, group:product_option_groups(id,name,slug,type,input_type,allow_custom_value), value:product_option_values(id,label,value,description)");
+
+  return throwIfError(result, "Não foi possível salvar as opções do produto.");
+}
+
 export async function adminCreateProduct(payload) {
   const result = await supabase
     .from("products")

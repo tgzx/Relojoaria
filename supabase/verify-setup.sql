@@ -23,11 +23,14 @@ where table_schema = 'public'
     'notifications',
     'audit_logs',
     'future_carts',
-    'future_cart_items'
+    'future_cart_items',
+    'product_option_groups',
+    'product_option_values',
+    'product_option_selections'
   )
 order by table_name;
 
--- 2) Contagem esperada de tabelas publicas principais = 16
+-- 2) Contagem esperada de tabelas publicas principais = 19
 select
   count(*) as public_table_count
 from information_schema.tables
@@ -48,7 +51,10 @@ where table_schema = 'public'
     'notifications',
     'audit_logs',
     'future_carts',
-    'future_cart_items'
+    'future_cart_items',
+    'product_option_groups',
+    'product_option_values',
+    'product_option_selections'
   );
 
 -- 3) RLS ativo nas tabelas publicas principais
@@ -76,7 +82,10 @@ where n.nspname = 'public'
     'notifications',
     'audit_logs',
     'future_carts',
-    'future_cart_items'
+    'future_cart_items',
+    'product_option_groups',
+    'product_option_values',
+    'product_option_selections'
   )
 order by c.relname;
 
@@ -97,7 +106,9 @@ where n.nspname = 'public'
     'increment_product_view',
     'increment_product_interest',
     'public_upsert_push_subscription',
-    'public_deactivate_push_subscription'
+    'public_deactivate_push_subscription',
+    'validate_product_option_value_store',
+    'validate_product_option_selection_store'
   )
 order by p.proname;
 
@@ -164,6 +175,9 @@ select
   (select count(*) from public.product_images pi where pi.store_id = s.id) as product_images_count,
   (select count(*) from public.banners ba where ba.store_id = s.id) as banners_count,
   (select count(*) from public.notifications n where n.store_id = s.id) as notifications_count,
-  (select count(*) from public.push_subscriptions ps where ps.store_id = s.id) as push_subscriptions_count
+  (select count(*) from public.push_subscriptions ps where ps.store_id = s.id) as push_subscriptions_count,
+  (select count(*) from public.product_option_groups pog where pog.store_id = s.id) as product_option_groups_count,
+  (select count(*) from public.product_option_values pov where pov.store_id = s.id) as product_option_values_count,
+  (select count(*) from public.product_option_selections pos where pos.store_id = s.id) as product_option_selections_count
 from public.stores s
 order by s.created_at desc;

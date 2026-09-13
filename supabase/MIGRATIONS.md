@@ -236,3 +236,17 @@ Não versionar nem registrar em caderno/vault:
 - anon key completa, exceto em arquivo de config pública quando a estratégia de deploy assim exigir;
 - tokens;
 - secrets VAPID/cron.
+
+## 20260517000000_product_options_catalog.sql
+
+Adiciona o catálogo gerenciável de características e variações de produto:
+
+- `product_option_groups`: grupos por loja, separados por `attribute` e `variant`;
+- `product_option_values`: valores disponíveis por grupo;
+- `product_option_selections`: valores selecionados por produto;
+- triggers de `updated_at`;
+- validações de consistência de loja/grupo/produto/valor;
+- RLS/policies seguindo o padrão de `products`, `categories` e `brands`;
+- índices por loja, tipo, grupo, status ativo e produto.
+
+A migration mantém `products.attributes` e `products.variants` por compatibilidade. O admin passa a usar o catálogo como caminho principal, mas o payload final ainda preserva JSON compatível para a vitrine e rollback funcional.

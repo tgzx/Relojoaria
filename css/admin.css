@@ -1975,3 +1975,119 @@ th {
     backdrop-filter: blur(12px);
   }
 }
+
+/* Product options manager */
+.options-manager-grid {
+  align-items: start;
+}
+
+.option-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.option-summary-grid article {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  background: var(--admin-surface-muted);
+}
+
+.option-summary-grid strong {
+  font-family: var(--admin-font-serif);
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.option-switch-list {
+  display: grid;
+  gap: 10px;
+}
+
+.option-list-item .tag-list {
+  margin-top: 12px;
+}
+
+.product-option-picker {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--admin-surface-muted) 72%, #ffffff);
+}
+
+.product-option-field-list {
+  display: grid;
+  gap: 14px;
+}
+
+.product-option-field {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  background: var(--admin-surface);
+}
+
+.product-option-field legend {
+  padding: 0 6px;
+  color: var(--admin-text);
+  font-weight: 800;
+}
+
+.product-option-field select,
+.product-option-field input[type="text"] {
+  width: 100%;
+}
+
+.option-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-choice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: var(--admin-surface-muted);
+  cursor: pointer;
+}
+
+.option-choice-chip input {
+  width: auto;
+}
+
+.option-advanced-json {
+  border: 1px dashed var(--admin-border);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.option-advanced-json summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+@media (max-width: 759px) {
+  .option-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-option-picker,
+  .product-option-field {
+    padding: 12px;
+  }
+}
