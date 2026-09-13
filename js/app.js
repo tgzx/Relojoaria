@@ -986,6 +986,41 @@ function renderFavoritesSection() {
   grid.innerHTML = favoriteProducts.map((product) => renderProductCard(product)).join("");
 }
 
+function humanizeAttributeKey(key) {
+  return String(key || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b\p{L}/gu, (char) => char.toLocaleUpperCase("pt-BR"));
+}
+
+function formatAttributeValue(value, settings = {}) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (Array.isArray(value)) {
+    return value.map((item) => formatAttributeValue(item, settings)).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    if ("quantidade" in value && "valor_parcela" in value) {
+      const installments = Number(value.quantidade || 0);
+      const installmentValue = Number(value.valor_parcela || 0);
+      const interestLabel = value.sem_juros === false ? "" : "sem juros ";
+      if (installments && installmentValue) {
+        return installments + "x " + interestLabel + "de " + formatCurrency(installmentValue, settings.currency, settings.locale);
+      }
+    }
+
+    return Object.entries(value)
+      .map(([nestedKey, nestedValue]) => {
+        const formattedValue = formatAttributeValue(nestedValue, settings);
+        return formattedValue ? humanizeAttributeKey(nestedKey) + ": " + formattedValue : "";
+      })
+      .filter(Boolean)
+      .join(" · ");
+  }
+  return String(value);
+}
+
 function renderProductCard(product, options = {}) {
   const settings = appState.settings || {};
   const productUrl = `${window.location.origin}${window.location.pathname}#produto-${product.slug}`;
@@ -1142,7 +1177,12 @@ function renderProductModal(product) {
     storeSettings: settings,
     pageUrl: `${window.location.origin}${window.location.pathname}#produto-${product.slug}`
   });
-  const attributes = Object.entries(product.attributes || {});
+  const attributes = Object.entries(product.attributes || {})
+    .map(([key, value]) => ({
+      label: humanizeAttributeKey(key),
+      value: formatAttributeValue(value, settings)
+    }))
+    .filter((attribute) => attribute.value);
   const variants = Array.isArray(product.variants) ? product.variants : [];
 
   content.innerHTML = `
@@ -1225,7 +1265,9 @@ function renderProductModal(product) {
                 <strong>Características</strong>
                 <div class="attribute-list">
                   ${attributes
-                    .map(([key, value]) => `<span class="mini-pill">${escapeHtml(key)}: ${escapeHtml(String(value))}</span>`)
+                    .map(
+                      ({ label, value }) => `<span class="mini-pill">${escapeHtml(label)}: ${escapeHtml(value)}</span>`
+                    )
                     .join("")}
                 </div>
               </div>
