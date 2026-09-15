@@ -18,6 +18,7 @@ import {
   escapeHtml,
   formatCurrency,
   getFavorites,
+  getOrderedProductImages,
   getPrimaryImage,
   isFavorite,
   parseJsonSafe,
@@ -377,7 +378,7 @@ function renderHero() {
           .map(
             (brand) => `
               <article class="brand-chip">
-                <img src="${escapeHtml(brand.logo_url || "./assets/placeholders/product-placeholder.svg")}" alt="${escapeHtml(brand.name)}" />
+                <img src="${escapeHtml(brand.logo_url || "./assets/placeholders/product-placeholder.svg")}" alt="${escapeHtml(brand.name)}" loading="lazy" decoding="async" />
                 <strong>${escapeHtml(brand.name)}</strong>
                 <small>Marca disponível na vitrine</small>
               </article>
@@ -833,9 +834,20 @@ async function loadCatalogProducts({ reset, forceNetwork = false }) {
     `;
   }
 
+  const normalizedSearch = appState.filters.search.trim().toLocaleLowerCase("pt-BR");
   const requestParams = {
     storeId: appState.store.id,
     search: appState.filters.search,
+    searchCategoryIds: normalizedSearch
+      ? appState.categories
+          .filter((category) => String(category.name || "").toLocaleLowerCase("pt-BR").includes(normalizedSearch))
+          .map((category) => category.id)
+      : [],
+    searchBrandIds: normalizedSearch
+      ? appState.brands
+          .filter((brand) => String(brand.name || "").toLocaleLowerCase("pt-BR").includes(normalizedSearch))
+          .map((brand) => brand.id)
+      : [],
     categoryId: appState.filters.categoryId,
     brandId: appState.filters.brandId,
     flags: {
@@ -1041,6 +1053,7 @@ function renderProductCard(product, options = {}) {
           src="${escapeHtml(getPrimaryImage(product))}"
           alt="${escapeHtml(product.name)}"
           loading="lazy"
+          decoding="async"
         />
         <div class="product-card__badges">
           ${badges
@@ -1129,7 +1142,7 @@ async function openProductModal(slug) {
   try {
     const cacheKey = buildCacheKey("product", APP_CONFIG.STORE_SLUG, slug);
     const cached = readDataCache(cacheKey, { storage: "session" });
-    let product = findLoadedProductBySlug(slug) || (cached?.fresh ? cached.payload : null);
+    let product = cached?.fresh ? cached.payload : null;
 
     if (!product) {
       if (!navigator.onLine && cached?.payload) {
@@ -1153,7 +1166,9 @@ async function openProductModal(slug) {
     appState.currentModalProduct = product;
     storeViewedProduct(product);
     renderProductModal(product);
-    incrementProductView(product.id).catch(() => {});
+    if (shouldTrackProductView(product.id)) {
+      incrementProductView(product.id).catch(() => {});
+    }
   } catch (error) {
     console.error(error);
     content.innerHTML = `
@@ -1169,7 +1184,7 @@ function renderProductModal(product) {
   const content = qs("#product-modal-content");
   const settings = appState.settings || {};
   const images = product.images?.length
-    ? [...product.images].sort((left, right) => (left.sort_order || 0) - (right.sort_order || 0))
+    ? getOrderedProductImages(product)
     : [{ image_url: "./assets/placeholders/product-placeholder.svg", alt_text: product.name }];
   const mainImage = images[0];
   const whatsappLink = buildWhatsAppLink({
@@ -1189,7 +1204,7 @@ function renderProductModal(product) {
     <div class="product-modal__grid">
       <div class="product-modal__gallery">
         <figure class="product-modal__main-image">
-          <img id="modal-main-image" src="${escapeHtml(mainImage.image_url)}" alt="${escapeHtml(mainImage.alt_text || product.name)}" />
+          <img id="modal-main-image" src="${escapeHtml(mainImage.image_url)}" alt="${escapeHtml(mainImage.alt_text || product.name)}" decoding="async" />
         </figure>
         <div class="product-modal__thumbs">
           ${images
@@ -1202,7 +1217,7 @@ function renderProductModal(product) {
                   data-image-url="${escapeHtml(image.image_url)}"
                   data-alt-text="${escapeHtml(image.alt_text || product.name)}"
                 >
-                  <img src="${escapeHtml(image.image_url)}" alt="${escapeHtml(image.alt_text || product.name)}" />
+                  <img src="${escapeHtml(image.image_url)}" alt="${escapeHtml(image.alt_text || product.name)}" loading="lazy" decoding="async" />
                 </button>
               `
             )
@@ -1292,17 +1307,20 @@ function renderProductModal(product) {
   `;
 }
 
-function findLoadedProductBySlug(slug) {
-  const catalogProduct = appState.products.find((product) => product.slug === slug);
-  if (catalogProduct) return catalogProduct;
+function shouldTrackProductView(productId, ttlMs = 6 * 60 * 60 * 1000) {
+  if (!productId) return false;
 
-  for (const section of appState.sections) {
-    const product = (section.products || []).find((item) => item.slug === slug);
-    if (product) return product;
+  const key = `vitrinezap:view:${APP_CONFIG.STORE_SLUG}:${productId}`;
+  try {
+    const lastTrackedAt = Number(localStorage.getItem(key) || 0);
+    if (lastTrackedAt && Date.now() - lastTrackedAt < ttlMs) return false;
+    localStorage.setItem(key, String(Date.now()));
+    return true;
+  } catch {
+    return true;
   }
-
-  return null;
 }
+
 function closeProductModal() {
   const modal = qs("#product-modal");
   modal.classList.add("is-hidden");

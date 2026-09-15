@@ -1,7 +1,32 @@
 import { supabase } from "./supabaseClient.js";
 import { buildStorageFileName, normalizeProduct, parseJsonSafe } from "./utils.js";
 
-const PUBLIC_PRODUCT_SELECT = `
+const PUBLIC_PRODUCT_CARD_SELECT = `
+  id,
+  store_id,
+  category_id,
+  brand_id,
+  name,
+  slug,
+  sku,
+  short_description,
+  price,
+  old_price,
+  stock_quantity,
+  stock_status,
+  is_featured,
+  is_new,
+  is_best_seller,
+  is_promotion,
+  allow_whatsapp_cta,
+  tags,
+  sort_order,
+  category:categories(id,name,slug),
+  brand:brands(id,name,slug),
+  images:product_images(id,image_url,alt_text,is_primary,sort_order)
+`;
+
+const PUBLIC_PRODUCT_DETAIL_SELECT = `
   id,
   store_id,
   category_id,
@@ -36,13 +61,20 @@ const PUBLIC_PRODUCT_SELECT = `
 `;
 
 const ADMIN_PRODUCT_SELECT = `
-  ${PUBLIC_PRODUCT_SELECT},
+  ${PUBLIC_PRODUCT_DETAIL_SELECT},
   cost_price
 `;
 
 function throwIfError(result, fallbackMessage) {
   if (result.error) {
     throw result.error;
+  }
+  return result.data;
+}
+
+function throwHumanizedError(result, fallbackMessage) {
+  if (result.error) {
+    throw new Error(fallbackMessage, { cause: result.error });
   }
   return result.data;
 }
@@ -123,7 +155,7 @@ export async function getPublicHomeData(storeSlug) {
             id,
             sort_order,
             product:products(
-              ${PUBLIC_PRODUCT_SELECT}
+              ${PUBLIC_PRODUCT_CARD_SELECT}
             )
           )
         `
@@ -184,6 +216,8 @@ export async function getPublicHomeData(storeSlug) {
 export async function getProducts({
   storeId,
   search = "",
+  searchCategoryIds = [],
+  searchBrandIds = [],
   categoryId = "",
   brandId = "",
   flags = {},
@@ -195,7 +229,7 @@ export async function getProducts({
 }) {
   let query = supabase
     .from("products")
-    .select(PUBLIC_PRODUCT_SELECT, { count: "exact" })
+    .select(PUBLIC_PRODUCT_CARD_SELECT, { count: "exact" })
     .eq("store_id", storeId)
     .eq("is_active", true)
     .eq("is_archived", false);
@@ -208,14 +242,25 @@ export async function getProducts({
   if (Number.isFinite(Number(priceMax)) && priceMax !== "") query = query.lte("price", Number(priceMax));
 
   if (search) {
-    query = query.or(
-      [
-        `name.ilike.%${search}%`,
-        `short_description.ilike.%${search}%`,
-        `description.ilike.%${search}%`,
-        `sku.ilike.%${search}%`
-      ].join(",")
-    );
+    const safeSearch = String(search).replace(/[,%(){}"\\]/g, " ").trim();
+    const searchFilters = [
+      `name.ilike.%${safeSearch}%`,
+      `short_description.ilike.%${safeSearch}%`,
+      `description.ilike.%${safeSearch}%`,
+      `sku.ilike.%${safeSearch}%`
+    ];
+
+    if (safeSearch && !safeSearch.includes(" ")) {
+      searchFilters.push(`tags.cs.{${safeSearch}}`);
+    }
+    if (searchCategoryIds.length) {
+      searchFilters.push(`category_id.in.(${searchCategoryIds.join(",")})`);
+    }
+    if (searchBrandIds.length) {
+      searchFilters.push(`brand_id.in.(${searchBrandIds.join(",")})`);
+    }
+
+    query = query.or(searchFilters.join(","));
   }
 
   switch (sort) {
@@ -244,38 +289,21 @@ export async function getProducts({
       break;
   }
 
-  const effectiveLimit = search ? Math.max(limit, 48) : limit;
-  const result = await query.range(offset, offset + effectiveLimit - 1);
+  const result = await query.range(offset, offset + limit - 1);
   const rows = mapProducts(throwIfError(result, "Não foi possível carregar os produtos."));
-  const normalizedSearch = search.trim().toLowerCase();
-  const filtered = normalizedSearch
-    ? rows.filter((product) =>
-        [
-          product.name,
-          product.short_description,
-          product.description,
-          product.brand?.name,
-          product.category?.name,
-          ...(product.tags || [])
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearch)
-      )
-    : rows;
+  const count = result.count || 0;
 
   return {
-    data: filtered.slice(0, limit),
-    count: result.count || filtered.length,
-    hasMore: offset + filtered.length < (result.count || filtered.length)
+    data: rows,
+    count,
+    hasMore: offset + rows.length < count
   };
 }
 
 export async function getProductBySlug(storeId, slug) {
   const result = await supabase
     .from("products")
-    .select(PUBLIC_PRODUCT_SELECT)
+    .select(PUBLIC_PRODUCT_DETAIL_SELECT)
     .eq("store_id", storeId)
     .eq("slug", slug)
     .eq("is_active", true)
@@ -479,9 +507,60 @@ export async function adminArchiveProduct(id) {
   throwIfError(result, "Não foi possível arquivar o produto.");
 }
 
+async function cleanupUnreferencedStoragePaths(paths = []) {
+  const uniquePaths = Array.from(new Set(paths.filter(Boolean)));
+  if (!uniquePaths.length) return { removed: [], retained: [], failed: [] };
+
+  const bucket = supabase.storage.from("product-images");
+  const cleanup = { removed: [], retained: [], failed: [] };
+
+  for (const storagePath of uniquePaths) {
+    const [productReferences, bannerReferences] = await Promise.all([
+      supabase
+        .from("product_images")
+        .select("id", { count: "exact", head: true })
+        .eq("storage_path", storagePath),
+      supabase
+        .from("banners")
+        .select("id", { count: "exact", head: true })
+        .eq("storage_path", storagePath)
+    ]);
+
+    const referenceError = productReferences.error || bannerReferences.error;
+    if (referenceError) {
+      cleanup.failed.push({ path: storagePath, reason: referenceError.message || "reference-check-failed" });
+      continue;
+    }
+
+    const referenceCount = (productReferences.count || 0) + (bannerReferences.count || 0);
+    if (referenceCount > 0) {
+      cleanup.retained.push(storagePath);
+      continue;
+    }
+
+    const removeResult = await bucket.remove([storagePath]);
+    if (removeResult.error) {
+      cleanup.failed.push({ path: storagePath, reason: removeResult.error.message || "storage-remove-failed" });
+      continue;
+    }
+
+    cleanup.removed.push(storagePath);
+  }
+
+  return cleanup;
+}
 export async function adminDeleteProduct(id) {
+  const imagesResult = await supabase
+    .from("product_images")
+    .select("storage_path")
+    .eq("product_id", id);
+  const imageRows = throwIfError(imagesResult, "Não foi possível preparar a limpeza das imagens do produto.");
+  const storagePaths = (imageRows || []).map((image) => image.storage_path).filter(Boolean);
+
   const result = await supabase.from("products").delete().eq("id", id);
   throwIfError(result, "Não foi possível excluir o produto.");
+
+  return cleanupUnreferencedStoragePaths(storagePaths);
 }
 
 export async function adminBulkUpdateProducts(ids = [], patch = {}) {
@@ -502,7 +581,8 @@ export async function uploadProductImage(file, storeId, productId) {
 
   const uploadResult = await bucket.upload(path, file, {
     upsert: false,
-    contentType: file.type
+    contentType: file.type,
+    cacheControl: "31536000"
   });
 
   throwIfError(uploadResult, "Não foi possível enviar a imagem.");
@@ -521,7 +601,8 @@ export async function uploadBannerImage(file, storeId) {
 
   const uploadResult = await bucket.upload(path, file, {
     upsert: false,
-    contentType: file.type
+    contentType: file.type,
+    cacheControl: "31536000"
   });
 
   throwIfError(uploadResult, "Não foi possível enviar a imagem do banner.");
@@ -535,17 +616,38 @@ export async function uploadBannerImage(file, storeId) {
 
 export async function createProductImageRecord(payload) {
   const result = await supabase.from("product_images").insert(payload).select("*").single();
+  return throwHumanizedError(result, "Não foi possível salvar o registro da imagem.");
+}
+
+export async function createUploadedProductImageRecord(payload) {
+  const result = await supabase.rpc("create_product_image_record", {
+    target_product_id: payload.product_id,
+    target_image_url: payload.image_url,
+    target_storage_path: payload.storage_path || null,
+    target_alt_text: payload.alt_text || null,
+    target_sort_order: Number(payload.sort_order || 0)
+  });
   return throwIfError(result, "Não foi possível salvar o registro da imagem.");
 }
 
-export async function adminUpdateProductImage(id, payload) {
-  const result = await supabase.from("product_images").update(payload).eq("id", id).select("*").single();
-  return throwIfError(result, "Não foi possível atualizar a imagem do produto.");
+export async function adminSetPrimaryProductImage(productId, imageId) {
+  const result = await supabase.rpc("set_product_primary_image", {
+    target_product_id: productId,
+    target_image_id: imageId
+  });
+  return throwHumanizedError(result, "Não foi possível atualizar a imagem principal do produto.");
 }
 
+
 export async function adminDeleteProductImage(id) {
-  const result = await supabase.from("product_images").delete().eq("id", id);
-  throwIfError(result, "Não foi possível excluir a imagem do produto.");
+  const result = await supabase.rpc("delete_product_image_and_promote", {
+    target_image_id: id
+  });
+  const payload = throwHumanizedError(result, "Não foi possível excluir a imagem do produto.") || {};
+  const image = payload.deleted_image || null;
+  const promotedImage = payload.promoted_image || null;
+  const cleanup = await cleanupUnreferencedStoragePaths([image?.storage_path]);
+  return { image, promotedImage, cleanup };
 }
 
 export async function adminListSections(storeId) {
@@ -796,16 +898,38 @@ export async function adminListBanners(storeId) {
 }
 
 export async function adminSaveBanner(payload) {
+  let previousStoragePath = null;
+  if (payload.id) {
+    const previousResult = await supabase
+      .from("banners")
+      .select("storage_path")
+      .eq("id", payload.id)
+      .single();
+    previousStoragePath = (throwIfError(previousResult, "Não foi possível localizar o banner atual."))?.storage_path || null;
+  }
+
   const mutation = payload.id
     ? supabase.from("banners").update(payload).eq("id", payload.id).select("*").single()
     : supabase.from("banners").insert(payload).select("*").single();
 
-  return throwIfError(await mutation, "Não foi possível salvar o banner.");
+  const banner = throwIfError(await mutation, "Não foi possível salvar o banner.");
+  const replacedPaths = previousStoragePath && previousStoragePath !== banner.storage_path ? [previousStoragePath] : [];
+  const cleanup = await cleanupUnreferencedStoragePaths(replacedPaths);
+  return { banner, cleanup };
 }
 
 export async function adminDeleteBanner(id) {
+  const previousResult = await supabase
+    .from("banners")
+    .select("storage_path")
+    .eq("id", id)
+    .single();
+  const storagePath = (throwIfError(previousResult, "Não foi possível localizar o banner."))?.storage_path || null;
+
   const result = await supabase.from("banners").delete().eq("id", id);
   throwIfError(result, "Não foi possível excluir o banner.");
+
+  return cleanupUnreferencedStoragePaths([storagePath]);
 }
 
 export async function adminListNotifications(storeId) {
@@ -868,14 +992,14 @@ async function getFunctionErrorMessage(error, fallbackMessage) {
 export async function adminListPushSubscriptionsSummary(storeId) {
   const result = await supabase
     .from("push_subscriptions")
-    .select("id,is_active,created_at", { count: "exact" })
+    .select("id", { count: "exact", head: true })
     .eq("store_id", storeId)
     .eq("is_active", true);
 
   throwIfError(result, "Não foi possível carregar o resumo de inscritos.");
   return {
     count: result.count || 0,
-    data: result.data || []
+    data: []
   };
 }
 

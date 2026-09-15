@@ -254,13 +254,21 @@ export function buildWhatsAppLink({ product, storeSettings, customMessage, pageU
   return `https://wa.me/${number}?text=${encodeURIComponent(defaultMessage)}`;
 }
 
-export function getPrimaryImage(product) {
+export function getOrderedProductImages(product) {
   const images = Array.isArray(product?.images) ? [...product.images] : [];
-  const ordered = images.sort((left, right) => {
+  return images.sort((left, right) => {
     if (left.is_primary && !right.is_primary) return -1;
     if (!left.is_primary && right.is_primary) return 1;
-    return (left.sort_order || 0) - (right.sort_order || 0);
+
+    const sortOrderDiff = Number(left.sort_order || 0) - Number(right.sort_order || 0);
+    if (sortOrderDiff !== 0) return sortOrderDiff;
+
+    return String(left.id || "").localeCompare(String(right.id || ""));
   });
+}
+
+export function getPrimaryImage(product) {
+  const ordered = getOrderedProductImages(product);
 
   return (
     ordered[0]?.image_url ||

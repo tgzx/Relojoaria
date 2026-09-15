@@ -1,5 +1,6 @@
 import { APP_CONFIG } from "./config.js";
 import { invalidateStorefrontCache } from "./dataCache.js";
+import { optimizeImageForUpload } from "./imageOptimization.js";
 import { supabase } from "./supabaseClient.js";
 import {
   adminBulkUpdateProducts,
@@ -34,9 +35,10 @@ import {
   adminSaveStoreSettings,
   adminSendNotification,
   adminUpdateProduct,
-  adminUpdateProductImage,
+  adminSetPrimaryProductImage,
   adminUpdateStore,
   createProductImageRecord,
+  createUploadedProductImageRecord,
   getCurrentUserProfile,
   getStoreSettings,
   getMyStoreMemberships,
@@ -159,7 +161,8 @@ const adminState = {
   passwordRecoveryActive: false,
   isPasswordChangeOpen: false,
   isSavingProduct: false,
-  productSaveMode: null
+  productSaveMode: null,
+  productImageOperation: null
 };
 
 const openAdminModalKeys = new Set();
@@ -394,7 +397,9 @@ async function loadAdminData() {
 
     const settingsPromise = withTimeout(getStoreSettings(membership.store.id).catch(() => null), 10000, "getStoreSettings");
     const productsPromise = withTimeout(adminListProducts(membership.store.id, {}), 10000, "adminListProducts");
-    const filteredProductsPromise = withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListFilteredProducts");
+    const filteredProductsPromise = hasActiveProductFilters()
+      ? withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListFilteredProducts")
+      : productsPromise;
     const categoriesPromise = withTimeout(adminListCategories(membership.store.id), 10000, "adminListCategories");
     const brandsPromise = withTimeout(adminListBrands(membership.store.id), 10000, "adminListBrands");
     const optionGroupsPromise = withTimeout(adminListProductOptionGroups(membership.store.id), 10000, "adminListProductOptionGroups");
@@ -1080,7 +1085,7 @@ function renderProducts() {
                           </td>
                           <td>
                             <div class="product-line">
-                              <img class="product-thumb" src="${escapeHtml(getPrimaryImage(product))}" alt="${escapeHtml(product.name)}" />
+                              <img class="product-thumb" src="${escapeHtml(getPrimaryImage(product))}" alt="${escapeHtml(product.name)}" loading="lazy" decoding="async" />
                               <div class="product-line__copy">
                                 <strong>${escapeHtml(product.name)}</strong>
                                 <small>${escapeHtml(product.sku || product.slug)} · ${escapeHtml(product.category?.name || "Sem categoria")}</small>
@@ -1716,7 +1721,7 @@ function renderAppearanceManager() {
             <div class="editor-preview-hero-veil" aria-hidden="true"></div>
             <div class="editor-preview-hero-copy">
               <span class="section-kicker">Hero da vitrine</span>
-              <img src="${escapeHtml(previewBanner?.image_url || adminState.store.logo_url || "./assets/placeholders/product-placeholder.svg")}" alt="Prévia do banner" />
+              <img src="${escapeHtml(previewBanner?.image_url || adminState.store.logo_url || "./assets/placeholders/product-placeholder.svg")}" alt="Prévia do banner" decoding="async" />
             </div>
             <strong>${escapeHtml(previewBanner?.title || adminState.store.name)}</strong>
             <p>${escapeHtml(previewBanner?.subtitle || adminState.store.slogan || "Configure um banner ou use o logo da loja como destaque inicial.")}</p>
@@ -3007,6 +3012,7 @@ function getVisibleProducts() {
 function openProductEditor(productId = null) {
   adminState.productEditorStep = 1;
   adminState.pendingProductFiles = [];
+  adminState.productImageOperation = null;
   adminState.editingProduct = productId
     ? structuredClone(findProductById(productId))
     : createEmptyProductDraft();
@@ -3256,6 +3262,9 @@ function renderProductEditor() {
   const isSavingProduct = adminState.isSavingProduct;
   const isSavingDraft = isSavingProduct && adminState.productSaveMode === "draft";
   const isPublishingProduct = isSavingProduct && adminState.productSaveMode === "publish";
+  const imageOperation = adminState.productImageOperation;
+  const isImageOperationBusy = Boolean(imageOperation);
+  const isEditorBusy = isSavingProduct || isImageOperationBusy;
   let root = qs("#admin-modal-root");
   if (!root) {
     root = document.createElement("div");
@@ -3266,13 +3275,13 @@ function renderProductEditor() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="editor-backdrop"></div>
-    <section class="editor-shell product-editor-shell ${isSavingProduct ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isSavingProduct ? "true" : "false"}">
+    <section class="editor-shell product-editor-shell ${isEditorBusy ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isEditorBusy ? "true" : "false"}">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Cadastro em etapas</span>
           <h2 id="product-editor-title">${draft.id ? "Editar produto" : "Novo produto"}</h2>
         </div>
-        <button class="modal-close-button" type="button" id="close-editor-button" aria-label="Fechar editor de produto" ${isSavingProduct ? "disabled" : ""}>×</button>
+        <button class="modal-close-button" type="button" id="close-editor-button" aria-label="Fechar editor de produto" ${isEditorBusy ? "disabled" : ""}>×</button>
       </header>
       <div class="editor-body">
         <div class="editor-progress">
@@ -3282,7 +3291,7 @@ function renderProductEditor() {
           ${[1, 2, 3, 4, 5]
             .map(
               (step) => `
-                <button class="${adminState.productEditorStep === step ? "is-active" : ""}" type="button" data-editor-step="${step}" ${isSavingProduct ? "disabled" : ""}>
+                <button class="${adminState.productEditorStep === step ? "is-active" : ""}" type="button" data-editor-step="${step}" ${isEditorBusy ? "disabled" : ""}>
                   Etapa ${step}
                 </button>
               `
@@ -3396,7 +3405,7 @@ function renderProductEditor() {
             <div class="editor-step ${adminState.productEditorStep === 4 ? "is-active" : ""}" data-step="4">
               <label class="admin-field">
                 <span>Novas imagens</span>
-                <input type="file" id="product-images-input" multiple accept=".jpg,.jpeg,.png,.webp" ${isSavingProduct ? "disabled" : ""} />
+                <input type="file" id="product-images-input" multiple accept=".jpg,.jpeg,.png,.webp" ${isEditorBusy ? "disabled" : ""} />
               </label>
               ${
                 adminState.pendingProductFiles.length
@@ -3422,7 +3431,7 @@ function renderProductEditor() {
                                   class="btn btn-danger"
                                   type="button"
                                   data-remove-pending-image="${escapeHtml(getPendingProductFileKey(file))}"
-                                  ${isSavingProduct ? "disabled" : ""}
+                                  ${isEditorBusy ? "disabled" : ""}
                                 >
                                   Remover da fila
                                 </button>
@@ -3441,15 +3450,15 @@ function renderProductEditor() {
                     (image) => `
                       <article class="list-item">
                         <div class="product-line">
-                          <img class="product-thumb" src="${escapeHtml(image.image_url)}" alt="${escapeHtml(image.alt_text || draft.name || "Imagem do produto")}" />
+                          <img class="product-thumb" src="${escapeHtml(image.image_url)}" alt="${escapeHtml(image.alt_text || draft.name || "Imagem do produto")}" loading="lazy" decoding="async" />
                           <div class="product-line__copy">
                             <strong>${escapeHtml(image.alt_text || draft.name || "Imagem")}</strong>
                             <small>${image.is_primary ? "Imagem principal" : "Imagem auxiliar"}</small>
                           </div>
                         </div>
                         <div class="list-item-footer">
-                          <button class="btn btn-secondary" type="button" data-primary-image="${escapeHtml(image.id)}" ${isSavingProduct ? "disabled" : ""}>Definir principal</button>
-                          <button class="btn btn-danger" type="button" data-delete-image="${escapeHtml(image.id)}" ${isSavingProduct ? "disabled" : ""}>Remover</button>
+                          <button class="btn btn-secondary" type="button" data-primary-image="${escapeHtml(image.id)}" ${isEditorBusy || image.is_primary ? "disabled" : ""}>${image.is_primary ? "Principal" : imageOperation?.type === "set-primary" && imageOperation.imageId === image.id ? "Atualizando..." : "Definir principal"}</button>
+                          <button class="btn btn-danger" type="button" data-delete-image="${escapeHtml(image.id)}" ${isEditorBusy ? "disabled" : ""}>${imageOperation?.type === "delete" && imageOperation.imageId === image.id ? "Removendo..." : "Remover"}</button>
                         </div>
                       </article>
                     `
@@ -3490,7 +3499,7 @@ function renderProductEditor() {
             <span class="section-kicker">Prévia do card</span>
             <div class="editor-preview-card">
               <div class="editor-preview-media">
-                <img src="${escapeHtml(currentImage)}" alt="Prévia do produto" />
+                <img src="${escapeHtml(currentImage)}" alt="Prévia do produto" decoding="async" />
               </div>
               <strong>${escapeHtml(draft.name || "Nome do produto")}</strong>
               <span>${escapeHtml(draft.brand?.name || adminState.brands.find((brand) => brand.id === draft.brand_id)?.name || "Marca")}</span>
@@ -3502,17 +3511,17 @@ function renderProductEditor() {
       </div>
       <footer class="editor-footer">
         <div class="editor-footer-actions">
-          <button class="btn btn-ghost" type="button" id="editor-cancel-button" ${isSavingProduct ? "disabled" : ""}>Cancelar</button>
-          <button class="btn btn-secondary" type="button" id="editor-prev-button" ${adminState.productEditorStep === 1 || isSavingProduct ? "disabled" : ""}>Voltar</button>
-          <button class="btn btn-secondary" type="button" id="editor-next-button" ${adminState.productEditorStep === 5 || isSavingProduct ? "disabled" : ""}>Próximo</button>
-          <button class="btn btn-secondary ${isSavingDraft ? "is-loading" : ""}" type="button" id="save-draft-product" ${isSavingProduct ? "disabled" : ""}>
+          <button class="btn btn-ghost" type="button" id="editor-cancel-button" ${isEditorBusy ? "disabled" : ""}>Cancelar</button>
+          <button class="btn btn-secondary" type="button" id="editor-prev-button" ${adminState.productEditorStep === 1 || isEditorBusy ? "disabled" : ""}>Voltar</button>
+          <button class="btn btn-secondary" type="button" id="editor-next-button" ${adminState.productEditorStep === 5 || isEditorBusy ? "disabled" : ""}>Próximo</button>
+          <button class="btn btn-secondary ${isSavingDraft ? "is-loading" : ""}" type="button" id="save-draft-product" ${isEditorBusy ? "disabled" : ""}>
             ${
               isSavingDraft
                 ? `<span class="btn__content"><span class="btn-spinner" aria-hidden="true"></span><span>Salvando...</span></span>`
                 : "Salvar rascunho"
             }
           </button>
-          <button class="btn btn-primary ${isPublishingProduct ? "is-loading" : ""}" type="button" id="save-publish-product" ${isSavingProduct ? "disabled" : ""}>
+          <button class="btn btn-primary ${isPublishingProduct ? "is-loading" : ""}" type="button" id="save-publish-product" ${isEditorBusy ? "disabled" : ""}>
             ${
               isPublishingProduct
                 ? `<span class="btn__content"><span class="btn-spinner" aria-hidden="true"></span><span>Publicando...</span></span>`
@@ -3660,24 +3669,25 @@ function persistEditorDraftFromDom() {
 }
 
 function changeProductEditorStep(delta) {
-  if (adminState.isSavingProduct) return;
+  if (adminState.isSavingProduct || adminState.productImageOperation) return;
   persistEditorDraftFromDom();
   adminState.productEditorStep = Math.max(1, Math.min(5, adminState.productEditorStep + delta));
   renderProductEditor();
 }
 
 function closeProductEditor(force = false) {
-  if (adminState.isSavingProduct && !force) return;
+  if ((adminState.isSavingProduct || adminState.productImageOperation) && !force) return;
   adminState.editingProduct = null;
   adminState.pendingProductFiles = [];
   adminState.isSavingProduct = false;
   adminState.productSaveMode = null;
+  adminState.productImageOperation = null;
   qs("#admin-modal-root").innerHTML = "";
   setAdminModalOpen("product-editor", false);
 }
 
 async function saveProduct(publish) {
-  if (adminState.isSavingProduct) return;
+  if (adminState.isSavingProduct || adminState.productImageOperation) return;
   persistEditorDraftFromDom();
   const draft = adminState.editingProduct;
   let savedProduct = null;
@@ -3780,16 +3790,31 @@ async function uploadProductImages(product) {
   for (let index = 0; index < filesToUpload.length; index += 1) {
     const file = filesToUpload[index];
     try {
-      const upload = await uploadProductImage(file, adminState.store.id, product.id);
-      const createdImage = await createProductImageRecord({
-        store_id: adminState.store.id,
-        product_id: product.id,
-        image_url: upload.publicUrl,
-        storage_path: upload.path,
-        alt_text: product.name,
-        is_primary: !existingImages.some((image) => image.is_primary) && index === 0,
-        sort_order: existingImages.length
-      });
+      const optimization = await optimizeImageForUpload(file, { maxDimension: 1600, quality: 0.9 });
+      const uploadFile = optimization.file;
+      const upload = await uploadProductImage(uploadFile, adminState.store.id, product.id);
+      if (optimization.optimized) {
+        console.info("Imagem otimizada antes do upload.", {
+          file: file.name,
+          originalBytes: optimization.originalSize,
+          optimizedBytes: optimization.optimizedSize,
+          originalDimensions: `${optimization.originalWidth}x${optimization.originalHeight}`,
+          outputDimensions: `${optimization.outputWidth}x${optimization.outputHeight}`
+        });
+      }
+      let createdImage;
+      try {
+        createdImage = await createUploadedProductImageRecord({
+          product_id: product.id,
+          image_url: upload.publicUrl,
+          storage_path: upload.path,
+          alt_text: product.name,
+          sort_order: existingImages.length
+        });
+      } catch (recordError) {
+        await supabase.storage.from("product-images").remove([upload.path]).catch(() => {});
+        throw recordError;
+      }
 
       createdImages.push(createdImage);
       existingImages.push(createdImage);
@@ -3811,54 +3836,72 @@ async function uploadProductImages(product) {
 
 async function setPrimaryProductImage(imageId) {
   const draft = adminState.editingProduct;
-  const images = draft.images || [];
-  await Promise.all(
-    images.map((image) =>
-      adminUpdateProductImage(image.id, {
-        is_primary: image.id === imageId
-      })
-    )
-  );
-  draft.images = images.map((image) => ({
-    ...image,
-    is_primary: image.id === imageId
-  }));
-  showToast("Imagem principal atualizada.", "success");
-  notifyStorefrontChanged("product-image-primary");
-  renderProductEditor();
-}
+  const images = draft?.images || [];
+  const targetImage = images.find((image) => image.id === imageId);
+  if (!draft?.id || !targetImage || targetImage.is_primary || adminState.productImageOperation) return;
 
-async function removeExistingProductImage(imageId) {
-  const proceed = window.confirm("Remover esta imagem do produto?");
-  if (!proceed) return;
-  const currentImages = [...(adminState.editingProduct.images || [])];
-  const removedImage = currentImages.find((image) => image.id === imageId);
-  let remainingImages = currentImages.filter((image) => image.id !== imageId);
-
-  if (removedImage?.is_primary && remainingImages.length) {
-    remainingImages = remainingImages.map((image, index) => ({
-      ...image,
-      is_primary: index === 0
-    }));
-  }
-
-  adminState.editingProduct.images = remainingImages;
+  adminState.productImageOperation = { type: "set-primary", imageId };
   renderProductEditor();
 
   try {
-    await adminDeleteProductImage(imageId);
+    const updatedImage = await adminSetPrimaryProductImage(draft.id, imageId);
+    draft.images = images.map((image) => ({
+      ...image,
+      ...(image.id === imageId ? updatedImage : {}),
+      is_primary: image.id === imageId
+    }));
+    showToast("Imagem principal atualizada.", "success");
+    notifyStorefrontChanged("product-image-primary");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "N?o foi poss?vel atualizar a imagem principal.", "danger");
+  } finally {
+    adminState.productImageOperation = null;
+    if (adminState.editingProduct) renderProductEditor();
+  }
+}
 
-    if (removedImage?.is_primary && remainingImages.length) {
-      await adminUpdateProductImage(remainingImages[0].id, { is_primary: true });
+async function removeExistingProductImage(imageId) {
+  if (adminState.productImageOperation) return;
+
+  const proceed = window.confirm("Remover esta imagem do produto?");
+  if (!proceed) return;
+
+  const currentImages = [...(adminState.editingProduct?.images || [])];
+  const removedImage = currentImages.find((image) => image.id === imageId);
+  if (!removedImage) return;
+
+  adminState.productImageOperation = { type: "delete", imageId };
+  renderProductEditor();
+
+  try {
+    const deleteResult = await adminDeleteProductImage(imageId);
+    const promotedImage = deleteResult?.promotedImage || null;
+    let remainingImages = currentImages.filter((image) => image.id !== imageId);
+
+    if (removedImage.is_primary) {
+      remainingImages = remainingImages.map((image) => ({
+        ...image,
+        ...(promotedImage?.id === image.id ? promotedImage : {}),
+        is_primary: Boolean(promotedImage?.id && promotedImage.id === image.id)
+      }));
     }
 
-    showToast("Imagem removida.", "warning");
+    adminState.editingProduct.images = remainingImages;
+
+    if (deleteResult?.cleanup?.failed?.length) {
+      console.warn("Imagem removida do cat?logo, mas houve falha ao limpar o arquivo no Storage.", deleteResult.cleanup.failed);
+      showToast("Imagem removida. Um arquivo ficou pendente de limpeza no Storage.", "warning");
+    } else {
+      showToast("Imagem removida.", "warning");
+    }
     notifyStorefrontChanged("product-image-remove");
   } catch (error) {
     console.error(error);
-    adminState.editingProduct.images = currentImages;
-    renderProductEditor();
-    showToast(error.message || "Não foi possível remover a imagem.", "danger");
+    showToast(error.message || "N?o foi poss?vel remover a imagem.", "danger");
+  } finally {
+    adminState.productImageOperation = null;
+    if (adminState.editingProduct) renderProductEditor();
   }
 }
 
@@ -3909,8 +3952,13 @@ async function duplicateProduct(productId) {
 async function deleteProduct(productId) {
   const proceed = window.confirm("Excluir este produto permanentemente?");
   if (!proceed) return;
-  await adminDeleteProduct(productId);
-  showToast("Produto excluído.", "warning");
+  const cleanup = await adminDeleteProduct(productId);
+  if (cleanup?.failed?.length) {
+    console.warn("Produto excluído, mas houve falha ao limpar arquivos órfãos no Storage.", cleanup.failed);
+    showToast("Produto excluído. Alguns arquivos ficaram pendentes de limpeza no Storage.", "warning");
+  } else {
+    showToast("Produto excluído.", "warning");
+  }
   notifyStorefrontChanged("product-delete");
   await refreshProductsAndSectionsData();
 }
@@ -4161,48 +4209,90 @@ async function saveBanner(event) {
   clearAdminFormDirty("appearance");
   const form = event.currentTarget;
   const data = new FormData(form);
+  const previousImageUrl = String(adminState.editingBanner?.image_url || "");
   let imageUrl = String(data.get("image_url") || "");
+  let storagePath = adminState.editingBanner?.storage_path || null;
+  let uploadedPath = null;
 
-  if (adminState.pendingBannerFile) {
-    const upload = await uploadBannerImage(adminState.pendingBannerFile, adminState.store.id);
-    imageUrl = upload.publicUrl;
+  try {
+    if (adminState.pendingBannerFile) {
+      const optimization = await optimizeImageForUpload(adminState.pendingBannerFile, { maxDimension: 1920, quality: 0.86 });
+      const upload = await uploadBannerImage(optimization.file, adminState.store.id);
+      if (optimization.optimized) {
+        console.info("Banner otimizado antes do upload.", {
+          file: adminState.pendingBannerFile.name,
+          originalBytes: optimization.originalSize,
+          optimizedBytes: optimization.optimizedSize,
+          originalDimensions: `${optimization.originalWidth}x${optimization.originalHeight}`,
+          outputDimensions: `${optimization.outputWidth}x${optimization.outputHeight}`
+        });
+      }
+      imageUrl = upload.publicUrl;
+      storagePath = upload.path;
+      uploadedPath = upload.path;
+    } else if (imageUrl !== previousImageUrl) {
+      storagePath = null;
+    }
+
+    const saveResult = await adminSaveBanner({
+      id: String(data.get("id") || "") || undefined,
+      store_id: adminState.store.id,
+      title: String(data.get("title") || ""),
+      subtitle: String(data.get("subtitle") || ""),
+      image_url: imageUrl,
+      storage_path: storagePath,
+      theme_preset: normalizeHeroThemeKey(String(data.get("theme_preset") || "classic-night")),
+      image_position: String(data.get("image_position") || "center center"),
+      image_fit: String(data.get("image_fit") || "cover"),
+      image_brightness: Number(data.get("image_brightness") || 0.92),
+      image_contrast: Number(data.get("image_contrast") || 1.05),
+      overlay_strength: Number(data.get("overlay_strength") || 0.56),
+      target_url: String(data.get("target_url") || ""),
+      target_type: String(data.get("target_type") || "hero"),
+      is_active: form.querySelector("[name='is_active']").checked,
+      sort_order: Number(data.get("sort_order") || 0),
+      starts_at: String(data.get("starts_at") || "") || null,
+      ends_at: String(data.get("ends_at") || "") || null
+    });
+
+    if (saveResult?.cleanup?.failed?.length) {
+      console.warn("Banner salvo, mas houve falha ao limpar o arquivo anterior no Storage.", saveResult.cleanup.failed);
+      showToast("Banner salvo. Um arquivo anterior ficou pendente de limpeza no Storage.", "warning");
+    } else {
+      showToast("Banner salvo com sucesso.", "success");
+    }
+
+    notifyStorefrontChanged("banner-save");
+    adminState.pendingBannerFile = null;
+    adminState.editingBanner = createEmptyBannerDraft();
+    adminState.banners = await adminListBanners(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    if (uploadedPath) {
+      await supabase.storage.from("product-images").remove([uploadedPath]).catch(() => {});
+    }
+    console.error(error);
+    showToast(error.message || "Não foi possível salvar o banner.", "danger");
   }
-
-  await adminSaveBanner({
-    id: String(data.get("id") || "") || undefined,
-    store_id: adminState.store.id,
-    title: String(data.get("title") || ""),
-    subtitle: String(data.get("subtitle") || ""),
-    image_url: imageUrl,
-    theme_preset: normalizeHeroThemeKey(String(data.get("theme_preset") || "classic-night")),
-    image_position: String(data.get("image_position") || "center center"),
-    image_fit: String(data.get("image_fit") || "cover"),
-    image_brightness: Number(data.get("image_brightness") || 0.92),
-    image_contrast: Number(data.get("image_contrast") || 1.05),
-    overlay_strength: Number(data.get("overlay_strength") || 0.56),
-    target_url: String(data.get("target_url") || ""),
-    target_type: String(data.get("target_type") || "hero"),
-    is_active: form.querySelector("[name='is_active']").checked,
-    sort_order: Number(data.get("sort_order") || 0),
-    starts_at: String(data.get("starts_at") || "") || null,
-    ends_at: String(data.get("ends_at") || "") || null
-  });
-
-  showToast("Banner salvo com sucesso.", "success");
-  notifyStorefrontChanged("banner-save");
-  adminState.pendingBannerFile = null;
-  adminState.editingBanner = createEmptyBannerDraft();
-  adminState.banners = await adminListBanners(adminState.store.id);
-  renderAdminLayout();
 }
 
 async function removeBanner(bannerId) {
   if (!window.confirm("Excluir este banner?")) return;
-  await adminDeleteBanner(bannerId);
-  notifyStorefrontChanged("banner-delete");
-  showToast("Banner excluído.", "warning");
-  adminState.banners = await adminListBanners(adminState.store.id);
-  renderAdminLayout();
+  try {
+    const cleanup = await adminDeleteBanner(bannerId);
+    notifyStorefrontChanged("banner-delete");
+    if (cleanup?.failed?.length) {
+      console.warn("Banner excluído, mas houve falha ao limpar o arquivo no Storage.", cleanup.failed);
+      showToast("Banner excluído. Um arquivo ficou pendente de limpeza no Storage.", "warning");
+    } else {
+      showToast("Banner excluído.", "warning");
+    }
+    adminState.banners = await adminListBanners(adminState.store.id);
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível excluir o banner.", "danger");
+  }
 }
 
 async function saveNotification(event) {
@@ -4415,9 +4505,13 @@ async function saveSettings(event) {
 }
 
 async function refreshProductsData() {
+  const allProductsPromise = adminListProducts(adminState.store.id, {});
+  const filteredProductsPromise = hasActiveProductFilters()
+    ? adminListProducts(adminState.store.id, adminState.productFilters)
+    : allProductsPromise;
   const [allProductsRes, filteredProductsRes] = await Promise.all([
-    adminListProducts(adminState.store.id, {}),
-    adminListProducts(adminState.store.id, adminState.productFilters)
+    allProductsPromise,
+    filteredProductsPromise
   ]);
   adminState.products = allProductsRes.data || [];
   adminState.filteredProducts = filteredProductsRes.data || [];
@@ -4431,9 +4525,13 @@ async function refreshSectionsData() {
 }
 
 async function refreshProductsAndSectionsData() {
+  const allProductsPromise = adminListProducts(adminState.store.id, {});
+  const filteredProductsPromise = hasActiveProductFilters()
+    ? adminListProducts(adminState.store.id, adminState.productFilters)
+    : allProductsPromise;
   const [allProductsRes, filteredProductsRes, sections] = await Promise.all([
-    adminListProducts(adminState.store.id, {}),
-    adminListProducts(adminState.store.id, adminState.productFilters),
+    allProductsPromise,
+    filteredProductsPromise,
     adminListSections(adminState.store.id)
   ]);
   adminState.products = allProductsRes.data || [];
@@ -4631,6 +4729,7 @@ function createEmptyBannerDraft() {
     title: "",
     subtitle: "",
     image_url: "",
+    storage_path: null,
     theme_preset: "classic-night",
     image_position: "center center",
     image_fit: "cover",

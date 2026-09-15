@@ -255,6 +255,16 @@ Depois abra:
 - `http://localhost:5500/index.html`
 - `http://localhost:5500/admin.html`
 
+### Teste automatizado do cache cliente
+
+O projeto possui um teste de regressão leve que roda direto no Node, sem Supabase, navegador ou dependências extras:
+
+```bash
+node tests/dataCache.test.mjs
+```
+
+Ele cobre cache fresh/stale, expiração, invalidação por loja em `localStorage`/`sessionStorage` e dedupe de requests concorrentes.
+
 ## 9. Testar a vitrine pública
 
 Confira:

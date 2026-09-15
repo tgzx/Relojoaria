@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head><meta charset="utf-8"><title>Image optimization smoke test</title></head>
+  <body>
+    <pre id="result">running</pre>
+    <script type="module">
+      import { optimizeImageForUpload } from "../js/imageOptimization.js";
+
+      const params = new URLSearchParams(location.search);
+      const url = params.get("url");
+      const maxDimension = Number(params.get("max") || 1600);
+      const quality = Number(params.get("quality") || 0.86);
+      const result = document.querySelector("#result");
+
+      try {
+        if (!url) throw new Error("missing url");
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`fetch ${response.status}`);
+        const blob = await response.blob();
+        const name = new URL(url).pathname.split("/").pop() || "image";
+        const file = new File([blob], name, { type: blob.type, lastModified: Date.now() });
+        const optimization = await optimizeImageForUpload(file, { maxDimension, quality });
+        const payload = {
+          name,
+          inputType: file.type,
+          outputType: optimization.file.type,
+          optimized: optimization.optimized,
+          reason: optimization.reason,
+          originalSize: optimization.originalSize,
+          optimizedSize: optimization.optimizedSize,
+          savedBytes: optimization.originalSize - optimization.optimizedSize,
+          savedPercent: Number((((optimization.originalSize - optimization.optimizedSize) / optimization.originalSize) * 100).toFixed(1)),
+          originalWidth: optimization.originalWidth,
+          originalHeight: optimization.originalHeight,
+          outputWidth: optimization.outputWidth,
+          outputHeight: optimization.outputHeight
+        };
+        result.textContent = JSON.stringify(payload, null, 2);
+        document.title = "PASS image optimization";
+      } catch (error) {
+        result.textContent = JSON.stringify({ error: error.message }, null, 2);
+        document.title = "FAIL image optimization";
+      }
+    </script>
+  </body>
+</html>
