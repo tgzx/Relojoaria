@@ -21,6 +21,9 @@ As migrations devem rodar nesta ordem:
 20260515000000_banner_appearance.sql
 20260515001000_push_notifications_setup.sql
 20260516000000_notification_scheduling.sql
+20260517000000_product_options_catalog.sql
+20260913000000_banner_storage_path.sql
+20260915000000_product_primary_image_atomicity.sql
 ```
 
 ### 20260514000000_initial_schema.sql
@@ -73,6 +76,43 @@ Migration incremental de suporte a push notifications. Mantida idempotente para 
 
 Migration incremental de agendamento/recorrência de notificações. Mantida idempotente para rodar depois do baseline.
 
+### 20260517000000_product_options_catalog.sql
+
+Adiciona o catálogo gerenciável de características e variações de produto. Mantém `products.attributes` e `products.variants` por compatibilidade, mas permite edição guiada no admin.
+
+### 20260913000000_banner_storage_path.sql
+
+Migration incremental de ciclo de vida de Storage para banners.
+
+Inclui:
+
+- coluna `banners.storage_path`, opcional e compatível com banners externos;
+- backfill conservador apenas para URLs claramente pertencentes ao bucket público gerenciado `product-images`;
+- índice parcial `idx_banners_storage_path` para checagem de referência antes de remover blobs.
+
+Importante: aplicar esta migration antes de publicar a versão do admin que salva, substitui ou exclui banners usando `storage_path`. Sem essa coluna no banco, o fluxo administrativo de banner da branch de eficiência não deve ser colocado em produção.
+
+### 20260915000000_product_primary_image_atomicity.sql
+
+Endurece a regra de imagem principal dos produtos e remove a dependência de updates separados no frontend.
+
+Inclui:
+
+- índice único parcial `uq_product_images_one_primary_per_product`, garantindo no máximo uma `is_primary=true` por produto;
+- RPC `set_product_primary_image` para troca atômica da principal;
+- RPC `create_product_image_record` para criar imagem e decidir a primeira principal sob lock do produto;
+- RPC `delete_product_image_and_promote` para excluir uma imagem e promover deterministicamente a próxima quando necessário;
+- funções como `security invoker`, com RLS preservada e `EXECUTE` restrito a `authenticated`/`service_role`;
+- regra de promoção: `sort_order ASC`, depois `created_at ASC`, depois `id ASC`.
+
+Aplicação segura:
+
+1. auditar múltiplas principais, produtos com imagem sem principal e divergência de `store_id`;
+2. aplicar primeiro no QA;
+3. validar RPCs, concorrência e RLS;
+4. somente depois aplicar no cliente/produção e publicar o frontend que usa as RPCs.
+
+O lifecycle de Storage continua separado da transação Postgres: a RPC retorna a imagem removida e o frontend/API executa cleanup do blob somente após o commit do banco.
 ## Por que as migrations antigas foram renomeadas
 
 As migrations antigas foram mantidas, mas renomeadas para versões completas e únicas, porque antes existiam duas migrations com a mesma versão `20260515`.
@@ -250,3 +290,33 @@ Adiciona o catálogo gerenciável de características e variações de produto:
 - índices por loja, tipo, grupo, status ativo e produto.
 
 A migration mantém `products.attributes` e `products.variants` por compatibilidade. O admin passa a usar o catálogo como caminho principal, mas o payload final ainda preserva JSON compatível para a vitrine e rollback funcional.
+
+## Rollback — atomicidade da imagem principal
+
+Para `20260915000000_product_primary_image_atomicity.sql`, existe rollback manual versionado em:
+
+```text
+supabase/rollbacks/20260915000000_product_primary_image_atomicity.rollback.sql
+```
+
+O rollback:
+
+- remove `delete_product_image_and_promote(uuid)`;
+- remove `create_product_image_record(uuid, text, text, text, integer)`;
+- remove `set_product_primary_image(uuid, uuid)`;
+- remove por último o índice parcial `uq_product_images_one_primary_per_product`;
+- **não altera nem exclui rows de `products`/`product_images`**;
+- **não toca blobs do Storage**.
+
+Ordem operacional segura para um rollback real de release:
+
+1. coordenar/reverter o frontend que depende das RPCs;
+2. executar o rollback de banco apenas se necessário;
+3. validar contagem/integridade de `product_images` e vitrine/admin;
+4. não apagar imagens nem blobs como parte do rollback.
+
+Observação: enquanto o frontend novo estiver publicado, não remover as RPCs, pois ele depende delas. O rollback de banco foi ensaiado no QA dentro de `BEGIN ... ROLLBACK` em 2026-09-15: os três RPCs e o índice ficaram ausentes dentro da transação, a contagem de imagens permaneceu 30, e o rollback restaurou todos os objetos.
+
+### Gate de produção
+
+A migration de atomicidade foi aplicada e validada **somente no QA** durante o desenvolvimento. Antes de publicar o frontend que chama essas RPCs no cliente/produção, aplicar `20260915000000_product_primary_image_atomicity.sql` no Supabase de produção e executar os checks específicos de índice/RPCs/integridade. Não publicar o frontend dependente das RPCs antes desse gate.

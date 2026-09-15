@@ -1947,32 +1947,43 @@ th {
   .product-editor-shell {
     inset: 12px;
     width: auto;
-    height: auto;
+    height: calc(100dvh - 24px);
     max-height: calc(100dvh - 24px);
-    display: block;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
   }
 
   .product-editor-shell .editor-header {
-    position: sticky;
-    top: 0;
+    position: relative;
+    top: auto;
     z-index: 3;
   }
 
   .product-editor-shell .editor-body {
-    overflow: visible;
-    padding-bottom: calc(176px + env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .product-editor-shell .editor-content,
+  .product-editor-shell .panel-form,
+  .product-editor-shell .editor-step {
+    min-height: auto;
+  }
+
+  .product-editor-shell .editor-content {
+    align-content: start;
   }
 
   .product-editor-shell .editor-footer {
-    position: sticky;
-    bottom: 0;
+    position: relative;
+    bottom: auto;
     z-index: 3;
     padding-top: 12px;
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
-    backdrop-filter: blur(12px);
   }
 }
 

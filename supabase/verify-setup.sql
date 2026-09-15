@@ -107,6 +107,9 @@ where n.nspname = 'public'
     'increment_product_interest',
     'public_upsert_push_subscription',
     'public_deactivate_push_subscription',
+    'set_product_primary_image',
+    'create_product_image_record',
+    'delete_product_image_and_promote',
     'validate_product_option_value_store',
     'validate_product_option_selection_store'
   )
@@ -181,3 +184,37 @@ select
   (select count(*) from public.product_option_selections pos where pos.store_id = s.id) as product_option_selections_count
 from public.stores s
 order by s.created_at desc;
+
+-- 11) Atomicidade da imagem principal
+select
+  indexname,
+  indexdef
+from pg_indexes
+where schemaname = 'public'
+  and tablename = 'product_images'
+  and indexname = 'uq_product_images_one_primary_per_product';
+
+select
+  (select count(*) from (
+    select product_id
+    from public.product_images
+    where is_primary = true
+    group by product_id
+    having count(*) > 1
+  ) duplicated) as products_with_multiple_primaries,
+  (select count(*) from (
+    select p.id
+    from public.products p
+    join public.product_images pi on pi.product_id = p.id
+    where not exists (
+      select 1
+      from public.product_images p2
+      where p2.product_id = p.id
+        and p2.is_primary = true
+    )
+    group by p.id
+  ) without_primary) as products_with_images_no_primary,
+  (select count(*)
+   from public.product_images pi
+   join public.products p on p.id = pi.product_id
+   where pi.store_id <> p.store_id) as store_mismatch_rows;
