@@ -308,9 +308,11 @@ export async function getProductBySlug(storeId, slug) {
     .eq("slug", slug)
     .eq("is_active", true)
     .eq("is_archived", false)
-    .single();
+    .maybeSingle();
 
-  return normalizeProduct(throwIfError(result, "Não foi possível carregar o produto."));
+  const product = throwIfError(result, "Não foi possível carregar o produto.");
+  if (!product) throw new Error("Produto não encontrado.");
+  return normalizeProduct(product);
 }
 
 export async function incrementProductView(productId) {

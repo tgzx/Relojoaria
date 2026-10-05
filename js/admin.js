@@ -154,6 +154,7 @@ const adminState = {
   lastLoadedUserId: null,
   hasUnsavedAdminFormChanges: false,
   dirtyAdminTab: null,
+  dirtyOptionForms: { group: false, value: false },
   pendingBackgroundRender: false,
   previewNeedsRefresh: false,
   previewReady: false,
@@ -162,10 +163,14 @@ const adminState = {
   isPasswordChangeOpen: false,
   isSavingProduct: false,
   productSaveMode: null,
-  productImageOperation: null
+  productImageOperation: null,
+  productEditorDirty: false,
+  businessHoursEditorDirty: false,
+  productFilterRequestSeq: 0
 };
 
 const openAdminModalKeys = new Set();
+const adminModalReturnFocus = new Map();
 
 let globalDebugHandlersRegistered = false;
 
@@ -197,10 +202,25 @@ function resetAdminSessionState() {
   adminState.lastLoadedUserId = null;
   adminState.hasUnsavedAdminFormChanges = false;
   adminState.dirtyAdminTab = null;
+  resetOptionDirtyForms();
+  adminState.editingOptionGroup = null;
+  adminState.editingOptionValue = null;
+  adminState.editingProduct = null;
+  adminState.pendingProductFiles = [];
+  adminState.isSavingProduct = false;
+  adminState.productSaveMode = null;
+  adminState.productImageOperation = null;
   adminState.pendingBackgroundRender = false;
   openAdminModalKeys.clear();
+  adminModalReturnFocus.clear();
   adminState.passwordRecoveryActive = false;
   adminState.isPasswordChangeOpen = false;
+  adminState.productEditorDirty = false;
+  adminState.businessHoursEditorDirty = false;
+  adminState.productFilterRequestSeq = 0;
+  qs("#admin-modal-root")?.remove();
+  qs("#admin-hours-modal-root")?.remove();
+  qs("#admin-password-modal-root")?.remove();
   syncAdminModalBodyScroll();
 }
 
@@ -208,17 +228,37 @@ function syncAdminModalBodyScroll() {
   const shouldLockScroll = openAdminModalKeys.size > 0;
   document.documentElement.style.overflow = shouldLockScroll ? "hidden" : "";
   document.body.style.overflow = shouldLockScroll ? "hidden" : "";
+
+  const adminRoot = qs("#admin-root");
+  if (adminRoot) adminRoot.inert = shouldLockScroll;
 }
 
 function setAdminModalOpen(modalKey, isOpen) {
   if (!modalKey) return;
+
   if (isOpen) {
+    if (!openAdminModalKeys.has(modalKey)) {
+      const trigger = document.activeElement;
+      if (trigger instanceof HTMLElement) adminModalReturnFocus.set(modalKey, trigger);
+    }
     openAdminModalKeys.add(modalKey);
-  } else {
-    openAdminModalKeys.delete(modalKey);
+    syncAdminModalBodyScroll();
+    return;
   }
 
+  openAdminModalKeys.delete(modalKey);
+  const trigger = adminModalReturnFocus.get(modalKey) || null;
+  adminModalReturnFocus.delete(modalKey);
   syncAdminModalBodyScroll();
+
+  if (openAdminModalKeys.size === 0 && trigger?.isConnected) {
+    window.requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+  }
+}
+
+function resetOptionDirtyForms() {
+  adminState.dirtyOptionForms.group = false;
+  adminState.dirtyOptionForms.value = false;
 }
 
 function markAdminFormDirty(tabId = adminState.currentAdminTab) {
@@ -226,10 +266,60 @@ function markAdminFormDirty(tabId = adminState.currentAdminTab) {
   adminState.dirtyAdminTab = tabId;
 }
 
+function hasPendingAdminChanges() {
+  return Boolean(
+    adminState.hasUnsavedAdminFormChanges ||
+    adminState.productEditorDirty ||
+    adminState.businessHoursEditorDirty
+  );
+}
+
+function handleAdminBeforeUnload(event) {
+  if (!hasPendingAdminChanges()) return;
+
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+function markOptionFormDirty(formKey) {
+  if (!(formKey in adminState.dirtyOptionForms)) return;
+  adminState.dirtyOptionForms[formKey] = true;
+  markAdminFormDirty("options");
+}
+
+function clearOptionFormDirty(formKey) {
+  if (formKey && formKey in adminState.dirtyOptionForms) {
+    adminState.dirtyOptionForms[formKey] = false;
+  }
+
+  const hasDirtyOptionForm = adminState.dirtyOptionForms.group || adminState.dirtyOptionForms.value;
+  if (hasDirtyOptionForm) {
+    adminState.hasUnsavedAdminFormChanges = true;
+    adminState.dirtyAdminTab = "options";
+    return;
+  }
+
+  if (adminState.dirtyAdminTab === "options") {
+    adminState.hasUnsavedAdminFormChanges = false;
+    adminState.dirtyAdminTab = null;
+  }
+}
+
 function clearAdminFormDirty(tabId = null) {
   if (tabId && adminState.dirtyAdminTab && adminState.dirtyAdminTab !== tabId) {
     return;
   }
+
+  const discardOptionDrafts =
+    adminState.hasUnsavedAdminFormChanges &&
+    adminState.dirtyAdminTab === "options" &&
+    (!tabId || tabId === "options");
+
+  if (discardOptionDrafts) {
+    adminState.editingOptionGroup = createEmptyOptionGroupDraft();
+    adminState.editingOptionValue = createEmptyOptionValueDraft();
+  }
+  if (!tabId || tabId === "options") resetOptionDirtyForms();
 
   adminState.hasUnsavedAdminFormChanges = false;
   adminState.dirtyAdminTab = null;
@@ -280,6 +370,7 @@ function triggerAdminDataLoad() {
 
 async function initAdmin() {
   registerGlobalDebugHandlers();
+  window.addEventListener("beforeunload", handleAdminBeforeUnload);
 
   if (APP_CONFIG.SUPABASE_URL.startsWith("COLE_AQUI") || APP_CONFIG.SUPABASE_ANON_KEY.startsWith("COLE_AQUI")) {
     renderSetupMessage();
@@ -742,6 +833,11 @@ function clearPasswordRecoveryUrl() {
 }
 
 async function handleLogout() {
+  if (hasPendingAdminChanges()) {
+    const shouldDiscard = window.confirm("Descartar as alterações não salvas e sair do painel?");
+    if (!shouldDiscard) return;
+  }
+
   await supabase.auth.signOut();
   showToast("Sessão encerrada.", "warning");
 }
@@ -2472,15 +2568,24 @@ async function handlePasswordChangeSubmit(event) {
   }
 }
 
+function navigateAdminTab(nextTab) {
+  if (!nextTab || nextTab === adminState.currentAdminTab) return;
+
+  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === adminState.currentAdminTab) {
+    const shouldDiscard = window.confirm("Descartar as alterações não salvas desta tela?");
+    if (!shouldDiscard) return;
+  }
+
+  clearAdminFormDirty();
+  adminState.pendingBackgroundRender = false;
+  adminState.currentAdminTab = nextTab;
+  renderAdminLayout();
+  scrollAdminMainToTop();
+}
+
 function bindAdminLayoutEvents() {
   qsa("[data-admin-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      clearAdminFormDirty();
-      adminState.pendingBackgroundRender = false;
-      adminState.currentAdminTab = button.dataset.adminTab;
-      renderAdminLayout();
-      scrollAdminMainToTop();
-    });
+    button.addEventListener("click", () => navigateAdminTab(button.dataset.adminTab));
   });
 
   qs("#sign-out-button")?.addEventListener("click", handleLogout);
@@ -2494,15 +2599,9 @@ function bindAdminLayoutEvents() {
   qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
   syncPreviewStatus();
 
-  qsa("[data-go-tab]").forEach((button) =>
-    button.addEventListener("click", () => {
-      clearAdminFormDirty();
-      adminState.pendingBackgroundRender = false;
-      adminState.currentAdminTab = button.dataset.goTab;
-      renderAdminLayout();
-      scrollAdminMainToTop();
-    })
-  );
+  qsa("[data-go-tab]").forEach((button) => {
+    button.addEventListener("click", () => navigateAdminTab(button.dataset.goTab));
+  });
 
   bindProductsTab();
   bindSectionTab();
@@ -2630,7 +2729,11 @@ function prependUniqueProductState(product) {
 
 function bindProductsTab() {
   const filterForm = qs("#products-filter-form");
-  filterForm?.addEventListener("input", debounceAdmin(async () => {
+  const refreshFilteredProducts = debounceAdmin(async () => {
+    await refreshProducts({ preserveFilterFocus: true });
+  });
+
+  filterForm?.addEventListener("input", (event) => {
     const data = new FormData(filterForm);
     adminState.productFilters = {
       search: String(data.get("search") || ""),
@@ -2639,8 +2742,9 @@ function bindProductsTab() {
       brandId: String(data.get("brandId") || ""),
       sectionId: String(data.get("sectionId") || "")
     };
-    await refreshProducts();
-  }));
+    adminState.productFilterRequestSeq += 1;
+    refreshFilteredProducts();
+  });
 
   qs("#open-new-product")?.addEventListener("click", () => openProductEditor());
   qs("#reload-products")?.addEventListener("click", refreshProducts);
@@ -2752,24 +2856,55 @@ function bindBrandTab() {
   );
 }
 
+function syncOptionGroupDraftFromForm(form) {
+  const data = new FormData(form);
+  const name = String(data.get("name") || "");
+  adminState.editingOptionGroup = {
+    ...(adminState.editingOptionGroup || createEmptyOptionGroupDraft()),
+    id: String(data.get("id") || "") || null,
+    store_id: adminState.store?.id,
+    type: String(data.get("type") || "attribute"),
+    name,
+    slug: String(data.get("slug") || "").trim() || slugify(name),
+    description: String(data.get("description") || ""),
+    input_type: String(data.get("input_type") || "select"),
+    value_type: "text",
+    allow_custom_value: form.querySelector("[name='allow_custom_value']")?.checked || false,
+    show_on_product: form.querySelector("[name='show_on_product']")?.checked !== false,
+    use_as_filter: form.querySelector("[name='use_as_filter']")?.checked || false,
+    is_required: form.querySelector("[name='is_required']")?.checked || false,
+    is_active: form.querySelector("[name='is_active']")?.checked !== false,
+    sort_order: Number(data.get("sort_order") || 0)
+  };
+}
+
+function syncOptionValueDraftFromForm(form) {
+  const data = new FormData(form);
+  const label = String(data.get("label") || "");
+  adminState.editingOptionValue = {
+    ...(adminState.editingOptionValue || createEmptyOptionValueDraft()),
+    id: String(data.get("id") || "") || null,
+    store_id: adminState.store?.id,
+    group_id: String(data.get("group_id") || ""),
+    label,
+    value: String(data.get("value") || "").trim() || slugify(label),
+    description: String(data.get("description") || ""),
+    metadata: {},
+    is_active: form.querySelector("[name='is_active']")?.checked !== false,
+    sort_order: Number(data.get("sort_order") || 0)
+  };
+}
+
+function confirmDiscardOptionDraft(formKey, label) {
+  if (!adminState.dirtyOptionForms[formKey]) return true;
+  if (!window.confirm(`Descartar as alterações não salvas deste ${label}?`)) return false;
+  clearOptionFormDirty(formKey);
+  return true;
+}
+
 function bindProductOptionsTab() {
-  bindDirtyFormState("#option-group-form", "options");
-  bindDirtyFormState("#option-value-form", "options");
-
-  qs("#option-group-form")?.addEventListener("submit", saveProductOptionGroup);
-  qs("#option-value-form")?.addEventListener("submit", saveProductOptionValue);
-
-  qs("#reset-option-group-form")?.addEventListener("click", () => {
-    clearAdminFormDirty("options");
-    adminState.editingOptionGroup = createEmptyOptionGroupDraft();
-    renderAdminLayout();
-  });
-
-  qs("#reset-option-value-form")?.addEventListener("click", () => {
-    clearAdminFormDirty("options");
-    adminState.editingOptionValue = createEmptyOptionValueDraft();
-    renderAdminLayout();
-  });
+  const groupForm = qs("#option-group-form");
+  const valueForm = qs("#option-value-form");
 
   qs("#option-group-form [name='name']")?.addEventListener("input", (event) => {
     const slugInput = qs("#option-group-form [name='slug']");
@@ -2781,10 +2916,42 @@ function bindProductOptionsTab() {
     if (valueInput && !valueInput.value.trim()) valueInput.value = slugify(event.currentTarget.value);
   });
 
+  const syncGroupDraft = () => {
+    if (!groupForm) return;
+    syncOptionGroupDraftFromForm(groupForm);
+    markOptionFormDirty("group");
+  };
+  const syncValueDraft = () => {
+    if (!valueForm) return;
+    syncOptionValueDraftFromForm(valueForm);
+    markOptionFormDirty("value");
+  };
+
+  groupForm?.addEventListener("input", syncGroupDraft);
+  groupForm?.addEventListener("change", syncGroupDraft);
+  valueForm?.addEventListener("input", syncValueDraft);
+  valueForm?.addEventListener("change", syncValueDraft);
+  groupForm?.addEventListener("submit", saveProductOptionGroup);
+  valueForm?.addEventListener("submit", saveProductOptionValue);
+
+  qs("#reset-option-group-form")?.addEventListener("click", () => {
+    clearOptionFormDirty("group");
+    adminState.editingOptionGroup = createEmptyOptionGroupDraft();
+    renderAdminLayout();
+  });
+
+  qs("#reset-option-value-form")?.addEventListener("click", () => {
+    clearOptionFormDirty("value");
+    adminState.editingOptionValue = createEmptyOptionValueDraft();
+    renderAdminLayout();
+  });
+
   qsa("[data-edit-option-group]").forEach((button) =>
     button.addEventListener("click", () => {
-      clearAdminFormDirty("options");
-      adminState.editingOptionGroup = structuredClone(getProductOptionGroup(button.dataset.editOptionGroup) || createEmptyOptionGroupDraft());
+      if (!confirmDiscardOptionDraft("group", "grupo")) return;
+      adminState.editingOptionGroup = structuredClone(
+        getProductOptionGroup(button.dataset.editOptionGroup) || createEmptyOptionGroupDraft()
+      );
       renderAdminLayout();
       qs("#option-group-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     })
@@ -2792,8 +2959,11 @@ function bindProductOptionsTab() {
 
   qsa("[data-edit-option-value]").forEach((button) =>
     button.addEventListener("click", () => {
-      clearAdminFormDirty("options");
-      adminState.editingOptionValue = structuredClone((adminState.productOptionValues || []).find((item) => item.id === button.dataset.editOptionValue) || createEmptyOptionValueDraft());
+      if (!confirmDiscardOptionDraft("value", "valor")) return;
+      adminState.editingOptionValue = structuredClone(
+        (adminState.productOptionValues || []).find((item) => item.id === button.dataset.editOptionValue) ||
+          createEmptyOptionValueDraft()
+      );
       renderAdminLayout();
       qs("#option-value-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     })
@@ -2990,13 +3160,48 @@ function bindSettingsTab() {
   qs("#open-business-hours-editor")?.addEventListener("click", openBusinessHoursEditor);
 }
 
-async function refreshProducts() {
+async function refreshProducts({ preserveFilterFocus = false } = {}) {
+  const requestSeq = ++adminState.productFilterRequestSeq;
+
   const response = await adminListProducts(adminState.store.id, adminState.productFilters);
+  if (requestSeq !== adminState.productFilterRequestSeq) return;
+
+  const activeFilterControl = preserveFilterFocus
+    ? document.activeElement?.closest?.("#products-filter-form [name]")
+    : null;
+  const activeFilterName = activeFilterControl?.getAttribute("name") || "";
+  const canRestoreSelection =
+    activeFilterControl instanceof HTMLInputElement || activeFilterControl instanceof HTMLTextAreaElement;
+  const selectionStart = canRestoreSelection ? activeFilterControl.selectionStart : null;
+  const selectionEnd = canRestoreSelection ? activeFilterControl.selectionEnd : null;
+
   adminState.filteredProducts = response.data || [];
   adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
     adminState.filteredProducts.some((product) => product.id === id)
   );
   renderAdminLayout();
+
+  if (activeFilterName) {
+    window.requestAnimationFrame(() => {
+      const nextFilterForm = qs("#products-filter-form");
+      const nextFilterControl = nextFilterForm?.elements?.namedItem(activeFilterName);
+      const activeElement = document.activeElement;
+      const userMovedFocus =
+        activeElement &&
+        activeElement !== document.body &&
+        activeElement !== document.documentElement;
+      if (!(nextFilterControl instanceof HTMLElement) || userMovedFocus) return;
+
+      nextFilterControl.focus({ preventScroll: true });
+      if (
+        (nextFilterControl instanceof HTMLInputElement || nextFilterControl instanceof HTMLTextAreaElement) &&
+        selectionStart !== null &&
+        selectionEnd !== null
+      ) {
+        nextFilterControl.setSelectionRange(selectionStart, selectionEnd);
+      }
+    });
+  }
 }
 
 function getVisibleProducts() {
@@ -3017,8 +3222,10 @@ function openProductEditor(productId = null) {
     ? structuredClone(findProductById(productId))
     : createEmptyProductDraft();
 
+  adminState.productEditorDirty = false;
   setAdminModalOpen("product-editor", true);
   renderProductEditor();
+  window.requestAnimationFrame(() => qs("#close-editor-button")?.focus());
 }
 
 function getProductOptionTypeLabel(type) {
@@ -3537,9 +3744,16 @@ function renderProductEditor() {
 }
 
 function bindProductEditorEvents() {
-  qs("#editor-backdrop")?.addEventListener("click", closeProductEditor);
-  qs("#close-editor-button")?.addEventListener("click", closeProductEditor);
-  qs("#editor-cancel-button")?.addEventListener("click", closeProductEditor);
+  const editorForm = qs("#product-editor-form");
+  const markProductEditorDirty = () => {
+    adminState.productEditorDirty = true;
+  };
+  editorForm?.addEventListener("input", markProductEditorDirty);
+  editorForm?.addEventListener("change", markProductEditorDirty);
+
+  qs("#editor-backdrop")?.addEventListener("click", () => closeProductEditor());
+  qs("#close-editor-button")?.addEventListener("click", () => closeProductEditor());
+  qs("#editor-cancel-button")?.addEventListener("click", () => closeProductEditor());
   qs("#editor-prev-button")?.addEventListener("click", () => changeProductEditorStep(-1));
   qs("#editor-next-button")?.addEventListener("click", () => changeProductEditorStep(1));
   qs("#save-draft-product")?.addEventListener("click", () => saveProduct(false));
@@ -3677,6 +3891,11 @@ function changeProductEditorStep(delta) {
 
 function closeProductEditor(force = false) {
   if ((adminState.isSavingProduct || adminState.productImageOperation) && !force) return;
+  if (adminState.productEditorDirty && !force) {
+    const shouldDiscard = window.confirm("Descartar as alterações não salvas deste produto?");
+    if (!shouldDiscard) return;
+  }
+  adminState.productEditorDirty = false;
   adminState.editingProduct = null;
   adminState.pendingProductFiles = [];
   adminState.isSavingProduct = false;
@@ -4060,7 +4279,6 @@ function isSectionStale(section) {
 
 async function saveProductOptionGroup(event) {
   event.preventDefault();
-  clearAdminFormDirty("options");
   const form = event.currentTarget;
   const data = new FormData(form);
   const name = String(data.get("name") || "").trim();
@@ -4087,6 +4305,7 @@ async function saveProductOptionGroup(event) {
   });
 
   adminState.editingOptionGroup = createEmptyOptionGroupDraft();
+  clearOptionFormDirty("group");
   await refreshProductOptionsData();
   showToast("Grupo salvo.", "success");
   renderAdminLayout();
@@ -4094,7 +4313,6 @@ async function saveProductOptionGroup(event) {
 
 async function saveProductOptionValue(event) {
   event.preventDefault();
-  clearAdminFormDirty("options");
   const form = event.currentTarget;
   const data = new FormData(form);
   const label = String(data.get("label") || "").trim();
@@ -4121,6 +4339,7 @@ async function saveProductOptionValue(event) {
   });
 
   adminState.editingOptionValue = createEmptyOptionValueDraft();
+  clearOptionFormDirty("value");
   await refreshProductOptionsData();
   showToast("Valor salvo.", "success");
   renderAdminLayout();
@@ -4888,6 +5107,7 @@ function openBusinessHoursEditor() {
   if (!hoursField) return;
 
   setAdminModalOpen("hours-editor", true);
+  adminState.businessHoursEditorDirty = false;
   const normalized = normalizeBusinessHours(hoursField.value);
   let modalRoot = qs("#admin-hours-modal-root");
   if (!modalRoot) {
@@ -4961,16 +5181,22 @@ function openBusinessHoursEditor() {
   `;
 
   qsa("[data-hours-day]", modalRoot).forEach(syncBusinessHoursDayCard);
-  qs("#hours-editor-backdrop")?.addEventListener("click", closeBusinessHoursEditor);
-  qs("#close-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
-  qs("#cancel-hours-editor")?.addEventListener("click", closeBusinessHoursEditor);
+  qs("#hours-editor-backdrop")?.addEventListener("click", () => closeBusinessHoursEditor());
+  qs("#close-hours-editor")?.addEventListener("click", () => closeBusinessHoursEditor());
+  qs("#cancel-hours-editor")?.addEventListener("click", () => closeBusinessHoursEditor());
   qs("#apply-hours-editor")?.addEventListener("click", applyBusinessHoursEditor);
 
+  modalRoot.addEventListener("input", () => {
+    adminState.businessHoursEditorDirty = true;
+  });
   modalRoot.addEventListener("change", (event) => {
+    adminState.businessHoursEditorDirty = true;
     const card = event.target.closest("[data-hours-day]");
     if (!card) return;
     syncBusinessHoursDayCard(card);
   });
+
+  window.requestAnimationFrame(() => qs("#close-hours-editor")?.focus());
 }
 
 function syncBusinessHoursDayCard(card) {
@@ -5051,10 +5277,17 @@ function applyBusinessHoursEditor() {
   }
 
   markAdminFormDirty("settings");
-  closeBusinessHoursEditor();
+  adminState.businessHoursEditorDirty = false;
+  closeBusinessHoursEditor(true);
 }
 
-function closeBusinessHoursEditor() {
+function closeBusinessHoursEditor(force = false) {
+  if (adminState.businessHoursEditorDirty && !force) {
+    const shouldDiscard = window.confirm("Descartar as alterações não aplicadas dos horários de funcionamento?");
+    if (!shouldDiscard) return;
+  }
+
+  adminState.businessHoursEditorDirty = false;
   qs("#admin-hours-modal-root")?.remove();
   setAdminModalOpen("hours-editor", false);
 }

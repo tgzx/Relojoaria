@@ -1,5 +1,5 @@
-const STATIC_CACHE = "vitrinezap-static-v5.9";
-const HTML_CACHE = "vitrinezap-html-v6.5";
+const STATIC_CACHE = "vitrinezap-static-v5.10";
+const HTML_CACHE = "vitrinezap-html-v6.6";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [
@@ -100,7 +100,7 @@ async function networkFirstStatic(request) {
 
   try {
     const response = await fetch(request, { cache: "no-store" });
-    cache.put(request, response.clone());
+    if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch (error) {
     const cached = await cache.match(request);
@@ -113,7 +113,7 @@ async function networkFirstHtml(request) {
 
   try {
     const response = await fetch(request);
-    cache.put(request, response.clone());
+    if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch (error) {
     const cached = await cache.match(request);
@@ -128,7 +128,7 @@ async function cacheFirstAsset(request) {
   try {
     const response = await fetch(request);
     const cache = await caches.open(STATIC_CACHE);
-    cache.put(request, response.clone());
+    if (response.ok || response.type === "opaque") await cache.put(request, response.clone());
     return response;
   } catch (error) {
     if (request.destination === "image") {

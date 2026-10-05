@@ -71,6 +71,7 @@ const appState = {
   carouselCleanup: null,
   sectionNavCleanup: null,
   activeSectionAnchor: "",
+  initialHash: window.location.hash,
   storeStatus: null,
   headerResizeObserver: null
 };
@@ -93,7 +94,8 @@ async function initApp() {
   try {
     await loadHomeData();
     await loadCatalogProducts({ reset: true });
-    runInitialReveal();
+    await runInitialReveal();
+    document.body.classList.add("app-interactive");
   } catch (error) {
     console.error(error);
     revealStorefrontShell();
@@ -266,7 +268,7 @@ async function runInitialReveal() {
     revealStorefrontShell();
   }
 
-  scrollToInitialHashTarget();
+  await handleInitialHashTarget();
 }
 
 function revealStorefrontShell() {
@@ -275,11 +277,20 @@ function revealStorefrontShell() {
   qs("#app-loading-screen")?.remove();
 }
 
-function scrollToInitialHashTarget() {
-  const hash = window.location.hash;
+async function handleInitialHashTarget() {
+  const hash = appState.initialHash || window.location.hash;
   if (!hash) return;
 
   const targetId = hash.slice(1);
+  if (targetId.startsWith("produto-")) {
+    const slug = targetId.slice("produto-".length);
+    if (slug) {
+      await openProductModal(slug);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#produto-${slug}`);
+    }
+    return;
+  }
+
   const target = document.getElementById(targetId) || qs(`[data-section-anchor="${targetId}"]`);
   if (!target) return;
 
@@ -294,6 +305,7 @@ function scrollToInitialHashTarget() {
 }
 
 function renderStoreFrame() {
+  document.title = `${appState.store.name} | VitrineZap`;
   const logo = appState.store.logo_url || "./assets/icons/icon-192.png";
   qs("#store-logo").src = logo;
   qs("#store-logo").alt = `Logo da loja ${appState.store.name}`;
@@ -969,8 +981,8 @@ function renderProductsSummary(totalCount) {
   if (appState.filters.newOnly) activeParts.push("somente novidades");
 
   summary.textContent = activeParts.length
-    ? `${totalCount} produto(s) encontrados para ${activeParts.join(", ")}.`
-    : `${totalCount} produto(s) disponíveis na vitrine.`;
+    ? `${totalCount} ${totalCount === 1 ? "produto encontrado" : "produtos encontrados"} para ${activeParts.join(", ")}.`
+    : `${totalCount} ${totalCount === 1 ? "produto disponível" : "produtos disponíveis"} na vitrine.`;
 }
 
 function renderFavoritesSection() {
@@ -1069,7 +1081,8 @@ function renderProductCard(product, options = {}) {
               <button
                 class="favorite-button ${isFavorite(product.id) ? "is-active" : ""}"
                 type="button"
-                aria-label="Favoritar produto"
+                aria-label="${isFavorite(product.id) ? "Remover dos favoritos" : "Favoritar produto"}"
+                aria-pressed="${isFavorite(product.id) ? "true" : "false"}"
                 data-action="toggle-favorite"
                 data-product-id="${escapeHtml(product.id)}"
               >
@@ -1123,6 +1136,7 @@ async function openProductModal(slug) {
   appState.lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modal.classList.remove("is-hidden");
   modal.setAttribute("aria-hidden", "false");
+  setStorefrontBackgroundInert(true);
   document.body.style.overflow = "hidden";
   window.requestAnimationFrame(() => qs("#close-product-modal")?.focus());
 
@@ -1170,11 +1184,12 @@ async function openProductModal(slug) {
       incrementProductView(product.id).catch(() => {});
     }
   } catch (error) {
-    console.error(error);
+    const isNotFound = error?.message === "Produto não encontrado.";
+    if (!isNotFound) console.error(error);
     content.innerHTML = `
       <div class="empty-state">
-        <h3>Produto indisponível</h3>
-        <p>Não foi possível carregar os detalhes agora. Tente novamente em instantes.</p>
+        <h3>${isNotFound ? "Produto não encontrado" : "Produto indisponível"}</h3>
+        <p>${isNotFound ? "Este produto não está mais disponível nesta vitrine." : "Não foi possível carregar os detalhes agora. Tente novamente em instantes."}</p>
       </div>
     `;
   }
@@ -1213,6 +1228,7 @@ function renderProductModal(product) {
                 <button
                   class="product-thumb-button"
                   type="button"
+                  aria-label="Ver ${escapeHtml(image.alt_text || product.name)}"
                   data-action="swap-gallery-image"
                   data-image-url="${escapeHtml(image.image_url)}"
                   data-alt-text="${escapeHtml(image.alt_text || product.name)}"
@@ -1321,10 +1337,17 @@ function shouldTrackProductView(productId, ttlMs = 6 * 60 * 60 * 1000) {
   }
 }
 
+function setStorefrontBackgroundInert(isInert) {
+  qsa(".site-header, main, .site-footer, #intro-overlay, #install-prompt").forEach((element) => {
+    element.inert = isInert;
+  });
+}
+
 function closeProductModal() {
   const modal = qs("#product-modal");
   modal.classList.add("is-hidden");
   modal.setAttribute("aria-hidden", "true");
+  setStorefrontBackgroundInert(false);
   document.body.style.overflow = "";
   const trigger = appState.lastModalTrigger;
   appState.lastModalTrigger = null;
@@ -1343,6 +1366,7 @@ function openFiltersSheet() {
   appState.lastFiltersTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   sheet.classList.remove("is-hidden");
   sheet.setAttribute("aria-hidden", "false");
+  setStorefrontBackgroundInert(true);
   document.body.style.overflow = "hidden";
   syncFilterForm();
   window.requestAnimationFrame(() => qs("#close-filters-button")?.focus());
@@ -1352,6 +1376,7 @@ function closeFiltersSheet() {
   const sheet = qs("#filters-sheet");
   sheet.classList.add("is-hidden");
   sheet.setAttribute("aria-hidden", "true");
+  setStorefrontBackgroundInert(false);
   document.body.style.overflow = "";
   const trigger = appState.lastFiltersTrigger;
   appState.lastFiltersTrigger = null;
@@ -1549,7 +1574,10 @@ function findKnownProduct(productId) {
 
 function syncFavoriteButtons() {
   qsa("[data-action='toggle-favorite']").forEach((button) => {
-    button.classList.toggle("is-active", appState.favoriteIds.includes(button.dataset.productId));
+    const isActive = appState.favoriteIds.includes(button.dataset.productId);
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    button.setAttribute("aria-label", isActive ? "Remover dos favoritos" : "Favoritar produto");
   });
 }
 

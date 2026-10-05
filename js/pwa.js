@@ -2,12 +2,16 @@ import { showToast, qs } from "./utils.js";
 
 const INSTALL_REMINDER_KEY = "vz_install_prompt_dismissed_at";
 const INSTALL_REMINDER_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
-const AUTO_PROMPT_DELAY_MS = 2200;
+const AUTO_PROMPT_DELAY_MS = 6000;
 
 let deferredInstallPrompt = null;
 let promptMode = "android";
 let autoPromptTimer = 0;
 let hasAutoPromptedThisSession = false;
+let pendingAutoPromptMode = null;
+let lastPromptInteractionAt = Date.now();
+let promptInteractionTrackingBound = false;
+let lastPromptTrigger = null;
 
 function isEmbeddedPreview() {
   const params = new URLSearchParams(window.location.search);
@@ -40,14 +44,83 @@ function clearPromptTimer() {
   autoPromptTimer = 0;
 }
 
-function hideInstallPrompt({ storeCooldown = false } = {}) {
+function clearAutoPromptState() {
   clearPromptTimer();
+  pendingAutoPromptMode = null;
+}
+
+function schedulePendingAutoPrompt() {
+  if (!pendingAutoPromptMode || hasAutoPromptedThisSession) return;
+
+  window.clearTimeout(autoPromptTimer);
+  const idleFor = Date.now() - lastPromptInteractionAt;
+  const delay = Math.max(150, AUTO_PROMPT_DELAY_MS - idleFor);
+
+  autoPromptTimer = window.setTimeout(() => {
+    autoPromptTimer = 0;
+    if (!pendingAutoPromptMode || hasAutoPromptedThisSession) return;
+
+    if (!document.body.classList.contains("app-interactive") || hasBlockingSurfaceOpen()) {
+      autoPromptTimer = window.setTimeout(schedulePendingAutoPrompt, 800);
+      return;
+    }
+
+    const currentIdleFor = Date.now() - lastPromptInteractionAt;
+    if (currentIdleFor < AUTO_PROMPT_DELAY_MS) {
+      schedulePendingAutoPrompt();
+      return;
+    }
+
+    const mode = pendingAutoPromptMode;
+    pendingAutoPromptMode = null;
+    if (showInstallPrompt(mode)) {
+      hasAutoPromptedThisSession = true;
+    } else {
+      pendingAutoPromptMode = mode;
+      autoPromptTimer = window.setTimeout(schedulePendingAutoPrompt, 800);
+    }
+  }, delay);
+}
+
+function notePromptInteraction() {
+  lastPromptInteractionAt = Date.now();
+  if (pendingAutoPromptMode && !hasAutoPromptedThisSession) {
+    schedulePendingAutoPrompt();
+  }
+}
+
+function ensurePromptInteractionTracking() {
+  if (promptInteractionTrackingBound) return;
+  promptInteractionTrackingBound = true;
+
+  document.addEventListener("pointerdown", notePromptInteraction, { passive: true, capture: true });
+  document.addEventListener("keydown", notePromptInteraction, { capture: true });
+  document.addEventListener("input", notePromptInteraction, { capture: true });
+  document.addEventListener("scroll", notePromptInteraction, { passive: true, capture: true });
+}
+
+function hasBlockingSurfaceOpen() {
+  return Boolean(document.querySelector("#product-modal:not(.is-hidden), #filters-sheet:not(.is-hidden)"));
+}
+
+function setPromptBackgroundInert(isInert) {
+  document.querySelectorAll(".site-header, main, .site-footer, #intro-overlay, #product-modal, #filters-sheet").forEach((element) => {
+    element.inert = isInert;
+  });
+}
+
+function hideInstallPrompt({ storeCooldown = false } = {}) {
+  clearAutoPromptState();
 
   const shell = qs("#install-prompt");
   if (!shell) return;
 
   shell.classList.add("is-hidden");
   shell.setAttribute("aria-hidden", "true");
+  setPromptBackgroundInert(false);
+  const trigger = lastPromptTrigger;
+  lastPromptTrigger = null;
+  if (trigger?.isConnected) window.requestAnimationFrame(() => trigger.focus());
 
   if (storeCooldown) {
     storeReminderCooldown();
@@ -63,9 +136,12 @@ export function showInstallPrompt(mode, options = {}) {
   const steps = qs("#install-ios-steps");
   const confirmButton = qs("#confirm-install-prompt");
 
-  if (!shell || !title || !copy || !steps || !confirmButton) return;
+  if (!shell || !title || !copy || !steps || !confirmButton) return false;
+  if (!shell.classList.contains("is-hidden")) return true;
+  if (!document.body.classList.contains("app-interactive") || hasBlockingSurfaceOpen()) return false;
 
   promptMode = mode;
+  lastPromptTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   if (options.title || options.copy || options.confirmLabel) {
     title.textContent = options.title || "Instale a vitrine no seu celular";
@@ -86,16 +162,18 @@ export function showInstallPrompt(mode, options = {}) {
 
   shell.classList.remove("is-hidden");
   shell.setAttribute("aria-hidden", "false");
+  setPromptBackgroundInert(true);
+  window.requestAnimationFrame(() => qs("#close-install-prompt")?.focus());
+  return true;
 }
 
 function scheduleInstallReminder(mode) {
   if (hasAutoPromptedThisSession || isStandalone() || !canShowInstallReminder()) return;
 
-  clearPromptTimer();
-  autoPromptTimer = window.setTimeout(() => {
-    hasAutoPromptedThisSession = true;
-    showInstallPrompt(mode);
-  }, AUTO_PROMPT_DELAY_MS);
+  pendingAutoPromptMode = mode;
+  lastPromptInteractionAt = Date.now();
+  ensurePromptInteractionTracking();
+  schedulePendingAutoPrompt();
 }
 
 export async function registerPwa() {
@@ -141,6 +219,8 @@ export async function registerPwa() {
   }
 
   installButton?.addEventListener("click", () => {
+    clearAutoPromptState();
+
     if (deferredInstallPrompt) {
       showInstallPrompt("android");
       return;
