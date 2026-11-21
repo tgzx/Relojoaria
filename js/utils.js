@@ -545,3 +545,16 @@ export function buildStorageFileName(fileName = "arquivo") {
 
   return `${Date.now()}-${sanitized}`.replace(/-+/g, "-");
 }
+
+export function getPublicProductDescription(product = {}) {
+  const detailed = String(product.description || "").trim();
+  const isImportNote = /cadastrad[oa] a partir das informa[cç][õo]es enviadas pelo cliente/i.test(detailed);
+  return (isImportNote ? product.short_description : detailed) || product.short_description || product.name || "Consulte a loja para mais detalhes.";
+}
+
+export function getPublicProductAttributes(attributes = {}) {
+  return Object.entries(attributes || {}).filter(([key]) => {
+    const name = String(key).normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    return !["fonte", "origem", "source"].includes(name);
+  });
+}

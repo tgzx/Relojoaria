@@ -18,6 +18,8 @@ import {
   escapeHtml,
   formatCurrency,
   getFavorites,
+  getPublicProductAttributes,
+  getPublicProductDescription,
   getOrderedProductImages,
   getPrimaryImage,
   isFavorite,
@@ -65,6 +67,7 @@ const appState = {
   isEmbeddedPreview: detectEmbeddedPreview(),
   isOffline: !navigator.onLine,
   usingCachedData: false,
+  whatsappConfigured: false,
   currentModalProduct: null,
   lastModalTrigger: null,
   lastFiltersTrigger: null,
@@ -335,6 +338,9 @@ function renderStoreFrame() {
     customMessage: appState.settings?.whatsapp_default_message || "Olá! Vim pelo site e gostaria de atendimento."
   });
 
+  appState.whatsappConfigured = defaultWhatsApp !== "#";
+  if (!appState.whatsappConfigured) qs("#whatsapp-cta")?.classList.add("is-hidden");
+
   qs("#whatsapp-cta").addEventListener("click", () => {
     if (defaultWhatsApp === "#") {
       showToast("Configure o WhatsApp da loja para habilitar esse botão.", "warning");
@@ -352,7 +358,12 @@ function renderStoreFrame() {
   });
 
   const footerWhatsApp = qs("#footer-whatsapp");
-  footerWhatsApp.href = defaultWhatsApp;
+  if (appState.whatsappConfigured) {
+    footerWhatsApp.href = defaultWhatsApp;
+  } else {
+    footerWhatsApp.removeAttribute("href");
+    footerWhatsApp.classList.add("is-hidden");
+  }
 
   const instagramLink = qs("#footer-instagram");
   if (appState.settings?.instagram_url) {
@@ -465,7 +476,8 @@ function renderHero() {
     </div>
   `;
 
-  qs("#hero-whatsapp-cta")?.addEventListener("click", () => qs("#whatsapp-cta")?.click());
+  if (appState.whatsappConfigured) qs("#hero-whatsapp-cta")?.addEventListener("click", () => qs("#whatsapp-cta")?.click());
+  else qs("#hero-whatsapp-cta")?.remove();
 }
 
 function renderDynamicSections() {
@@ -1116,7 +1128,7 @@ function renderProductCard(product, options = {}) {
         </button>
         <div class="stacked-actions">
           ${
-            product.allow_whatsapp_cta
+            product.allow_whatsapp_cta && whatsappLink !== "#"
               ? `<a class="btn btn-primary" href="${whatsappLink}" target="_blank" rel="noreferrer" data-action="whatsapp-product" data-product-id="${escapeHtml(product.id)}">WhatsApp</a>`
               : ""
           }
@@ -1207,7 +1219,7 @@ function renderProductModal(product) {
     storeSettings: settings,
     pageUrl: `${window.location.origin}${window.location.pathname}#produto-${product.slug}`
   });
-  const attributes = Object.entries(product.attributes || {})
+  const attributes = getPublicProductAttributes(product.attributes)
     .map(([key, value]) => ({
       label: humanizeAttributeKey(key),
       value: formatAttributeValue(value, settings)
@@ -1243,7 +1255,7 @@ function renderProductModal(product) {
       <div class="product-modal__copy">
         <span class="section-kicker">${escapeHtml(product.category?.name || "Detalhes do produto")}</span>
         <h2 id="product-modal-title">${escapeHtml(product.name)}</h2>
-        <p class="product-modal__description">${escapeHtml(product.description || product.short_description || "Sem descrição completa no momento.")}</p>
+        <p class="product-modal__description">${escapeHtml(getPublicProductDescription(product))}</p>
         <div class="price-line">
           <span class="price-current">${formatCurrency(product.price, settings.currency, settings.locale)}</span>
           ${
@@ -1307,7 +1319,7 @@ function renderProductModal(product) {
         }
         <div class="modal-actions">
           ${
-            product.allow_whatsapp_cta
+            product.allow_whatsapp_cta && whatsappLink !== "#"
               ? `<a class="btn btn-primary" href="${whatsappLink}" target="_blank" rel="noreferrer">Chamar no WhatsApp</a>`
               : ""
           }
@@ -1547,25 +1559,27 @@ async function handleBodyClick(event) {
   }
 }
 
-async function handleProductInterest(product) {
+function handleProductInterest(product) {
   if (!product) return;
-
-  try {
-    await incrementProductInterest(product.id);
-  } catch (error) {
-    console.warn("Falha ao registrar interesse", error);
-  }
 
   const link = buildWhatsAppLink({
     product,
     storeSettings: appState.settings,
-    pageUrl: `${window.location.origin}${window.location.pathname}#produto-${product.slug}`
+    pageUrl: window.location.origin + window.location.pathname + "#produto-" + product.slug
   });
 
-  showToast("Interesse registrado. Vamos abrir o WhatsApp para você continuar.");
-  if (link !== "#") window.open(link, "_blank", "noopener");
-}
+  if (link === "#") {
+    showToast("O WhatsApp da loja ainda não está configurado.", "warning");
+    return;
+  }
 
+  // Abrir durante o evento de clique, antes de aguardar a escrita no banco.
+  window.open(link, "_blank", "noopener");
+  showToast("Abrindo WhatsApp para você continuar.");
+  incrementProductInterest(product.id).catch((error) => {
+    console.warn("Não foi possível registrar o interesse.", error);
+  });
+}
 function findKnownProduct(productId) {
   return [...appState.products, ...appState.sections.flatMap((section) => section.products || [])].find(
     (product) => product.id === productId

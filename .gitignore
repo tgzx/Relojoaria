@@ -15,6 +15,7 @@ supabase/edge-functions/.env*
 # Deploy/platform local folders
 .vercel/
 .netlify/
+.wrangler/
 # Secret files / credentials
 *.pem
 *.p12
