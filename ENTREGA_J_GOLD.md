@@ -2,11 +2,12 @@
 Data de fechamento técnico: 2026-11-21
 
 ## Situação
-- Vitrine em produção: https://j-gold-relojoaria.pages.dev/
-- Admin: https://j-gold-relojoaria.pages.dev/admin.html
-- Plataforma: Cloudflare Pages (Direct Upload), projeto `j-gold-relojoaria`.
+- Vitrine em produção na conta Hotmail: https://j-gold-relojoaria-oficial.pages.dev/
+- Admin na conta Hotmail: https://j-gold-relojoaria-oficial.pages.dev/admin.html
+- Plataforma: Cloudflare Pages (Direct Upload), projeto atual `j-gold-relojoaria-oficial` na conta Hotmail (`db26fe2768772e99d642058374ea4559`).
+- Contingência ainda acessível: projeto antigo `j-gold-relojoaria` na conta Gmail (`https://j-gold-relojoaria.pages.dev/`).
 - Banco/Auth/Storage: Supabase `qufuwkgtkblevayhpjsb`, região `sa-east-1`, mantido no ambiente original do cliente.
-- Site anterior: https://tgzx.github.io/Relojoaria/ (mantido como contingência até aceite; não apagar automaticamente).
+- Legado GitHub Pages: https://tgzx.github.io/Relojoaria/ (também mantido até aceite; não apagar automaticamente).
 - Branch de entrega: `delivery/cloudflare-jgold-2026-11-21`.
 - Alterações SQL não exigem novo deploy do frontend. **A branch Git não publica automaticamente no Pages**.
 
@@ -54,7 +55,7 @@ Fontes públicas consultadas em 2026-11-21:
 - https://supabase.com/docs/guides/storage/serving/bandwidth
 
 ## Operação, publicação e rollback
-- Para nova versão do frontend, seguir `DEPLOY_CLOUDFLARE.md`; requer credencial Cloudflare válida no ambiente, config local publicável e `node scripts/build-cloudflare-pages.mjs`, depois Wrangler Direct Upload. **Não houve novo deploy nesta rodada**.
+- Para nova versão do frontend, seguir `DEPLOY_CLOUDFLARE.md`; requer credencial Cloudflare válida no ambiente, config local publicável e `node scripts/build-cloudflare-pages.mjs`, depois Wrangler Direct Upload. **Nota histórica:** na rodada anterior (auditoria do Supabase) não houve novo deploy; em 21/11/2026, a vitrine foi republicada no projeto Hotmail `j-gold-relojoaria-oficial`. O projeto Gmail foi preservado.
 - Rollback Cloudflare: usar um deployment anterior retido no Dashboard Pages. Não depende de restaurar banco.
 - Rollback SQL apenas se realmente necessário e após análise de efeitos: executar o arquivo `.rollback.sql` correspondente e revalidar permissões, criação de usuário, loja pública e admin; não descartar dados existentes. `handle_new_user()` deve continuar acessível ao serviço Auth em qualquer estado.
 - Não commitar `js/config.js` (arquivo local com chave publicável) ou credenciais, tokens, secrets, estados de sessão; não armazenar cookies no Vault.
@@ -69,3 +70,16 @@ Fontes públicas consultadas em 2026-11-21:
 
 ## Critério de conclusão
 **Fechamento técnico do escopo executável nesta rodada: concluído.** A entrega final/comercial depende unicamente de confirmações, credenciais/sessões e ações dos responsáveis listadas acima. Não acionar Pulso GPT sem nova pendência técnica segura e necessária.
+
+## Migração de conta Cloudflare concluída — 21/11/2026
+
+- **Nova produção:** https://j-gold-relojoaria-oficial.pages.dev/ — Cloudflare Pages `j-gold-relojoaria-oficial`, conta Hotmail (`db26fe2768772e99d642058374ea4559`), Direct Upload branch `main`.
+- **Deployment validado:** `c1ac2d76.j-gold-relojoaria-oficial.pages.dev`; 22 arquivos publicados + `_headers`. O alias principal foi homologado HTTP 200.
+- **Legado de contingência:** https://j-gold-relojoaria.pages.dev/ (conta Gmail) segue vivo e funcional. A Cloudflare não permite renomear o subdomínio Pages antigo. A transição **exige divulgar a nova URL**; não redirecionamos/excluímos o projeto Gmail sem aceite. GitHub Pages legado também preservado.
+- Projeto/estrutura Supabase `qufuwkgtkblevayhpjsb` preservados, sem migração de dados nem CRUD administrativo; imagens remotas mantidas e cache por origem independente. A navegação de QA pode incrementar os contadores públicos de visualização/interesse existentes. Nenhum recurso Cloudflare Workers/D1 foi necessário no J Gold.
+- QA novo domínio: Edge/Playwright 1440×1000, 390×844 e 320×568: 5 produtos, zero scroll horizontal, busca Casio, filtros, detalhe/ESC e fallback seguro de WhatsApp PASS; 0 erros JS/HTTP. Admin público HTTP 200 com formulário e-mail/senha, **CRUD autenticado não testado** por ausência de sessão.
+- QA PWA: service worker ativo, 5 produtos após reload offline com banner offline; reconexão recupera catálogo e esconde banner. PASS. `js/config.js` HTTP 200 com `Cache-Control: no-store`; manifest 200; OPTIONS CORS Supabase 200 para a nova origem.
+- Comparação byte a byte: **12/12** assets críticos idênticos entre URLs antiga/nova (HTML, CSS, JS, manifest e SW; validação via SHA-256 sem expor conteúdo da configuração); **5/5 imagens** carregaram após scroll (lazy loading esperado). Evidências no caderno local `qa-hotmail-live-results.json`, `qa-hotmail-offline-results.json`, `qa-hotmail-compare-results.json`.
+- CLI Wrangler: perfil `jgold` apontando ao Hotmail apenas no repo Relojoaria; fallback `default` continua na conta Gmail/Lobby Game Fest. `pages project list` confirmado em ambas. Smoke das duas URLs antigas de J Gold e Lobby HTTP 200.
+- Rollback: link antigo da conta Gmail permanece ativo; em caso de problema no novo deployment, pode-se voltar a informar o link antigo ou reimplantar em Hotmail usando o mesmo bundle. Não apagar nenhum projeto sem aceite do cliente.
+- Pendências de negócio: WhatsApp empresarial de João Antônio, teste CRUD admin autenticado e controle final de contas/convites. Conta Hotmail ainda pertence ao desenvolvedor; não equivale a transferência de propriedade para João.

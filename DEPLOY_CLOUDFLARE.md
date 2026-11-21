@@ -1,8 +1,10 @@
 # J Gold Relojoaria — deploy Cloudflare Pages
 
 ## Arquitetura em produção
-- Site estático: https://j-gold-relojoaria.pages.dev/
-- Cloudflare Pages project: `j-gold-relojoaria`, produção branch: `main` (Direct Upload).
+- Site estático ATUAL (conta Hotmail): https://j-gold-relojoaria-oficial.pages.dev/
+- Site antigo (conta Gmail, rollback): https://j-gold-relojoaria.pages.dev/
+- Cloudflare Pages ATUAL: projeto `j-gold-relojoaria-oficial` na conta Hotmail (`db26fe2768772e99d642058374ea4559`), produção branch `main` (Direct Upload).
+- Legado: projeto `j-gold-relojoaria` na conta Gmail (`9a0369b8b9a402a79cf3dfe0d6ef03da`), mantido como fallback. Não apagar sem aceite.
 - Dados/Auth/Storage: Supabase projeto `qufuwkgtkblevayhpjsb` (cliente), **não migrar banco**.
 - Site GitHub Pages anterior: https://tgzx.github.io/Relojoaria/ (mantido para rollback até transferência).
 - Nenhum projeto Cloudflare do Lobby Game Fest deve ser alterado.
@@ -12,7 +14,7 @@
 2. Configure `js/config.js` localmente a partir de `js/config.example.js`, usando **somente chaves publicáveis/anon**, nunca `service_role` ou secrets.
 3. Confira `SUPABASE_URL = https://qufuwkgtkblevayhpjsb.supabase.co`, `STORE_SLUG = J-Gold-Relojoaria` e `APP_NAME = J Gold Relojoaria`.
 4. Na raiz do repo execute `node scripts/build-cloudflare-pages.mjs` (build fica no diretório temporário do usuário, fora do Git e sem publicar .git/.github/migrations).
-5. Execute `wrangler pages deploy "<caminho-temp>/vitrinezap-cloudflare-pages" --project-name j-gold-relojoaria --branch main`. A CLI informa o endereço de deployment e o aliases pages.dev.
+5. Use o perfil Wrangler `jgold`, vinculado à pasta Relojoaria, e confira `wrangler whoami` (deve apontar para `tiago.z.x@hotmail.com`). Execute `wrangler pages deploy "<caminho-temp>/vitrinezap-cloudflare-pages" --project-name j-gold-relojoaria-oficial --branch main --profile jgold` com `CLOUDFLARE_ACCOUNT_ID=db26fe2768772e99d642058374ea4559` definido apenas para esse processo. A CLI informa a URL do deployment. **Não publicar na conta Gmail por engano.**
 6. Verifique `/index.html`, `/admin.html`, `/manifest.json`, `/js/config.js` (sem expor a chave em logs), 5 produtos, console/rede, CORS, modal, busca e WhatsApp.
 
 ## Proteções e rollback
@@ -53,3 +55,7 @@ git diff --check
 - PWA offline validada com Playwright após cache aquecido: 5 produtos offline, banner de rede, reconexão, 0 pageErrors. Evidência no caderno operacional.
 - A migração SQL não exige publicar uma nova versão Cloudflare Pages. Não houve deploy nesta rodada.
 - Admin autenticado e WhatsApp empresarial continuam dependentes do titular; não inventar credenciais ou número.
+
+
+## Migrado para conta Hotmail — 21/11/2026
+Deploy principal validado em https://j-gold-relojoaria-oficial.pages.dev/ com 5 produtos, responsive QA, PWA offline, CORS e admin shell. Projeto antigo Gmail mantido apenas para contingência. Para manutenção, executar sempre Wrangler na pasta deste repo com perfil `jgold`; checar conta com `whoami` e ID `db26fe2768772e99d642058374ea4559` antes de publicar. O perfil `default` continua dedicado à conta Gmail do Lobby Game Fest. Não versionar `js/config.js`. Detalhes e evidências em `ENTREGA_J_GOLD.md` e caderno local.
