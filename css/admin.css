@@ -2176,3 +2176,10 @@ select:focus-visible,
   html, .editor-shell, .editor-body, .admin-sidebar { scrollbar-color: auto; }
   select:not([multiple]) { appearance: auto; background-image: none; }
 }
+
+/* Match modal close controls to comfortable mobile hit areas. */
+.modal-close-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+}

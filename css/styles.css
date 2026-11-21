@@ -2411,3 +2411,11 @@ html:has(.sheet-shell:not(.is-hidden)) {
   outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
+
+/* Touch-target refinement: keep existing icon/shape, make tap areas dependable. */
+.favorite-button {
+  width: 44px;
+  height: 44px;
+}
+.favorite-button svg { width: 18px; height: 18px; }
+.modal-close { width: 44px; height: 44px; }
