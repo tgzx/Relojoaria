@@ -5,7 +5,7 @@
 - Site antigo (conta Gmail, rollback): https://j-gold-relojoaria.pages.dev/
 - Cloudflare Pages ATUAL: projeto `j-gold-relojoaria-oficial` na conta Hotmail (`db26fe2768772e99d642058374ea4559`), produção branch `main` (Direct Upload).
 - Legado: projeto `j-gold-relojoaria` na conta Gmail (`9a0369b8b9a402a79cf3dfe0d6ef03da`), mantido como fallback. Não apagar sem aceite.
-- Dados/Auth/Storage: Supabase projeto `qufuwkgtkblevayhpjsb` (cliente), **não migrar banco**.
+- Dados/Auth/Storage/Edge Functions: Supabase projeto `qufuwkgtkblevayhpjsb`, **já transferido oficialmente para a organização `ATSM Projects` na conta Hotmail**, mantendo o ref, a URL da API e as chaves. Não replicar o banco nem substituir essa referência pelo projeto vazio criado no Hotmail.
 - Site GitHub Pages anterior: https://tgzx.github.io/Relojoaria/ (mantido para rollback até transferência).
 - Nenhum projeto Cloudflare do Lobby Game Fest deve ser alterado.
 
@@ -59,3 +59,7 @@ git diff --check
 
 ## Migrado para conta Hotmail — 21/11/2026
 Deploy principal validado em https://j-gold-relojoaria-oficial.pages.dev/ com 5 produtos, responsive QA, PWA offline, CORS e admin shell. Projeto antigo Gmail mantido apenas para contingência. Para manutenção, executar sempre Wrangler na pasta deste repo com perfil `jgold`; checar conta com `whoami` e ID `db26fe2768772e99d642058374ea4559` antes de publicar. O perfil `default` continua dedicado à conta Gmail do Lobby Game Fest. Não versionar `js/config.js`. Detalhes e evidências em `ENTREGA_J_GOLD.md` e caderno local.
+
+
+## Supabase movido para ATSM Projects (21/11/2026)
+A organização dona do backend foi alterada por transferência oficial: `ATSM Projects` (Hotmail, org `tulgvupuujkxdcenqdcr`). **A referência de projeto continua `qufuwkgtkblevayhpjsb`**, sem alteração no `js/config.js` ou novo deploy Pages. A conta Gmail tem papel Developer na ATSM. Vercel Marketplace deixou de vincular este recurso Supabase; não desinstalar a integração de todo o time, pois existem outros projetos. O conector Supabase da conta ChatGPT antiga pode precisar de nova autorização para a ATSM. Consulte `ENTREGA_J_GOLD.md` e o caderno para QA e integridade de dados.
