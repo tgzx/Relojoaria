@@ -1197,7 +1197,7 @@ function renderProducts() {
               <table>
                 <thead>
                   <tr>
-                    <th><input type="checkbox" id="select-all-products" ${adminState.selectedProductIds.length === products.length ? "checked" : ""} /></th>
+                    <th><input type="checkbox" id="select-all-products" aria-label="Selecionar todos os produtos" ${adminState.selectedProductIds.length === products.length ? "checked" : ""} /></th>
                     <th>Produto</th>
                     <th>Preço</th>
                     <th>Status</th>
@@ -1212,7 +1212,7 @@ function renderProducts() {
                       (product) => `
                         <tr>
                           <td>
-                            <input type="checkbox" data-select-product="${escapeHtml(product.id)}" ${adminState.selectedProductIds.includes(product.id) ? "checked" : ""} />
+                            <input type="checkbox" aria-label="Selecionar ${escapeHtml(product.name)}" data-select-product="${escapeHtml(product.id)}" ${adminState.selectedProductIds.includes(product.id) ? "checked" : ""} />
                           </td>
                           <td>
                             <div class="product-line">

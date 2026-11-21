@@ -129,6 +129,15 @@ function bindShellEvents() {
   filtersForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = serializeForm(filtersForm);
+    const minPrice = filtersForm.elements.namedItem("priceMin");
+    const maxPrice = filtersForm.elements.namedItem("priceMax");
+    maxPrice.setCustomValidity("");
+    if (minPrice.value && maxPrice.value && Number(minPrice.value) > Number(maxPrice.value)) {
+      maxPrice.setCustomValidity("O preço máximo não pode ser menor que o preço mínimo.");
+      maxPrice.reportValidity();
+      maxPrice.focus();
+      return;
+    }
     appState.filters = {
       ...appState.filters,
       categoryId: values.categoryId || "",
@@ -141,6 +150,11 @@ function bindShellEvents() {
     };
     closeFiltersSheet();
     await loadCatalogProducts({ reset: true });
+  });
+
+  const maxPriceField = filtersForm?.elements.namedItem("priceMax");
+  filtersForm?.querySelectorAll("[name='priceMin'], [name='priceMax']").forEach((field) => {
+    field.addEventListener("input", () => maxPriceField?.setCustomValidity(""));
   });
 
   qs("#open-filters-button")?.addEventListener("click", openFiltersSheet);
@@ -1161,6 +1175,7 @@ function renderProductCard(product, options = {}) {
 async function openProductModal(slug) {
   const modal = qs("#product-modal");
   const content = qs("#product-modal-content");
+  qs("#toast-root")?.replaceChildren();
   appState.lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modal.classList.remove("is-hidden");
   modal.setAttribute("aria-hidden", "false");
@@ -1390,6 +1405,7 @@ function swapModalGalleryImage(imageUrl, altText) {
 }
 
 function openFiltersSheet() {
+  qs("#toast-root")?.replaceChildren();
   const sheet = qs("#filters-sheet");
   appState.lastFiltersTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   sheet.classList.remove("is-hidden");
@@ -1480,6 +1496,7 @@ function syncFilterForm() {
   form.sort.value = appState.filters.sort;
   form.priceMin.value = appState.filters.priceMin;
   form.priceMax.value = appState.filters.priceMax;
+  form.priceMax.setCustomValidity("");
   form.querySelector("[name='promotionOnly']").checked = appState.filters.promotionOnly;
   form.querySelector("[name='newOnly']").checked = appState.filters.newOnly;
 }

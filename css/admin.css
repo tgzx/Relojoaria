@@ -2183,3 +2183,34 @@ select:focus-visible,
   min-width: 44px;
   height: 44px;
 }
+
+/* Transient feedback is non-interactive; it must not prevent clicking targets. */
+.toast-root { pointer-events: none; max-width: calc(100vw - 28px); }
+.toast-root .toast { max-width: 100%; overflow-wrap: anywhere; }
+
+/* Compact product-editor actions on narrow screens: more room for form fields. */
+@media (max-width: 759px) {
+  .product-editor-shell .editor-footer {
+    padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  .product-editor-shell .editor-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+  }
+  .product-editor-shell .editor-footer-actions .btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 4px;
+    white-space: normal;
+    line-height: 1.15;
+    font-size: 0.83rem;
+  }
+  .product-editor-shell #editor-cancel-button { grid-column: 1; grid-row: 1; }
+  .product-editor-shell #editor-prev-button { grid-column: 2; grid-row: 1; }
+  .product-editor-shell #editor-next-button { grid-column: 1; grid-row: 2; }
+  .product-editor-shell #save-draft-product { grid-column: 2; grid-row: 2; }
+  .product-editor-shell #save-publish-product { grid-column: 1 / -1; grid-row: 3; }
+}

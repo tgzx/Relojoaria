@@ -1,11 +1,13 @@
 import { APP_CONFIG } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 import { qs, showToast } from "./utils.js";
-import { isStandalone, showInstallPrompt } from "./pwa.js";
+import { isStandalone, showInstallPrompt, hideInstallPrompt } from "./pwa.js";
 
 const PUSH_REMINDER_KEY = "vz_push_prompt_dismissed_at";
 const PUSH_REMINDER_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
-const PUSH_AUTO_PROMPT_DELAY_MS = 2800;
+// Defer optional subscription prompts until the shopper stops interacting.
+const PUSH_AUTO_PROMPT_DELAY_MS = 12000;
+let pushReminderPending = false;
 
 function setPushButtonLabel(button, isSubscribed) {
   if (!button) return;
@@ -201,26 +203,34 @@ function storePushReminderCooldown() {
 
 export async function registerPushReminder(storeId, options = {}) {
   if (!options.enabled || !isPushSupported() || Notification.permission === "granted" || Notification.permission === "denied") return;
-  if (!canShowPushReminder()) return;
+  if (!canShowPushReminder() || pushReminderPending) return;
+  pushReminderPending = true;
 
-  window.setTimeout(() => {
+  const showReminder = () => {
+    clearTimeout(timer);
+    stopTracking();
+    // Never interrupt another dialog, an edited form, or a background tab.
+    if (document.hidden || document.querySelector("#product-modal:not(.is-hidden), #filters-sheet:not(.is-hidden), #install-prompt:not(.is-hidden)") ||
+        document.activeElement?.matches("input, select, textarea, [contenteditable='true']")) return;
     if (!isStandalone()) {
-      showInstallPrompt("push-install-required", {
+      const shown = showInstallPrompt("push-install-required", {
         title: "Instale o app para ativar novidades",
         copy: "No celular, as notificações ficam disponíveis depois que a vitrine é instalada como app.",
         confirmLabel: "Entendi"
       });
-      storePushReminderCooldown();
+      if (shown) storePushReminderCooldown();
       return;
     }
 
-    showInstallPrompt("push", {
+    const shown = showInstallPrompt("push", {
       allowStandalone: true,
       title: "Ative as novidades da loja",
       copy: "Receba avisos de promoções, lançamentos e campanhas direto no celular.",
       confirmLabel: "Ativar notificações"
     });
 
+    if (!shown) return;
+    storePushReminderCooldown();
     const confirmButton = qs("#confirm-install-prompt");
     const dismissButton = qs("#dismiss-install-prompt");
     const closeButton = qs("#close-install-prompt");
@@ -229,7 +239,7 @@ export async function registerPushReminder(storeId, options = {}) {
       try {
         await subscribeUserToPush(storeId);
         showToast("Notificações ativadas com sucesso.", "success");
-        qs("#install-prompt")?.classList.add("is-hidden");
+        hideInstallPrompt();
       } catch (error) {
         console.error(error);
         showToast(error.message || "Não foi possível ativar notificações.", "danger");
@@ -241,5 +251,18 @@ export async function registerPushReminder(storeId, options = {}) {
     confirmButton?.addEventListener("click", subscribe, { once: true });
     dismissButton?.addEventListener("click", storePushReminderCooldown, { once: true });
     closeButton?.addEventListener("click", storePushReminderCooldown, { once: true });
-  }, PUSH_AUTO_PROMPT_DELAY_MS);
+  };
+
+  let timer = 0;
+  const actions = ["pointerdown", "keydown", "input", "scroll"];
+  const restart = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(showReminder, PUSH_AUTO_PROMPT_DELAY_MS);
+  };
+  function stopTracking() {
+    pushReminderPending = false;
+    actions.forEach((type) => document.removeEventListener(type, restart, true));
+  }
+  actions.forEach((type) => document.addEventListener(type, restart, { capture: true, passive: true }));
+  restart();
 }

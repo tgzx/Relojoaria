@@ -109,7 +109,7 @@ function setPromptBackgroundInert(isInert) {
   });
 }
 
-function hideInstallPrompt({ storeCooldown = false } = {}) {
+export function hideInstallPrompt({ storeCooldown = false } = {}) {
   clearAutoPromptState();
 
   const shell = qs("#install-prompt");
@@ -174,6 +174,36 @@ function scheduleInstallReminder(mode) {
   lastPromptInteractionAt = Date.now();
   ensurePromptInteractionTracking();
   schedulePendingAutoPrompt();
+}
+
+let promptKeyboardBound = false;
+
+function handleInstallPromptKeydown(event) {
+  const shell = qs("#install-prompt");
+  if (!shell || shell.classList.contains("is-hidden")) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    hideInstallPrompt({ storeCooldown: true });
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusables = Array.from(
+    shell.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])")
+  ).filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+  if (!focusables.length) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const focused = document.activeElement;
+  if (event.shiftKey && (focused === first || !shell.contains(focused))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (focused === last || !shell.contains(focused))) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export async function registerPwa() {
@@ -253,6 +283,11 @@ export async function registerPwa() {
 
   dismissPromptButton?.addEventListener("click", () => hideInstallPrompt({ storeCooldown: true }));
   closePromptButton?.addEventListener("click", () => hideInstallPrompt({ storeCooldown: true }));
+
+  if (!promptKeyboardBound) {
+    document.addEventListener("keydown", handleInstallPromptKeydown);
+    promptKeyboardBound = true;
+  }
 
   window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;

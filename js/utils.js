@@ -311,7 +311,9 @@ export function showToast(message, tone = "default") {
   const toast = document.createElement("div");
   toast.className = `toast ${tone === "default" ? "" : `toast--${tone}`}`.trim();
   toast.textContent = message;
-  root.appendChild(toast);
+  // Keep one current announcement: old transient feedback must not cover a new action.
+  toast.setAttribute("role", tone === "danger" ? "alert" : "status");
+  root.replaceChildren(toast);
 
   window.setTimeout(() => {
     toast.remove();

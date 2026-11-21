@@ -2419,3 +2419,7 @@ html:has(.sheet-shell:not(.is-hidden)) {
 }
 .favorite-button svg { width: 18px; height: 18px; }
 .modal-close { width: 44px; height: 44px; }
+
+/* Transient feedback is non-interactive; it must not prevent clicking targets. */
+.toast-root { pointer-events: none; max-width: calc(100vw - 28px); }
+.toast-root .toast { max-width: 100%; overflow-wrap: anywhere; }
