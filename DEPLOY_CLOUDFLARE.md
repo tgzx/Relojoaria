@@ -41,3 +41,15 @@ node --check js/utils.js
 node --check service-worker.js
 git diff --check
 ```
+
+
+## Fechamento de auditoria de segurança e PWA — 2026-11-21
+- Para o relatório de entrega, limites, rollback e dependências externas, consultar `ENTREGA_J_GOLD.md`.
+- Migrações já aplicadas no Supabase cliente (histórico remoto verificado):
+  - `20261121160436_restrict_internal_auth_trigger_execution`;
+  - `20261121160727_pin_public_invoker_function_search_paths`.
+- Rollbacks manuais correspondentes em `supabase/rollbacks/`.
+- Supabase Advisor: aviso anônimo SECURITY DEFINER 6→5; avisos mutáveis de search_path 4→0. RPCs remanescentes são contratos de vitrine/push/RLS, com riscos e melhorias explicitados no relatório.
+- PWA offline validada com Playwright após cache aquecido: 5 produtos offline, banner de rede, reconexão, 0 pageErrors. Evidência no caderno operacional.
+- A migração SQL não exige publicar uma nova versão Cloudflare Pages. Não houve deploy nesta rodada.
+- Admin autenticado e WhatsApp empresarial continuam dependentes do titular; não inventar credenciais ou número.

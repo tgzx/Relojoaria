@@ -320,3 +320,12 @@ Observação: enquanto o frontend novo estiver publicado, não remover as RPCs, 
 ### Gate de produção
 
 A migration de atomicidade foi aplicada e validada **somente no QA** durante o desenvolvimento. Antes de publicar o frontend que chama essas RPCs no cliente/produção, aplicar `20260915000000_product_primary_image_atomicity.sql` no Supabase de produção e executar os checks específicos de índice/RPCs/integridade. Não publicar o frontend dependente das RPCs antes desse gate.
+
+
+## Hardening de entrega J Gold — 2026-11-21
+Duas migrations incrementais aplicadas e conferidas na produção J Gold `qufuwkgtkblevayhpjsb`:
+
+1. `20261121160436_restrict_internal_auth_trigger_execution.sql`: revoga a execução pública da função interna `handle_new_user()`, preservando `supabase_auth_admin` e o trigger de criação de usuário. Rollback em `rollbacks/20261121160436_restrict_internal_auth_trigger_execution.rollback.sql`.
+2. `20261121160727_pin_public_invoker_function_search_paths.sql`: fixa o `search_path` vazio das quatro funções `SECURITY INVOKER` auxiliares e remove quatro alertas de search path mutável. Rollback em `rollbacks/20261121160727_pin_public_invoker_function_search_paths.rollback.sql`.
+
+O histórico do servidor e os nomes locais dessas migrations foram alinhados após aplicação. O Supabase Advisor confirmou 0 avisos `function_search_path_mutable` e redução dos alertas `anon_security_definer_function_executable` para 5. As cinco funções restantes são usadas por contadores públicos, policies RLS e endpoints push; foram mantidas para não quebrar o contrato existente. Auditoria detalhada e riscos residuais em `../ENTREGA_J_GOLD.md`.
