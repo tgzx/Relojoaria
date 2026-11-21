@@ -193,6 +193,41 @@ function registerGlobalDebugHandlers() {
     });
   }, 0);
   window.addEventListener("message", handlePreviewBridgeMessage);
+  document.addEventListener("keydown", handleAdminModalKeyboard);
+}
+
+// Modals use existing close handlers for Escape, preserving dirty-state guards.
+function handleAdminModalKeyboard(event) {
+  if (!openAdminModalKeys.size || !["Tab", "Escape"].includes(event.key)) return;
+  const activeDialog = Array.from(document.querySelectorAll(".editor-shell[role='dialog']"))
+    .filter((dialog) => dialog.getClientRects().length > 0)
+    .at(-1);
+  if (!activeDialog) return;
+
+  if (event.key === "Escape") {
+    const closeButton = activeDialog.querySelector(
+      "#close-editor-button, #close-hours-editor, #close-password-change, #close-notification-history, #close-notification-planning"
+    );
+    if (!closeButton || closeButton.disabled) return;
+    event.preventDefault();
+    closeButton.click();
+    return;
+  }
+
+  const focusables = Array.from(
+    activeDialog.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")
+  ).filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const focusOutside = !activeDialog.contains(document.activeElement);
+  if (event.shiftKey && (document.activeElement === first || focusOutside)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || focusOutside)) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function resetAdminSessionState() {

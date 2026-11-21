@@ -2102,3 +2102,77 @@ th {
     padding: 12px;
   }
 }
+
+/* J Gold admin UI system — same black/off-white/gold family, softer admin geometry.
+   Keep native select picker and verified long-form modal scrolling. */
+:root {
+  --admin-scroll-track: var(--admin-bg);
+  --admin-scroll-thumb: color-mix(in srgb, var(--admin-text) 38%, var(--admin-bg) 62%);
+  --admin-scroll-thumb-hover: color-mix(in srgb, var(--admin-text) 45%, var(--admin-accent) 55%);
+}
+html,
+.admin-sidebar,
+.admin-content,
+.editor-body,
+.editor-shell,
+.selection-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--admin-scroll-thumb) var(--admin-scroll-track);
+}
+html::-webkit-scrollbar,
+.admin-sidebar::-webkit-scrollbar,
+.admin-content::-webkit-scrollbar,
+.editor-body::-webkit-scrollbar,
+.editor-shell::-webkit-scrollbar,
+.selection-list::-webkit-scrollbar { width: 10px; height: 8px; }
+html::-webkit-scrollbar-track,
+.admin-sidebar::-webkit-scrollbar-track,
+.editor-body::-webkit-scrollbar-track,
+.editor-shell::-webkit-scrollbar-track,
+.selection-list::-webkit-scrollbar-track { background: var(--admin-scroll-track); }
+html::-webkit-scrollbar-thumb,
+.admin-sidebar::-webkit-scrollbar-thumb,
+.editor-body::-webkit-scrollbar-thumb,
+.editor-shell::-webkit-scrollbar-thumb,
+.selection-list::-webkit-scrollbar-thumb {
+  border: 2px solid var(--admin-scroll-track);
+  border-radius: 8px;
+  background: var(--admin-scroll-thumb);
+}
+select:not([multiple]) {
+  appearance: none;
+  background-color: var(--admin-surface-strong);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--admin-text) 50%),
+    linear-gradient(135deg, var(--admin-text) 50%, transparent 50%);
+  background-position: calc(100% - 20px) calc(50% - 2px), calc(100% - 14px) calc(50% - 2px);
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  padding-inline-end: 44px;
+  color: var(--admin-text);
+  cursor: pointer;
+}
+select:disabled { opacity: 0.55; cursor: not-allowed; }
+select:focus-visible,
+.admin-field :is(input, textarea):focus-visible,
+.modal-close-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--admin-text) 65%, var(--admin-accent) 35%);
+  outline-offset: 2px;
+}
+.admin-modal-shell,
+.product-editor-shell {
+  border-color: color-mix(in srgb, var(--admin-border) 64%, var(--admin-accent) 36%);
+  overscroll-behavior: contain;
+}
+.admin-modal-shell .editor-body,
+.product-editor-shell .editor-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+@media (forced-colors: active) {
+  html, .editor-shell, .editor-body, .admin-sidebar { scrollbar-color: auto; }
+  select:not([multiple]) { appearance: auto; background-image: none; }
+}

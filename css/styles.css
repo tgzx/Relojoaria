@@ -2258,3 +2258,156 @@ body:not(.theme-dark) .product-badge--warning {
   color: color-mix(in srgb, var(--color-text) 90%, var(--color-premium-gold) 10%);
   border-color: color-mix(in srgb, var(--color-premium-gold) 54%, var(--color-border) 46%);
 }
+
+/* J Gold UI system — native controls, dialogs and scroll (2026-11-21).
+   Preserve the existing black/off-white/gold palette and squared storefront. */
+:root {
+  --ui-scroll-track: var(--color-bg-bottom);
+  --ui-scroll-thumb: color-mix(in srgb, var(--color-text) 38%, var(--color-bg-bottom) 62%);
+  --ui-scroll-thumb-hover: color-mix(in srgb, var(--color-text) 45%, var(--color-accent) 55%);
+  --ui-dialog-outline: color-mix(in srgb, var(--color-border) 65%, var(--color-accent) 35%);
+}
+html,
+.product-modal,
+.filter-sheet,
+.product-modal__thumbs {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-scroll-thumb) var(--ui-scroll-track);
+}
+html::-webkit-scrollbar,
+.product-modal::-webkit-scrollbar,
+.filter-sheet::-webkit-scrollbar,
+.product-modal__thumbs::-webkit-scrollbar { width: 10px; height: 8px; }
+html::-webkit-scrollbar-track,
+.product-modal::-webkit-scrollbar-track,
+.filter-sheet::-webkit-scrollbar-track,
+.product-modal__thumbs::-webkit-scrollbar-track { background: var(--ui-scroll-track); }
+html::-webkit-scrollbar-thumb,
+.product-modal::-webkit-scrollbar-thumb,
+.filter-sheet::-webkit-scrollbar-thumb,
+.product-modal__thumbs::-webkit-scrollbar-thumb {
+  border: 2px solid var(--ui-scroll-track);
+  border-radius: 8px;
+  background: var(--ui-scroll-thumb);
+}
+html::-webkit-scrollbar-thumb:hover,
+.product-modal::-webkit-scrollbar-thumb:hover,
+.filter-sheet::-webkit-scrollbar-thumb:hover { background: var(--ui-scroll-thumb-hover); }
+
+.field select:not([multiple]) {
+  appearance: none;
+  background-color: var(--color-surface-strong);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text) 50%),
+    linear-gradient(135deg, var(--color-text) 50%, transparent 50%);
+  background-position: calc(100% - 20px) calc(50% - 2px), calc(100% - 14px) calc(50% - 2px);
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  padding-inline-end: 44px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.field select:disabled { opacity: 0.55; cursor: not-allowed; }
+.field :is(input, select, textarea):focus-visible,
+:is(.modal-close, .product-thumb-button):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-text) 65%, var(--color-accent) 35%);
+  outline-offset: 2px;
+}
+.product-modal,
+.filter-sheet {
+  border: 1px solid var(--ui-dialog-outline);
+  box-shadow: 0 22px 64px rgba(17, 17, 17, 0.2);
+}
+.product-modal {
+  max-height: min(90dvh, 880px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-block: 18px;
+}
+.filter-sheet {
+  max-height: min(92dvh, 760px);
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+.sheet-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--color-surface-strong);
+  border-top: 1px solid var(--color-border);
+  padding: 12px 0 calc(10px + env(safe-area-inset-bottom));
+}
+html:has(.modal-shell:not(.is-hidden)),
+html:has(.sheet-shell:not(.is-hidden)) {
+  overflow: hidden;
+  overscroll-behavior: none;
+  scrollbar-gutter: stable;
+}
+@media (min-width: 760px) {
+  .product-modal {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+  }
+  .filter-sheet {
+    left: 50%;
+    right: auto;
+    width: min(calc(100% - 32px), 620px);
+    transform: translateX(-50%);
+  }
+}
+@media (max-width: 759px) {
+  .product-modal {
+    max-height: calc(100dvh - 16px);
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  .filter-sheet {
+    max-height: calc(100dvh - 12px);
+  }
+}
+@media (forced-colors: active) {
+  html, .product-modal, .filter-sheet { scrollbar-color: auto; }
+  .field select:not([multiple]) { appearance: auto; background-image: none; }
+}
+
+/* Applied filter summary — visible and individually removable without extra
+   requests until the shopper chooses a change. Palette follows live theme. */
+.active-filters-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 22px;
+}
+.active-filters-summary__label {
+  margin-inline-end: 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text-soft);
+}
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 58%, var(--color-accent) 42%);
+  border-radius: 0;
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.active-filter-chip > span:last-child { font-size: 1.2rem; line-height: 1; }
+.active-filter-chip:hover {
+  background: color-mix(in srgb, var(--color-surface-strong) 85%, var(--color-accent) 15%);
+}
+.active-filter-chip:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}

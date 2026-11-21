@@ -147,6 +147,22 @@ function bindShellEvents() {
   qs("#close-filters-button")?.addEventListener("click", closeFiltersSheet);
   qs("#reset-sheet-filters-button")?.addEventListener("click", resetFilters);
   qs("#reset-filters-button")?.addEventListener("click", resetFilters);
+  qs("#active-filters-summary")?.addEventListener("click", async (event) => {
+    const removeButton = event.target.closest("[data-remove-filter]");
+    if (!removeButton) return;
+    const key = removeButton.dataset.removeFilter;
+    const defaults = { search: "", categoryId: "", brandId: "", promotionOnly: false, newOnly: false, priceMin: "", priceMax: "", sort: "featured" };
+    if (!Object.hasOwn(defaults, key)) return;
+    appState.filters[key] = defaults[key];
+    const restoreFocus = document.activeElement === removeButton;
+    if (key === "search") qs("#global-search").value = "";
+    syncFilterForm();
+    await loadCatalogProducts({ reset: true });
+    if (restoreFocus) {
+      const next = qs("#active-filters-summary .active-filter-chip") || qs("#products-grid");
+      next?.focus({ preventScroll: true });
+    }
+  });
   qs("#load-more-button")?.addEventListener("click", () => loadCatalogProducts({ reset: false }));
   qs("#clear-favorites-button")?.addEventListener("click", () => {
     clearFavorites();
@@ -1395,21 +1411,55 @@ function closeFiltersSheet() {
   if (trigger?.isConnected) window.requestAnimationFrame(() => trigger.focus());
 }
 
-function handleGlobalKeydown(event) {
-  if (event.key !== "Escape") return;
+// Ensure both forward and backward keyboard navigation stay inside the open
+// storefront dialog, without replacing native select/combobox interactions.
+function trapStorefrontDialogFocus(event, dialog) {
+  if (event.key !== "Tab") return;
+  const candidates = Array.from(
+    dialog.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")
+  ).filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
 
-  const modal = qs("#product-modal");
-  if (modal && !modal.classList.contains("is-hidden")) {
-    closeProductModal();
+  if (!candidates.length) {
+    event.preventDefault();
+    dialog.focus();
     return;
   }
 
-  const sheet = qs("#filters-sheet");
-  if (sheet && !sheet.classList.contains("is-hidden")) {
-    closeFiltersSheet();
+  const first = candidates[0];
+  const last = candidates[candidates.length - 1];
+  const focused = document.activeElement;
+  const outside = !dialog.contains(focused);
+
+  if (event.shiftKey && (focused === first || outside)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (focused === last || outside)) {
+    event.preventDefault();
+    first.focus();
   }
 }
 
+function handleGlobalKeydown(event) {
+  const modal = qs("#product-modal");
+  const sheet = qs("#filters-sheet");
+  const activeDialog =
+    modal && !modal.classList.contains("is-hidden")
+      ? modal.querySelector("[role='dialog']")
+      : sheet && !sheet.classList.contains("is-hidden")
+        ? sheet.querySelector("[role='dialog']")
+        : null;
+
+  if (!activeDialog) return;
+  if (event.key === "Tab") {
+    trapStorefrontDialogFocus(event, activeDialog);
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    if (activeDialog.closest("#product-modal")) closeProductModal();
+    else closeFiltersSheet();
+  }
+}
 async function handleEmbeddedPreviewMessage(event) {
   if (!appState.isEmbeddedPreview || event.origin !== window.location.origin) return;
   if (event.data?.type !== "vitrinezap:refresh") return;
@@ -1450,8 +1500,43 @@ async function resetFilters() {
   await loadCatalogProducts({ reset: true });
 }
 
+function renderActiveFilters() {
+  const container = qs("#active-filters-summary");
+  if (!container) return;
+
+  const filters = appState.filters;
+  const applied = [];
+  const add = (key, label) => applied.push({ key, label });
+  if (filters.search) add("search", `Busca: ${filters.search}`);
+  if (filters.categoryId) {
+    const name = appState.categories.find((item) => String(item.id) === String(filters.categoryId))?.name;
+    add("categoryId", `Categoria: ${name || "selecionada"}`);
+  }
+  if (filters.brandId) {
+    const name = appState.brands.find((item) => String(item.id) === String(filters.brandId))?.name;
+    add("brandId", `Marca: ${name || "selecionada"}`);
+  }
+  if (filters.promotionOnly) add("promotionOnly", "Promoções");
+  if (filters.newOnly) add("newOnly", "Novidades");
+  if (filters.priceMin) add("priceMin", `Mín.: R$ ${String(filters.priceMin).replace(".", ",")}`);
+  if (filters.priceMax) add("priceMax", `Máx.: R$ ${String(filters.priceMax).replace(".", ",")}`);
+  if (filters.sort !== "featured") {
+    const names = { recent: "Mais recentes", price_asc: "Menor preço", price_desc: "Maior preço", best_seller: "Mais vendidos", az: "A-Z" };
+    add("sort", `Ordem: ${names[filters.sort] || "personalizada"}`);
+  }
+
+  container.classList.toggle("is-hidden", applied.length === 0);
+  container.innerHTML = applied.length
+    ? `<span class="active-filters-summary__label">Filtros ativos</span>${applied
+        .map(({ key, label }) =>
+          `<button class="active-filter-chip" type="button" data-remove-filter="${key}" aria-label="Remover filtro ${escapeHtml(label)}"><span>${escapeHtml(label)}</span><span aria-hidden="true">×</span></button>`
+        ).join("")}`
+    : "";
+}
+
 function toggleResetFiltersButton() {
   qs("#reset-filters-button")?.classList.toggle("is-hidden", !hasActiveFilters());
+  renderActiveFilters();
 }
 
 function hasActiveFilters() {
