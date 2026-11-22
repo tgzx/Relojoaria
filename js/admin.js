@@ -163,6 +163,7 @@ const adminState = {
   dirtyAdminTab: null,
   dirtyOptionForms: { group: false, value: false },
   pendingBackgroundRender: false,
+  mobileTabScrollLeft: 0,
   previewNeedsRefresh: false,
   previewReady: false,
   previewRefreshTimer: 0,
@@ -948,7 +949,11 @@ function renderAdminLayout() {
                 <button class="compact-action-button" type="button" data-mobile-admin-action="logout" aria-label="Sair">Sair</button>
               </div>
             </div>
-            <div class="toolbar-actions">${renderTabButtons()}</div>
+            <div class="admin-tab-overflow-shell">
+              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--left" aria-hidden="true">‹</span>
+              <div class="toolbar-actions">${renderTabButtons()}</div>
+              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--right" aria-hidden="true">›</span>
+            </div>
           </section>
           ${renderCurrentTab()}
         </section>
@@ -2643,6 +2648,7 @@ function bindAdminLayoutEvents() {
   qs("#open-preview-tab")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
   bindMobileAdminActions();
   bindMobileAdminChrome();
+  bindMobileTabOverflowHints();
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());
   qs("#reload-preview-iframe")?.addEventListener("click", () => refreshPreviewFrame());
   qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
@@ -2683,6 +2689,56 @@ function bindMobileAdminActions() {
         handleLogout();
       }
     });
+  });
+}
+
+function bindMobileTabOverflowHints() {
+  // O menu é recriado a cada render; não acumular listeners/observers.
+  window.__adminTabsOverflowCleanup?.();
+  const shell = qs(".admin-tab-overflow-shell");
+  const strip = shell?.querySelector(".toolbar-actions");
+  if (!strip) return;
+
+  const controller = new AbortController();
+  const update = () => {
+    if (!strip.isConnected || controller.signal.aborted) return;
+    const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+    const mobileOverflow = window.matchMedia("(max-width: 759px)").matches && maxScroll > 3;
+    shell.classList.toggle("can-scroll-left", mobileOverflow && strip.scrollLeft > 2);
+    shell.classList.toggle("can-scroll-right", mobileOverflow && strip.scrollLeft < maxScroll - 2);
+  };
+
+  strip.addEventListener("scroll", () => {
+    adminState.mobileTabScrollLeft = strip.scrollLeft;
+    update();
+  }, { passive: true, signal: controller.signal });
+  window.addEventListener("resize", update, { passive: true, signal: controller.signal });
+
+  const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+  resizeObserver?.observe(strip);
+  document.fonts?.ready.then(() => {
+    if (!controller.signal.aborted) update();
+  });
+  window.__adminTabsOverflowCleanup = () => {
+    controller.abort();
+    resizeObserver?.disconnect();
+  };
+
+  window.requestAnimationFrame(() => {
+    if (!strip.isConnected || controller.signal.aborted) return;
+    strip.scrollLeft = adminState.mobileTabScrollLeft;
+    if (window.matchMedia("(max-width: 759px)").matches) {
+      // Se a aba ativa ficou fora da faixa visível após o re-render, revelá-la.
+      const active = strip.querySelector(".tab-button.is-active");
+      if (active) {
+        const bounds = active.getBoundingClientRect();
+        const viewport = strip.getBoundingClientRect();
+        if (bounds.right > viewport.right - 8) strip.scrollLeft += bounds.right - viewport.right + 8;
+        else if (bounds.left < viewport.left + 8) strip.scrollLeft -= viewport.left - bounds.left + 8;
+      }
+    }
+    adminState.mobileTabScrollLeft = strip.scrollLeft;
+    update();
   });
 }
 

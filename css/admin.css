@@ -2747,3 +2747,39 @@ select:focus-visible,
   .admin-content { padding-top: 0; }
   .admin-shell.is-mobile-condensed .admin-topbar { display: none; }
 }
+
+/* Indicadores de overflow do menu horizontal no header mobile.
+   Setas são chevrons sem haste, sobrepostas; não alteram largura da faixa. */
+.admin-tab-overflow-shell { position: relative; min-width: 0; }
+@media (max-width: 759px) {
+  .admin-tab-overflow-hint {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    width: 25px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+    color: var(--admin-text, #1c1c1c);
+    font: 700 28px/1 Arial, sans-serif;
+    text-shadow: 0 0 2px rgba(255, 255, 255, .9);
+  }
+  .admin-tab-overflow-hint--left {
+    left: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,.94), rgba(255,255,255,0));
+  }
+  .admin-tab-overflow-hint--right {
+    right: 0;
+    background: linear-gradient(270deg, rgba(255,255,255,.94), rgba(255,255,255,0));
+  }
+  .admin-tab-overflow-shell.can-scroll-left .admin-tab-overflow-hint--left,
+  .admin-tab-overflow-shell.can-scroll-right .admin-tab-overflow-hint--right {
+    display: flex;
+  }
+}
+
+/* Fora do mobile, não renderizar chevrons nem capturar cliques. */
+.admin-tab-overflow-hint { display: none; pointer-events: none; }
