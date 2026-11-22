@@ -1,0 +1,29 @@
+name: QA visual contracts - J Gold admin
+
+on:
+  push:
+    branches:
+      - fix/jgold-modal-overflow-picker-2026-11-22
+    paths:
+      - js/admin.js
+      - css/admin.css
+      - tests/adminResponsiveContracts.test.mjs
+      - tests/adminSectionsAndArrows.test.mjs
+      - .github/workflows/admin-ui-qa-jgold.yml
+  workflow_dispatch:
+
+jobs:
+  static-ui-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --version
+          node --check js/admin.js
+          node --check js/app.js
+          node --check js/storeApi.js
+      - name: Check admin responsive UI regressions
+        run: |
+          node --test tests/adminResponsiveContracts.test.mjs tests/adminSectionsAndArrows.test.mjs
