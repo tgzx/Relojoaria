@@ -116,6 +116,8 @@ const SECTION_TYPE_OPTIONS = [
   { value: "featured", label: "Destaques" },
   { value: "promotion", label: "Promoções" },
   { value: "newest", label: "Novidades" },
+  { value: "best_seller", label: "Mais vendidos" },
+  { value: "low_stock", label: "Últimas unidades" },
   { value: "category", label: "Por categoria" },
   { value: "brand", label: "Por marca" }
 ];
