@@ -155,6 +155,35 @@ a {
   resize: vertical;
 }
 
+/* Alinhar botão e nome do arquivo no eixo vertical, sem estourar o formulário. */
+.admin-field input[type="file"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 50px;
+  padding: 5px 6px;
+  line-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-field input[type="file"]::file-selector-button {
+  height: 38px;
+  min-height: 38px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  background: var(--admin-surface-muted);
+  color: var(--admin-text);
+  font: inherit;
+  font-weight: 600;
+  line-height: normal;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
 .admin-field--switch {
   min-height: 54px;
   border-radius: 12px;
@@ -656,14 +685,29 @@ th {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
+}
+.notification-bucket__header > strong {
+  flex: 1 1 90px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .notification-bucket__actions {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-bucket__actions .btn {
+  min-width: 0;
+  white-space: normal;
 }
 
 .notification-history-shell {
@@ -1072,11 +1116,12 @@ th {
 .hours-editor-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
 }
 
 .hours-day-card {
   display: grid;
+  min-width: 0;
   gap: 14px;
   padding: 16px;
   border-radius: 18px;
@@ -1125,9 +1170,10 @@ th {
 
 .hours-time-grid {
   display: grid;
+  min-width: 0;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 100px));
-  justify-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 .hours-time-grid--split {
@@ -1143,6 +1189,8 @@ th {
 }
 
 .hours-editor-shell .admin-field input[type="time"] {
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
   padding-inline: 12px;
 }
