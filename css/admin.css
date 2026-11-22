@@ -2712,6 +2712,9 @@ select:focus-visible,
     padding: 8px 14px 0;
   }
   .product-page-selection .btn { min-height: 44px; }
+  .records-display[data-records-mode="cards"] .product-page-selection {
+    padding-bottom: 16px;
+  }
 }
 
 /* Topo mobile sempre compacto e colado às bordas da tela, como uma barra de navegação.

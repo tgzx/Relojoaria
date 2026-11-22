@@ -42,3 +42,9 @@ test("Seleção é por página, mantém outras páginas e é limpa ao alterar fi
  assert.match(admin,/id="products-page-next"/);
  assert.match(admin,/id="select-page-products"/);
 });
+test("Seleção de página tem 16px de respiro antes dos cards somente no mobile",()=>{
+ const css=readFileSync(join(root,"css/admin.css"),"utf8");
+ assert.match(css,/@media \(max-width: 759px\) \{[\s\S]*?\.records-display\[data-records-mode="cards"\] \.product-page-selection \{\s*padding-bottom: 16px;/);
+ assert.match(css,/\.product-page-selection \{ display: none; \}/);
+ assert.match(css,/\.product-page-selection \{[\s\S]*?padding: 8px 14px 0;/);
+});
