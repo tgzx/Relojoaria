@@ -36,3 +36,22 @@ test("upload de imagem mantém botão e rótulo alinhados", () => {
   assert.match(css, /\.admin-field input\[type="file"\]::file-selector-button\s*\{[^}]*vertical-align: middle/s);
   assert.match(css, /\.admin-field input\[type="file"\]\s*\{[^}]*overflow: hidden/s);
 });
+
+test("seções abrem em Registros e só exibem Criar/Editar quando solicitado", () => {
+  assert.match(admin, /sectionEditorOpen: false/);
+  assert.match(admin, /role="tablist" aria-label="Gestão de seções"/);
+  assert.match(admin, /data-section-workspace-tab="records"/);
+  assert.match(admin, /data-section-workspace-tab="editor"/);
+  assert.match(admin, /isEditorOpen \? editorMarkup : recordsMarkup/);
+  assert.match(admin, /sections-records-table/);
+  assert.match(admin, /adminState\.sectionEditorOpen = true/);
+  assert.match(admin, /adminState\.sectionEditorOpen = false/);
+  assert.match(admin, /<select name="type" required>/);
+});
+
+test("setas da navegação usam colunas exclusivas, sem sobrepor abas", () => {
+  assert.match(css, /\.admin-tab-overflow-shell\s*\{[^}]*grid-template-columns: 26px minmax\(0, 1fr\) 26px/s);
+  assert.match(css, /\.admin-tab-overflow-hint\s*\{[^}]*position: static/s);
+  assert.match(css, /\.admin-tab-overflow-hint\s*\{[^}]*visibility: hidden/s);
+  assert.match(css, /\.admin-tab-overflow-shell\.can-scroll-right \.admin-tab-overflow-hint--right\s*\{[^}]*visibility: visible/s);
+});
