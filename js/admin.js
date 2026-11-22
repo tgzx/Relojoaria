@@ -1,4 +1,5 @@
 import "./adminFieldGuidance.js";
+import { manualSectionPicker } from "./manualSectionPicker.js";
 import { APP_CONFIG } from "./config.js";
 import { invalidateStorefrontCache } from "./dataCache.js";
 import { optimizeImageForUpload } from "./imageOptimization.js";
@@ -17,6 +18,7 @@ import {
   adminListCategories,
   adminListNotifications,
   adminListProducts,
+  adminSearchSectionProducts,
   adminListProductOptionGroups,
   adminListProductOptionSelections,
   adminListProductOptionValues,
@@ -1351,7 +1353,7 @@ function renderSectionsManager() {
               </select>
             </label>
           </div>
-          <div class="inline-grid inline-grid--2">
+          <div class="inline-grid inline-grid--2" data-section-automatic-only>
             <label class="admin-field">
               <span>Regra automática</span>
               <select name="automatic_rule">
@@ -1395,31 +1397,13 @@ function renderSectionsManager() {
               <input type="checkbox" name="is_active" ${section.is_active !== false ? "checked" : ""} />
             </label>
           </div>
-          <label class="admin-field">
+          <label class="admin-field" data-section-automatic-only>
             <span>Parâmetros da regra automática (JSON)</span>
             <textarea name="automatic_params">${escapeHtml(
               JSON.stringify(section.automatic_params || {}, null, 2)
             )}</textarea>
           </label>
-          <label class="admin-field">
-            <span>Produtos manuais</span>
-            <div class="selection-list">
-              ${getManualSectionProductOptions()
-                .slice(0, 30)
-                .map((product) => {
-                  const selectedIds = (section.section_products || []).map((item) => item.product_id);
-                  return `
-                    <label class="selection-chip">
-                      <input type="checkbox" name="selectedProductIds" value="${escapeHtml(product.id)}" ${
-                        selectedIds.includes(product.id) ? "checked" : ""
-                      } />
-                      ${escapeHtml(product.name)}
-                    </label>
-                  `;
-                })
-                .join("")}
-            </div>
-          </label>
+          ${manualSectionPicker.markup(section)}
           <div class="toolbar-actions">
             <button class="btn btn-primary" type="submit">Salvar seção</button>
             ${
@@ -2729,12 +2713,6 @@ function findProductById(productId) {
   );
 }
 
-function getManualSectionProductOptions() {
-  return [...adminState.products].sort((left, right) =>
-    String(left.name || "").localeCompare(String(right.name || ""), adminState.settings?.locale || "pt-BR")
-  );
-}
-
 function buildDuplicatedSku(sourceSku) {
   const normalized = String(sourceSku || "").trim();
   if (!normalized) return "";
@@ -2822,6 +2800,7 @@ function bindSectionTab() {
   bindDirtyFormState("#section-form", "sections");
   qs("#new-section-button")?.addEventListener("click", () => {
     clearAdminFormDirty("sections");
+    manualSectionPicker.reset();
     adminState.editingSection = createEmptySectionDraft();
     renderAdminLayout();
   });
@@ -2830,6 +2809,7 @@ function bindSectionTab() {
     button.addEventListener("click", () => {
       clearAdminFormDirty("sections");
       adminState.currentAdminTab = "sections";
+      manualSectionPicker.reset();
       adminState.editingSection = structuredClone(
         adminState.sections.find((item) => item.id === button.dataset.editSection) || createEmptySectionDraft()
       );
@@ -2846,6 +2826,7 @@ function bindSectionTab() {
   });
 
   qs("#section-form")?.addEventListener("submit", saveSection);
+  manualSectionPicker.bind(adminState.store?.id, qs("#section-form [name='selection_mode']"));
 }
 
 function bindCategoryTab() {
@@ -4242,7 +4223,7 @@ async function saveSection(event) {
   clearAdminFormDirty("sections");
   const form = event.currentTarget;
   const formData = new FormData(form);
-  const selectedProductIds = formData.getAll("selectedProductIds").map(String);
+  const selectedProductIds = manualSectionPicker.selectedIds();
 
   const payload = {
     id: String(formData.get("id") || "") || undefined,
@@ -4265,6 +4246,7 @@ async function saveSection(event) {
 
   await adminSaveSection(payload);
   showToast("Seção salva com sucesso.", "success");
+  manualSectionPicker.reset();
   adminState.editingSection = createEmptySectionDraft();
   notifyStorefrontChanged("section-save");
   await refreshSectionsData();

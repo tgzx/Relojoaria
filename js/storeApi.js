@@ -325,6 +325,30 @@ export async function incrementProductInterest(productId) {
   throwIfError(result, "Falha ao registrar interesse.");
 }
 
+// Seletor de produtos de seção: busca e paginação no servidor, com projeção mínima.
+// Diferentemente de adminListProducts(), não depende dos primeiros 1.000 registros.
+export async function adminSearchSectionProducts(storeId, { search = "", page = 0, pageSize = 12, withCount = true } = {}) {
+  const limit = Math.min(24, Math.max(1, Math.floor(Number(pageSize) || 12)));
+  const currentPage = Math.max(0, Math.floor(Number(page) || 0));
+  const term = String(search || "").trim().slice(0, 100)
+    .replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+  let query = supabase
+    .from("products")
+    .select("id,name,sku,is_active,is_archived", withCount ? { count: "exact" } : {})
+    .eq("store_id", storeId)
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
+  if (term) query = query.ilike("name", `%${term}%`);
+  const from = currentPage * limit;
+  const result = await query.range(from, from + limit - 1);
+  return {
+    data: throwIfError(result, "Não foi possível buscar os produtos da seção.") || [],
+    count: result.count ?? null,
+    page: currentPage,
+    pageSize: limit
+  };
+}
+
 export async function adminListProducts(storeId, filters = {}) {
   let query = supabase
     .from("products")
