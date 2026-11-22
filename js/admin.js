@@ -2697,7 +2697,10 @@ function bindMobileAdminChrome() {
   const controller = new AbortController();
   const update = () => {
     const isMobileChrome = window.matchMedia("(max-width: 1119px)").matches;
-    const shouldCondense = isMobileChrome && window.scrollY > 96;
+    // No celular, o cabeçalho compacto permanece visível desde o início.
+    // Em tablets, mantém a antiga transição apenas depois da rolagem.
+    const shouldCondense = window.matchMedia("(max-width: 759px)").matches ||
+      (isMobileChrome && window.scrollY > 96);
     shell.classList.toggle("is-mobile-condensed", shouldCondense);
   };
 

@@ -2713,3 +2713,37 @@ select:focus-visible,
   }
   .product-page-selection .btn { min-height: 44px; }
 }
+
+/* Topo mobile sempre compacto e colado às bordas da tela, como uma barra de navegação.
+   O conteúdo interno conserva padding para legibilidade; só o contêiner é full-bleed. */
+@media (max-width: 759px) {
+  .admin-content > .bottom-nav:first-child,
+  .admin-shell.is-mobile-condensed .admin-content > .bottom-nav:first-child {
+    top: 0;
+    width: calc(100% + 32px);
+    margin-inline: -16px;
+    max-width: none;
+    border-radius: 0;
+    border-inline: 0;
+  }
+}
+
+/* Em larguras de 320px, evitar que o nome da loja invada os botões rápidos. */
+@media (max-width: 759px) {
+  .admin-shell.is-mobile-condensed .mobile-nav-compact {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 58vw);
+  }
+  .admin-shell.is-mobile-condensed .mobile-nav-actions {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+}
+
+/* Sem vão acima da barra compacta na primeira abertura em celulares. */
+@media (max-width: 759px) {
+  .admin-content { padding-top: 0; }
+  .admin-shell.is-mobile-condensed .admin-topbar { display: none; }
+}
