@@ -26,7 +26,7 @@ test("Registros oferece tabela e Criar, com edição e atualização", () => {
   assert.match(sections, /data-edit-section=/);
   assert.match(sections, /data-refresh-section=/);
   assert.match(binder, /adminState\.sectionEditorOpen = true/);
-  assert.match(admin, /adminState\.sectionEditorOpen = false;\s*notifyStorefrontChanged\("section-save"\)/);
+  assert.match(admin, /notifyStorefrontChanged\\(\"section-save\"\\);[\\s\\S]*?adminState\\.sectionEditorOpen = false;/);
 });
 
 test("tipo de seção usa picklist controlada", () => {
