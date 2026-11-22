@@ -993,6 +993,15 @@ export async function adminDeleteBanner(id) {
   return cleanupUnreferencedStoragePaths([storagePath]);
 }
 
+export async function adminDeleteNotification(storeId, notificationId) {
+  // Evita apagar históricos enviados e limita a mutação à loja autenticada.
+  const result = await supabase.from("notifications")
+    .delete().eq("store_id", storeId).eq("id", notificationId)
+    .in("status", ["draft", "scheduled", "failed"]).select("id");
+  const rows = throwIfError(result, "Não foi possível excluir a notificação.");
+  if (rows.length !== 1) throw new Error("Notificação inexistente ou já enviada. O histórico de disparos é preservado.");
+}
+
 export async function adminListNotifications(storeId) {
   const result = await supabase
     .from("notifications")

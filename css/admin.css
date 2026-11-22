@@ -3110,3 +3110,441 @@ body { min-height: 100dvh; }
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* QA 22/11 — barra sticky com altura invariável por menu. A grid pai
+   não pode redistribuir altura livre para o seu primeiro filho. */
+.admin-main,
+.admin-content { align-content: start; }
+.admin-content { grid-auto-rows: max-content; }
+.admin-content > .bottom-nav:first-child { align-self: start; }
+
+@media (max-width: 759px) {
+  .admin-content > .bottom-nav:first-child,
+  .admin-shell.is-mobile-condensed .admin-content > .bottom-nav:first-child {
+    box-sizing: border-box;
+    height: 114px;
+    min-height: 114px;
+    max-height: 114px;
+    padding: 6px 0;
+    gap: 4px;
+    grid-template-rows: 48px 48px;
+    overflow: visible;
+  }
+  .admin-shell .mobile-nav-compact,
+  .admin-shell.is-mobile-condensed .mobile-nav-compact {
+    min-width: 0;
+    min-height: 0;
+    height: 48px;
+    max-height: 48px;
+    padding: 0 10px;
+    gap: 6px;
+    align-items: center;
+  }
+  .mobile-nav-store { min-height: 0; align-content: center; }
+  .mobile-nav-store > * { min-width: 0; }
+  .mobile-nav-actions { min-height: 0; height: 100%; align-items: center; }
+  .admin-tab-overflow-shell { height: 48px; min-height: 0; max-height: 48px; }
+  .bottom-nav .toolbar-actions,
+  .admin-content > .bottom-nav:first-child .toolbar-actions {
+    height: 48px;
+    min-height: 0;
+    max-height: 48px;
+    padding-bottom: 0;
+    align-items: center;
+  }
+  .bottom-nav .tab-button,
+  .admin-content > .bottom-nav:first-child .tab-button {
+    box-sizing: border-box;
+    min-height: 44px;
+    height: 44px;
+    max-height: 44px;
+    padding-block: 0;
+    line-height: 1.15;
+    white-space: nowrap;
+    align-self: center;
+  }
+  .admin-tab-overflow-hint { min-height: 48px; height: 48px; max-height: 48px; }
+}
+@media (min-width: 760px) and (max-width: 1119px) {
+  .admin-content > .bottom-nav:first-child {
+    box-sizing: border-box;
+    height: 59px;
+    min-height: 59px;
+    max-height: 59px;
+    padding: 6px;
+    grid-template-rows: 45px;
+    gap: 0;
+  }
+  .bottom-nav .toolbar-actions { height: 45px; min-height: 45px; align-items: center; }
+  .bottom-nav .tab-button {
+    box-sizing: border-box;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding-block: 0;
+    line-height: 1.15;
+  }
+}
+
+
+/* UI transversal do admin — visualização Card/Tabela com rádio acessível. */
+.records-display { min-width:0; max-width:100%; }
+.record-view-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: var(--admin-surface-muted);
+}
+.record-view-option { position:relative; display:inline-flex; cursor:pointer; min-width:0; }
+.record-view-option input[type="radio"] {
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  border:0;
+  opacity:0;
+  overflow:hidden;
+}
+.record-view-option span {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  min-width:62px;
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:0.86rem;
+  font-weight:700;
+  color:var(--admin-text-soft);
+  background:transparent;
+  white-space:nowrap;
+}
+.record-view-option input[type="radio"]:checked + span {
+  background:var(--admin-primary);
+  color:var(--admin-primary-contrast);
+  box-shadow:0 1px 3px rgba(0,0,0,.12);
+}
+.record-view-option input[type="radio"]:focus-visible + span {
+  outline:3px solid var(--admin-accent, #b89b50);
+  outline-offset:2px;
+}
+.section-card__header { min-width:0; gap:12px; flex-wrap:wrap; align-items:center; }
+.section-card__header > div:first-child { min-width:0; flex:1 1 150px; }
+.section-card__header-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; min-width:0; }
+.workspace-records-heading .toolbar-actions { flex-wrap:wrap; align-items:center; min-width:0; }
+.record-actions-cell {display:flex;align-items:center;justify-content:flex-start;gap:8px;min-width:0;max-width:100%;}
+.record-inline-actions {display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-width:0;}
+.record-action-picker {
+  display:none;
+  box-sizing:border-box;
+  width:132px;
+  min-width:112px;
+  max-width:100%;
+  min-height:42px;
+  padding:8px 22px 8px 12px;
+  border:1px solid var(--admin-border);
+  border-radius:11px;
+  background:var(--admin-surface-strong);
+  color:var(--admin-text);
+  font:inherit;
+  font-size:.9rem;
+  font-weight:650;
+  cursor:pointer;
+}
+.records-display[data-records-mode="table"] .record-inline-actions {display:none !important;}
+.records-display[data-records-mode="table"] .record-action-picker {display:block;}
+.records-display[data-records-mode="cards"] .record-action-picker {display:none;}
+.records-display[data-records-mode="cards"] .section-records-scroll {overflow:visible;max-width:100%;}
+.records-display[data-records-mode="cards"] .section-records-table,
+.records-display[data-records-mode="cards"] .section-records-table tbody {
+  display:block;
+  width:100%;
+}
+.records-display[data-records-mode="cards"] .section-records-table thead {display:none;}
+.records-display[data-records-mode="cards"] .section-records-table tbody {
+  display:grid;
+  gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));
+}
+.records-display[data-records-mode="cards"] .section-records-table tr {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  margin:0;
+  padding:16px;
+  border:1px solid var(--admin-border);
+  border-radius:16px;
+  background:var(--admin-surface-strong);
+}
+.records-display[data-records-mode="cards"] .section-records-table td {
+  display:flex;
+  box-sizing:border-box;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+  width:100%;
+  min-width:0;
+  border:0;
+  padding:8px 0;
+  overflow-wrap:anywhere;
+  text-align:right;
+}
+.records-display[data-records-mode="cards"] .section-records-table td::before {
+  display:block;
+  content:attr(data-label);
+  font-size:.82rem;
+  color:var(--admin-text-soft);
+  font-weight:500;
+  text-align:left;
+}
+.records-display[data-records-mode="cards"] .section-records-table td:first-child {
+  display:block;
+  text-align:left;
+}
+.records-display[data-records-mode="cards"] .section-records-table td:first-child::before {display:none;}
+.records-display[data-records-mode="cards"] .section-records-table td:last-child {
+  display:block;
+  margin-top:4px;
+  text-align:left;
+}
+.records-display[data-records-mode="cards"] .section-records-table td:last-child::before {
+  display:block;
+  margin-bottom:8px;
+}
+.records-display[data-records-mode="table"] .section-records-scroll {
+  overflow-x:auto;
+  overflow-y:auto;
+  width:100%;
+  max-width:100%;
+  overscroll-behavior-inline:contain;
+}
+.records-display[data-records-mode="table"] .section-records-table {
+  display:table !important;
+  width:100%;
+  min-width:640px;
+  table-layout:auto;
+  border-collapse:collapse;
+}
+.records-display[data-records-mode="table"] .section-records-table thead {display:table-header-group !important;}
+.records-display[data-records-mode="table"] .section-records-table tbody {display:table-row-group !important;}
+.records-display[data-records-mode="table"] .section-records-table tr {display:table-row !important;border:0; background:transparent; padding:0; margin:0;}
+.records-display[data-records-mode="table"] .section-records-table th,
+.records-display[data-records-mode="table"] .section-records-table td {
+  display:table-cell !important;
+  width:auto;
+  padding:12px;
+  border-bottom:1px solid var(--admin-border);
+  vertical-align:middle;
+  text-align:left;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.records-display[data-records-mode="table"] .section-records-table td::before {display:none !important;}
+.records-display[data-records-mode="table"] .section-records-table th:last-child {min-width:150px;}
+.records-display[data-records-mode="table"] .section-records-table td:last-child {min-width:150px;}
+/* Produto tinha apresentação de cartão implícita no mobile; agora ambos os
+   modos ficam explícitos e independentes da largura do viewport. */
+.records-display[data-records-mode="cards"] .records-product-list .table-scroll {overflow:visible;max-width:100%;}
+.records-display[data-records-mode="cards"] .records-product-list table,
+.records-display[data-records-mode="cards"] .records-product-list tbody {
+  display:block;
+  width:100%;
+}
+.records-display[data-records-mode="cards"] .records-product-list thead {display:none;}
+.records-display[data-records-mode="cards"] .records-product-list tbody {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));
+  gap:12px;
+}
+.records-display[data-records-mode="cards"] .records-product-list tr {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  padding:16px;
+  margin:0;
+  border:1px solid var(--admin-border);
+  border-radius:16px;
+  background:var(--admin-surface-strong);
+}
+.records-display[data-records-mode="cards"] .records-product-list td {
+  display:flex;
+  box-sizing:border-box;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px;
+  width:100%;
+  min-width:0;
+  padding:8px 0;
+  border:0;
+  text-align:right;
+  overflow-wrap:anywhere;
+}
+.records-display[data-records-mode="cards"] .records-product-list td::before {
+  display:block;
+  content:attr(data-label);
+  font-size:.82rem;
+  font-weight:500;
+  color:var(--admin-text-soft);
+  text-align:left;
+}
+.records-display[data-records-mode="cards"] .records-product-list td:nth-child(2) {display:block;text-align:left;}
+.records-display[data-records-mode="cards"] .records-product-list td:nth-child(2)::before {display:none;}
+.records-display[data-records-mode="cards"] .records-product-list td:last-child {display:block;text-align:left;}
+.records-display[data-records-mode="cards"] .records-product-list td:last-child::before {display:block;margin-bottom:8px;}
+.records-display[data-records-mode="table"] .records-product-list .table-scroll {
+  overflow-x:auto;
+  overflow-y:auto;
+  max-width:100%;
+}
+.records-display[data-records-mode="table"] .records-product-list table {
+  display:table !important;
+  width:100%;
+  min-width:940px;
+  border-collapse:collapse;
+}
+.records-display[data-records-mode="table"] .records-product-list thead {display:table-header-group !important;}
+.records-display[data-records-mode="table"] .records-product-list tbody {display:table-row-group !important;}
+.records-display[data-records-mode="table"] .records-product-list tr {display:table-row !important;margin:0;padding:0;border:0;background:transparent;}
+.records-display[data-records-mode="table"] .records-product-list th,
+.records-display[data-records-mode="table"] .records-product-list td {
+  display:table-cell !important;
+  width:auto;
+  border-bottom:1px solid var(--admin-border);
+  padding:12px;
+  text-align:left;
+  white-space:normal;
+  vertical-align:middle;
+}
+.records-display[data-records-mode="table"] .records-product-list td::before {display:none !important;}
+.records-display[data-records-mode="table"] .records-product-list td:last-child {min-width:150px;}
+.records-product-list > header {display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;}
+.records-product-list > header .record-view-switch {margin-left:auto;}
+@media (max-width:759px) {
+  .workspace-records-heading .toolbar-actions {justify-content:flex-start;gap:8px;}
+  .section-card__header-actions {width:100%;justify-content:space-between;}
+  .section-card__header-actions .btn {min-width:0;}
+  .records-product-list > header .record-view-switch {margin-left:0;}
+}
+/* Campos nativos não devem impor min-content > largura da coluna/card. */
+.admin-content .admin-field,
+.admin-content .inline-grid > *,
+.admin-content .grid-form > *,
+.admin-content .section-form > *,
+.admin-content .workspace-content > *,
+.admin-content .settings-grid > *,
+.admin-content .toolbar-filters > * {
+  box-sizing:border-box;
+  min-width:0;
+  max-width:100%;
+}
+.admin-content .admin-field input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.admin-content .admin-field select,
+.admin-content .admin-field textarea,
+.admin-content .grid-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.admin-content .grid-form select,
+.admin-content .grid-form textarea {
+  box-sizing:border-box;
+  min-width:0;
+  max-width:100%;
+}
+
+
+/* No modo Tabela, o menu de ações deve permanecer alcançável mesmo quando
+   o usuário rola horizontalmente as outras colunas em telas estreitas. */
+.records-display[data-records-mode="table"] .section-records-table th:last-child,
+.records-display[data-records-mode="table"] .section-records-table td:last-child,
+.records-display[data-records-mode="table"] .records-product-list th:last-child,
+.records-display[data-records-mode="table"] .records-product-list td:last-child {
+  position:sticky;
+  right:0;
+  z-index:2;
+  box-shadow:-5px 0 8px rgba(0,0,0,.06);
+  min-width:132px;
+  width:132px;
+  background:var(--admin-surface-strong);
+}
+.records-display[data-records-mode="table"] .section-records-table th:last-child,
+.records-display[data-records-mode="table"] .records-product-list th:last-child {
+  background:var(--admin-surface-muted);
+  z-index:3;
+}
+.records-display[data-records-mode="table"] .record-action-picker {
+  width:116px;
+  min-width:0;
+  min-height:44px;
+  padding-inline:8px 18px;
+}
+@media (max-width:759px) {
+  .records-display[data-records-mode="table"] .section-records-scroll::before {
+    display:block;
+    content:"← Deslize para ver outras colunas →";
+    padding:6px 0 10px;
+    font-size:.78rem;
+    color:var(--admin-text-soft);
+  }
+  .records-display[data-records-mode="table"] .records-product-list .table-scroll::before {
+    display:block;
+    content:"← Deslize para ver outras colunas →";
+    padding:6px 8px 10px;
+    font-size:.78rem;
+    color:var(--admin-text-soft);
+  }
+}
+
+
+/* Coluna sticky opaca: impedir que "Modo/Detalhes" apareça misturado com "Ações". */
+.records-display[data-records-mode="table"] .section-records-table th:last-child,
+.records-display[data-records-mode="table"] .records-product-list th:last-child {
+  background-color:#f0f1ef !important;
+  box-shadow:-7px 0 8px rgba(0,0,0,.07);
+  border-left:1px solid var(--admin-border);
+  white-space:nowrap;
+  overflow:visible;
+}
+.records-display[data-records-mode="table"] .section-records-table td:last-child,
+.records-display[data-records-mode="table"] .records-product-list td:last-child {
+  background-color:#fff !important;
+  box-shadow:-7px 0 8px rgba(0,0,0,.07);
+  border-left:1px solid var(--admin-border);
+}
+
+
+/* Na tabela mobile, largura previsível do nome: quebra linha antes da
+   coluna fixa de ações, em vez de esconder o final do texto atrás dela. */
+@media (max-width:759px) {
+  .records-display[data-records-mode="table"] .section-records-table th:first-child,
+  .records-display[data-records-mode="table"] .section-records-table td:first-child {
+    width:168px;
+    min-width:168px;
+    max-width:168px;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .records-display[data-records-mode="table"] .section-records-table td:first-child strong,
+  .records-display[data-records-mode="table"] .records-product-list .product-line__copy {
+    display:block;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+}
+.records-display[data-records-mode="table"] .record-actions-unavailable {
+  display:inline-block;
+  padding:8px 10px;
+  border:1px solid var(--admin-border);
+  border-radius:9px;
+  color:var(--admin-text-soft);
+  font-size:.84rem;
+}
+.records-display[data-records-mode="cards"] .record-actions-unavailable {display:none;}

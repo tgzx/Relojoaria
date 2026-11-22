@@ -18,6 +18,7 @@ import {
   adminListBrands,
   adminListCategories,
   adminListNotifications,
+  adminDeleteNotification,
   adminListProducts,
   adminGetProductCounts,
   adminSearchSectionProducts,
@@ -177,6 +178,7 @@ const adminState = {
   mobileTabScrollLeft: 0,
   sectionView: "list",
   workspaceViews: { products: "list", categories: "list", brands: "list", options: "list", appearance: "list", notifications: "list" },
+  recordViews: { products:"cards", sections:"cards", categories:"cards", brands:"cards", options:"cards", appearance:"cards", notifications:"cards" },
   previewNeedsRefresh: false,
   previewReady: false,
   previewRefreshTimer: 0,
@@ -275,6 +277,7 @@ function resetAdminSessionState() {
   adminState.businessHoursEditorDirty = false;
   adminState.productFilterRequestSeq = 0;
   adminState.workspaceViews = { products: "list", categories: "list", brands: "list", options: "list", appearance: "list", notifications: "list" };
+  adminState.recordViews = { products:"cards", sections:"cards", categories:"cards", brands:"cards", options:"cards", appearance:"cards", notifications:"cards" };
   qs("#admin-modal-root")?.remove();
   qs("#admin-hours-modal-root")?.remove();
   qs("#admin-password-modal-root")?.remove();
@@ -382,17 +385,31 @@ function clearAdminFormDirty(tabId = null) {
   adminState.dirtyAdminTab = null;
 }
 
+function serializeAdminFormSnapshot(form) {
+  return JSON.stringify([...new FormData(form).entries()].map(([key, value]) => [
+    key, typeof value === "string" ? value : [value.name, value.size, value.type]
+  ]));
+}
+function hasUnsavedAdminForm(tab) {
+  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === tab) return true;
+  const forms = tab === "sections" ? qsa("#section-form") :
+    qsa(".workspace-manager form");
+  return forms.some((form) => Boolean(form.dataset.initialFormSnapshot) &&
+    serializeAdminFormSnapshot(form) !== form.dataset.initialFormSnapshot);
+}
+
 function bindDirtyFormState(selector, tabId = adminState.currentAdminTab) {
   const form = qs(selector);
   if (!form) return;
 
+  form.dataset.initialFormSnapshot = serializeAdminFormSnapshot(form);
   const markDirty = () => markAdminFormDirty(tabId);
   form.addEventListener("input", markDirty);
   form.addEventListener("change", markDirty);
 }
 
 function renderAdminLayoutFromBackground() {
-  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === adminState.currentAdminTab) {
+  if (hasUnsavedAdminForm(adminState.currentAdminTab)) {
     adminState.pendingBackgroundRender = true;
     return;
   }
@@ -1087,16 +1104,68 @@ function workspaceActions(tab) {
   return `<div class="workspace-records-heading">
     <div><span class="section-kicker">Gestão da loja</span><h2>${escapeHtml(MANAGER_WORKSPACES[tab].plural)}</h2></div>
     <div class="toolbar-actions">
+    ${renderRecordViewSwitch(tab)}
     ${buttons.map((button)=>`<button class="btn btn-primary" type="button" data-workspace-create="${button.mode}" data-workspace-kind="${tab}">${escapeHtml(button.label)}</button>`).join("")}
     </div>
   </div>`;
 }
+/* Alternância de apresentação puramente local: não consulta nem regrava no banco. */
+function currentRecordView(tab) {
+  return adminState.recordViews?.[tab] === "table" ? "table" : "cards";
+}
+function renderRecordViewSwitch(tab) {
+  const current = currentRecordView(tab);
+  return `<fieldset class="record-view-switch" aria-label="Modo de visualização">
+    <legend class="visually-hidden">Visualizar registros</legend>
+    <label class="record-view-option"><input type="radio" name="record-view-${tab}" data-record-view-radio="${tab}"
+      value="cards" ${current === "cards" ? "checked" : ""}/><span>Cards</span></label>
+    <label class="record-view-option"><input type="radio" name="record-view-${tab}" data-record-view-radio="${tab}"
+      value="table" ${current === "table" ? "checked" : ""}/><span>Tabela</span></label>
+  </fieldset>`;
+}
+function renderRecordActionPicker(name, canEdit = true, actionLabel = "Excluir", canRemove = true) {
+  if (!canEdit && !canRemove) return '<span class="record-actions-unavailable">Histórico</span>';
+  return `<select class="record-action-picker" data-record-action-picker
+    aria-label="Ações para ${escapeHtml(name || "registro")}">
+      <option value="">Ações</option>
+      <option value="edit" ${canEdit ? "" : "disabled"}>Editar</option>
+      <option value="delete" ${canRemove ? "" : "disabled"}>${escapeHtml(actionLabel)}</option>
+    </select>`;
+}
+function renderRowActionCell(name, actions) {
+  const canEdit = /class="[^"]*\brecord-action-edit\b/.test(actions);
+  const canRemove = /class="[^"]*\brecord-action-delete\b/.test(actions);
+  const actionLabel = /data-disable-option-(?:group|value)/.test(actions) ? "Desativar" : "Excluir";
+  return `<div class="record-actions-cell">
+    <div class="section-record-actions record-inline-actions">${actions}</div>
+    ${renderRecordActionPicker(name, canEdit, actionLabel, canRemove)}
+  </div>`;
+}
+function bindRecordViewControls() {
+  qsa("[data-record-view-radio]").forEach((input) => input.addEventListener("change", () => {
+    if (!input.checked || !["cards", "table"].includes(input.value)) return;
+    const tab = input.dataset.recordViewRadio;
+    adminState.recordViews[tab] = input.value;
+    const area = input.closest(".records-display");
+    if (area) area.dataset.recordsMode = input.value;
+  }));
+  qsa("[data-record-action-picker]").forEach((picker) => picker.addEventListener("change", () => {
+    const action = picker.value;
+    picker.value = "";
+    const cell = picker.closest("td");
+    if (!cell) return;
+    const target = cell.querySelector(action === "edit" ? ".record-action-edit" :
+      action === "delete" ? ".record-action-delete" : ".record-action-unknown");
+    if (target && !target.disabled) target.click();
+  }));
+}
+
 function workspaceRow(item) {
   return `<tr>
     <td data-label="Registro"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.slug || "")}</small></td>
     <td data-label="Detalhes">${escapeHtml(item.detail || "—")}</td>
     <td data-label="Status"><span class="badge ${item.statusClass || (item.active ? "badge--success":"badge--muted")}">${escapeHtml(item.statusLabel || (item.active ? "Ativo":"Oculto"))}</span></td>
-    <td data-label="Ações"><div class="section-record-actions">${item.actions}</div></td>
+    <td data-label="Ações">${renderRowActionCell(item.name,item.actions)}</td>
   </tr>`;
 }
 function workspaceRecordTable(heading, rows) {
@@ -1109,10 +1178,11 @@ function workspaceRecordTable(heading, rows) {
   </article>`;
 }
 function workspaceEditButton(attr,id) {
-  return `<button class="btn btn-secondary btn-sm" type="button" ${attr}="${escapeHtml(id)}">Editar</button>`;
+  return `<button class="btn btn-secondary btn-sm record-action-edit" type="button" ${attr}="${escapeHtml(id)}">Editar</button>`;
 }
+function workspaceUtilityButton(attr,id,label) {return `<button class="btn btn-secondary btn-sm record-action-utility" type="button" ${attr}="${escapeHtml(id)}">${escapeHtml(label)}</button>`;}
 function workspaceDeleteButton(attr,id,label="Excluir") {
-  return `<button class="btn btn-danger btn-sm" type="button" ${attr}="${escapeHtml(id)}">${label}</button>`;
+  return `<button class="btn btn-danger btn-sm record-action-delete" type="button" ${attr}="${escapeHtml(id)}">${label}</button>`;
 }
 function workspaceRecords(tab) {
   if (tab==="categories") return workspaceRecordTable("Categorias cadastradas",adminState.categories.map(x=>({
@@ -1142,9 +1212,10 @@ function workspaceRecords(tab) {
     name:x.title,detail:x.recurrence_rule?"Recorrente":x.scheduled_at?"Agendamento":getNotificationStatusLabel(x.status),
     statusLabel:getNotificationStatusLabel(x.status),statusClass:getNotificationStatusClass(x.status),
     actions:(["draft","scheduled","failed"].includes(x.status)?workspaceEditButton("data-edit-notification",x.id):"")+
-      (x.recurrence_rule?workspaceDeleteButton("data-stop-recurrence",x.id,"Encerrar recorrência"):"")+
-      (x.scheduled_at && !x.recurrence_rule && x.status==="scheduled"?workspaceDeleteButton("data-cancel-schedule",x.id,"Cancelar agendamento"):"")+
-      workspaceEditButton("data-send-notification",x.id).replace(">Editar</button>",">"+(x.status==="sent"?"Reenviar":"Enviar agora")+"</button>")
+      (x.recurrence_rule?workspaceUtilityButton("data-stop-recurrence",x.id,"Encerrar recorrência"):"")+
+      (x.scheduled_at && !x.recurrence_rule && x.status==="scheduled"?workspaceUtilityButton("data-cancel-schedule",x.id,"Cancelar agendamento"):"")+
+      (["draft","scheduled","failed"].includes(x.status)?workspaceDeleteButton("data-delete-notification",x.id):"")+
+      workspaceUtilityButton("data-send-notification",x.id,x.status==="sent"?"Reenviar":"Enviar agora")
   })));
   return "";
 }
@@ -1161,7 +1232,7 @@ function renderManagedWorkspace(tab, markup) {
   const content=isList ? workspaceRecords(tab) + (tab==="notifications" ? [1,2].map(i=>panels[i]?.outerHTML||"").join("") : "") :
     allowed.map(i=>panels[i]?.outerHTML||"").join("");
   if(!content) throw new Error("Aba inválida para "+tab+"/"+view);
-  return `<section class="sections-workspace workspace-manager workspace-manager--${tab}">
+  return `<section class="sections-workspace workspace-manager workspace-manager--${tab} records-display" data-records-mode="${currentRecordView(tab)}">
     ${workspaceTabs(tab)}
     ${isList ? workspaceActions(tab) : ""}
     <div class="${escapeHtml(original.className)} workspace-content" role="tabpanel" aria-label="${isList?"Registros":"Editor"}">${content}</div>
@@ -1169,7 +1240,7 @@ function renderManagedWorkspace(tab, markup) {
   </section>`;
 }
 function renderProducts() {
-  return `<section class="sections-workspace workspace-manager workspace-manager--products">
+  return `<section class="sections-workspace workspace-manager workspace-manager--products records-display" data-records-mode="${currentRecordView("products")}">
     ${workspaceTabs("products")}
     ${workspaceView("products")==="list" ? renderProductsLegacy() :
       `<div class="workspace-inline-product" id="product-workspace-editor-root" role="tabpanel" aria-label="Editor de produto por etapas"></div>`}
@@ -1182,7 +1253,7 @@ function renderAppearanceManager(){return renderManagedWorkspace("appearance",re
 function renderNotifications(){return renderManagedWorkspace("notifications",renderNotificationsLegacy());}
 function canDiscardWorkspace(tab){
   if (tab==="options") return confirmDiscardOptionDraft("group","grupo") && confirmDiscardOptionDraft("value","valor");
-  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab===tab &&
+  if (hasUnsavedAdminForm(tab) &&
      !window.confirm("Descartar alterações não salvas?")) return false;
   return true;
 }
@@ -1432,11 +1503,12 @@ function renderProductsLegacy() {
         : ""
     }
 
-    <section class="table-card">
+    <section class="table-card records-product-list">
       <header>
         <span class="section-kicker">Lista operacional</span>
         <h2>${pagination.total} produto(s)</h2>
         <p class="admin-product-result-range" id="products-page-status" role="status">${from}–${to} de ${pagination.total}</p>
+        ${renderRecordViewSwitch("products")}
       </header>
       ${
         hasProducts
@@ -1464,10 +1536,10 @@ function renderProductsLegacy() {
                     .map(
                       (product) => `
                         <tr>
-                          <td>
+                          <td data-label="Selecionar">
                             <input type="checkbox" aria-label="Selecionar ${escapeHtml(product.name)}" data-select-product="${escapeHtml(product.id)}" ${adminState.selectedProductIds.includes(product.id) ? "checked" : ""} />
                           </td>
-                          <td>
+                          <td data-label="Produto">
                             <div class="product-line">
                               <img class="product-thumb" src="${escapeHtml(getPrimaryImage(product))}" alt="${escapeHtml(product.name)}" loading="lazy" decoding="async" />
                               <div class="product-line__copy">
@@ -1476,16 +1548,16 @@ function renderProductsLegacy() {
                               </div>
                             </div>
                           </td>
-                          <td>${formatCurrency(product.price, adminState.settings?.currency, adminState.settings?.locale)}</td>
-                          <td>${renderProductStatusBadge(product)}</td>
-                          <td>${renderFlagBadges(product)}</td>
-                          <td>${formatDateTime(product.updated_at, adminState.settings?.locale || "pt-BR")}</td>
-                          <td>
-                            <div class="inline-actions">
-                              <button class="btn btn-secondary" type="button" data-edit-product="${escapeHtml(product.id)}">Editar</button>
+                          <td data-label="Preço">${formatCurrency(product.price, adminState.settings?.currency, adminState.settings?.locale)}</td>
+                          <td data-label="Status">${renderProductStatusBadge(product)}</td>
+                          <td data-label="Sinalizações">${renderFlagBadges(product)}</td>
+                          <td data-label="Atualizado">${formatDateTime(product.updated_at, adminState.settings?.locale || "pt-BR")}</td>
+                          <td data-label="Ações">
+                            <div class="record-actions-cell"><div class="inline-actions record-inline-actions">
+                              <button class="btn btn-secondary record-action-edit" type="button" data-edit-product="${escapeHtml(product.id)}">Editar</button>
                               <button class="btn btn-secondary" type="button" data-duplicate-product="${escapeHtml(product.id)}">Duplicar</button>
-                              <button class="btn btn-danger" type="button" data-delete-product="${escapeHtml(product.id)}">Excluir</button>
-                            </div>
+                              <button class="btn btn-danger record-action-delete" type="button" data-delete-product="${escapeHtml(product.id)}">Excluir</button>
+                            </div>${renderRecordActionPicker(product.name,true,"Excluir",true)}</div>
                           </td>
                         </tr>
                       `
@@ -1520,7 +1592,7 @@ function renderSectionsManager() {
   const sectionView = adminState.sectionView === "form" ? "form" : "list";
 
   return `
-    <section class="sections-workspace">
+    <section class="sections-workspace records-display" data-records-mode="${currentRecordView("sections")}">
       <div class="section-workspace-tabs" role="tablist" aria-label="Gerenciar seções">
         <button class="section-workspace-tab ${sectionView === "list" ? "is-active" : ""}" type="button"
           role="tab" id="section-workspace-tab-list" aria-controls="section-records-panel"
@@ -1542,7 +1614,7 @@ function renderSectionsManager() {
             <span class="section-kicker">Home pública</span>
             <h2>Seções da vitrine</h2>
           </div>
-          <button class="btn btn-primary" type="button" id="new-section-button">Criar seção</button>
+          <div class="section-card__header-actions">${renderRecordViewSwitch("sections")}<button class="btn btn-primary" type="button" id="new-section-button">Criar seção</button></div>
         </div>
         ${adminState.sections.length ? `
           <div class="section-records-scroll">
@@ -1564,13 +1636,13 @@ function renderSectionsManager() {
                     <td data-label="Situação">
                       <span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativa" : "Oculta"}</span>
                     </td>
-                    <td data-label="Ações"><div class="section-record-actions">
-                      <button class="btn btn-secondary" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
-                      <button class="btn btn-danger" type="button" data-delete-section="${escapeHtml(item.id)}">Excluir</button>
+                    <td data-label="Ações"><div class="record-actions-cell"><div class="section-record-actions record-inline-actions">
+                      <button class="btn btn-secondary record-action-edit" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
+                      <button class="btn btn-danger record-action-delete" type="button" data-delete-section="${escapeHtml(item.id)}">Excluir</button>
                       ${item.selection_mode === "automatic"
                         ? `<button class="btn btn-secondary" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>`
                         : ""}
-                    </div></td>
+                    </div>${renderRecordActionPicker(item.title,true,"Excluir",true)}</div></td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -2881,7 +2953,7 @@ async function handlePasswordChangeSubmit(event) {
 function navigateAdminTab(nextTab) {
   if (!nextTab || nextTab === adminState.currentAdminTab) return;
 
-  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === adminState.currentAdminTab) {
+  if (hasUnsavedAdminForm(adminState.currentAdminTab)) {
     const shouldDiscard = window.confirm("Descartar as alterações não salvas desta tela?");
     if (!shouldDiscard) return;
   }
@@ -2917,6 +2989,7 @@ function bindAdminLayoutEvents() {
   });
 
   bindManagementWorkspaces();
+  bindRecordViewControls();
   bindProductsTab();
   bindSectionTab();
   bindCategoryTab();
@@ -3176,7 +3249,7 @@ function bindSectionTab() {
     button.addEventListener("click", () => {
       const targetView = button.dataset.sectionView;
       if (targetView === adminState.sectionView) return;
-      if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === "sections" &&
+      if (hasUnsavedAdminForm("sections") &&
           !window.confirm("Descartar as alterações não salvas desta seção?")) return;
       clearAdminFormDirty("sections");
       adminState.sectionView = targetView;
@@ -3464,6 +3537,9 @@ function bindNotificationsTab() {
   );
   qsa("[data-cancel-schedule]").forEach((button) =>
     button.addEventListener("click", () => cancelNotificationSchedule(button.dataset.cancelSchedule))
+  );
+  qsa("[data-delete-notification]").forEach((button) =>
+    button.addEventListener("click", () => removeNotification(button.dataset.deleteNotification))
   );
   qsa("[data-send-notification]").forEach((button) =>
     button.addEventListener("click", () => sendNotification(button.dataset.sendNotification))
@@ -5102,6 +5178,23 @@ async function stopNotificationRecurrence(notificationId) {
   } catch (error) {
     console.error(error);
     showToast(error.message || "Não foi possível encerrar a recorrência.", "danger");
+  }
+}
+
+async function removeNotification(notificationId) {
+  const current = adminState.notifications.find((item) => item.id === notificationId);
+  if (!current || !["draft", "scheduled", "failed"].includes(current.status)) return;
+  const extra = current.status === "scheduled" ? " Isso também cancela o agendamento futuro." : "";
+  if (!window.confirm('Excluir a notificação "' + current.title + '"?' + extra + " Essa ação não pode ser desfeita.")) return;
+  try {
+    await adminDeleteNotification(adminState.store.id, notificationId);
+    adminState.notifications = adminState.notifications.filter((item) => item.id !== notificationId);
+    if (adminState.editingNotificationId === notificationId) adminState.editingNotificationId = null;
+    showToast("Notificação excluída.", "success");
+    renderAdminLayout();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível excluir a notificação.", "danger");
   }
 }
 
