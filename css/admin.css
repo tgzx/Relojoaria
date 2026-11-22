@@ -2838,34 +2838,6 @@ select:focus-visible,
 /* Fora do mobile, não renderizar chevrons nem capturar cliques. */
 .admin-tab-overflow-hint { display: none; pointer-events: none; }
 
-/* Chevron geométrico: centro visual idêntico nas duas direções, sem o
-   deslocamento de baseline dos glifos ‹ e › no Safari/iOS. */
-@media (max-width: 759px) {
-  .admin-tab-overflow-hint {
-    font-size: 0;
-    line-height: 0;
-  }
-  .admin-tab-overflow-hint::before {
-    content: "";
-    display: block;
-    flex: 0 0 11px;
-    width: 11px;
-    height: 11px;
-    border-right: 3px solid currentColor;
-    border-bottom: 3px solid currentColor;
-    border-radius: 1px;
-    transform-origin: center center;
-  }
-  .admin-tab-overflow-hint--left::before {
-    transform: rotate(135deg);
-    margin-left: 4px;
-  }
-  .admin-tab-overflow-hint--right::before {
-    transform: rotate(-45deg);
-    margin-right: 4px;
-  }
-}
-
 /* QA 2026-11-22: subtabs de Seções, registros e editor separados. */
 .sections-workspace {
   display: grid;
@@ -3041,4 +3013,32 @@ select:focus-visible,
 }
 #banner-upload-input {
   line-height: normal;
+}
+
+/* Chevron geométrico: centro visual idêntico nas duas direções, sem o
+   deslocamento de baseline dos glifos ‹ e › no Safari/iOS. */
+@media (max-width: 759px) {
+  .admin-tab-overflow-hint {
+    font-size: 0;
+    line-height: 0;
+  }
+  .admin-tab-overflow-hint::before {
+    content: "";
+    display: block;
+    flex: 0 0 11px;
+    width: 11px;
+    height: 11px;
+    border-right: 3px solid currentColor;
+    border-bottom: 3px solid currentColor;
+    border-radius: 1px;
+    transform-origin: center center;
+  }
+  .admin-tab-overflow-hint--left::before {
+    transform: rotate(135deg);
+    margin-left: 4px;
+  }
+  .admin-tab-overflow-hint--right::before {
+    transform: rotate(-45deg);
+    margin-right: 4px;
+  }
 }
