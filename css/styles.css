@@ -2493,3 +2493,109 @@ html:has(.sheet-shell:not(.is-hidden)) {
 #close-product-modal {
   display: grid;
 }
+
+/* Cabeçalho real do detalhe: o título e o fechar não disputam a imagem durante o scroll. */
+.product-modal {
+  padding: 0;
+}
+.product-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  padding: 18px 24px 0;
+  background: var(--color-surface-strong);
+}
+.product-modal__header-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+.product-modal__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.product-modal__heading .section-kicker {
+  display: block;
+  font-size: 0.66rem;
+  margin-bottom: 8px;
+  color: var(--color-accent);
+}
+.product-modal__heading h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  font-size: clamp(1.32rem, 3vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.product-modal__header-divider {
+  height: 1px;
+  width: min(72%, 410px);
+  margin: 17px 0 0;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--color-accent) 58%, transparent),
+    color-mix(in srgb, var(--color-accent) 9%, transparent));
+}
+.product-modal__body {
+  padding: 22px 24px calc(26px + env(safe-area-inset-bottom));
+}
+#close-product-modal {
+  position: relative;
+  top: auto;
+  z-index: auto;
+  margin: 0 0 0 auto;
+  align-self: flex-start;
+  flex: 0 0 44px;
+}
+.product-modal__copy {
+  align-content: start;
+}
+.product-modal__copy .product-modal__description {
+  margin-top: 0;
+}
+/* Reservar uma faixa exclusiva para o X do aviso de instalação. */
+.install-prompt__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+}
+.install-prompt__header .section-kicker {
+  min-width: 0;
+  align-self: center;
+}
+.install-prompt__header .install-prompt__close {
+  position: static;
+  top: auto;
+  right: auto;
+  flex: 0 0 44px;
+  margin: 0 0 0 auto;
+}
+.install-prompt__card > h2 {
+  margin-top: 12px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+@media (max-width: 719px) {
+  .product-modal__header {
+    padding: 16px 20px 0;
+  }
+  .product-modal__heading h2 {
+    font-size: clamp(1.25rem, 5.2vw, 1.62rem);
+  }
+  .product-modal__body {
+    padding: 18px 20px calc(26px + env(safe-area-inset-bottom));
+  }
+  .install-prompt__card > h2 {
+    font-size: clamp(1.42rem, 5vw, 1.86rem);
+  }
+}
+
+/* Remove a margem nativa de <figure> para aproveitar a largura útil da foto no mobile. */
+.product-modal__main-image {
+  margin: 0;
+}

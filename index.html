@@ -185,10 +185,17 @@
         aria-modal="true"
         aria-labelledby="product-modal-title"
       >
-        <button id="close-product-modal" class="modal-close" type="button" aria-label="Fechar detalhes">
-          ×
-        </button>
-        <div id="product-modal-content"></div>
+        <header class="product-modal__header">
+          <div class="product-modal__header-row">
+            <div class="product-modal__heading">
+              <span class="section-kicker">Detalhes do produto</span>
+              <h2 id="product-modal-title">Carregando detalhes…</h2>
+            </div>
+            <button id="close-product-modal" class="modal-close" type="button" aria-label="Fechar detalhes">×</button>
+          </div>
+          <div class="product-modal__header-divider" aria-hidden="true"></div>
+        </header>
+        <div id="product-modal-content" class="product-modal__body"></div>
       </section>
     </div>
 
@@ -269,15 +276,11 @@
 
     <div id="install-prompt" class="install-prompt is-hidden" aria-hidden="true">
       <section class="install-prompt__card" role="dialog" aria-modal="true" aria-labelledby="install-prompt-title">
-        <button
-          id="close-install-prompt"
-          class="modal-close install-prompt__close"
-          type="button"
-          aria-label="Fechar aviso de instalação"
-        >
-          ×
-        </button>
-        <span class="section-kicker">Abra como app</span>
+        <header class="install-prompt__header">
+          <span class="section-kicker">Abra como app</span>
+          <button id="close-install-prompt" class="modal-close install-prompt__close"
+            type="button" aria-label="Fechar aviso de instalação">×</button>
+        </header>
         <h2 id="install-prompt-title">Instale a vitrine no seu celular</h2>
         <p id="install-prompt-copy">
           Adicione esta vitrine à tela inicial para abrir mais rápido, com cara de aplicativo.

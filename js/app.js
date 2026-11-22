@@ -1179,6 +1179,8 @@ async function openProductModal(slug) {
   appState.lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modal.classList.remove("is-hidden");
   modal.setAttribute("aria-hidden", "false");
+  modal.querySelector(".product-modal").scrollTop = 0;
+  qs("#product-modal-title").textContent = "Carregando detalhes…";
   setStorefrontBackgroundInert(true);
   document.body.style.overflow = "hidden";
   window.requestAnimationFrame(() => qs("#close-product-modal")?.focus());
@@ -1229,6 +1231,7 @@ async function openProductModal(slug) {
   } catch (error) {
     const isNotFound = error?.message === "Produto não encontrado.";
     if (!isNotFound) console.error(error);
+    qs("#product-modal-title").textContent = isNotFound ? "Produto não encontrado" : "Produto indisponível";
     content.innerHTML = `
       <div class="empty-state">
         <h3>${isNotFound ? "Produto não encontrado" : "Produto indisponível"}</h3>
@@ -1240,6 +1243,7 @@ async function openProductModal(slug) {
 
 function renderProductModal(product) {
   const content = qs("#product-modal-content");
+  qs("#product-modal-title").textContent = product.name;
   const settings = appState.settings || {};
   const images = product.images?.length
     ? getOrderedProductImages(product)
@@ -1284,8 +1288,6 @@ function renderProductModal(product) {
         </div>
       </div>
       <div class="product-modal__copy">
-        <span class="section-kicker">${escapeHtml(product.category?.name || "Detalhes do produto")}</span>
-        <h2 id="product-modal-title">${escapeHtml(product.name)}</h2>
         <p class="product-modal__description">${escapeHtml(getPublicProductDescription(product))}</p>
         <div class="price-line">
           <span class="price-current">${formatCurrency(product.price, settings.currency, settings.locale)}</span>

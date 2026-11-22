@@ -1,3 +1,4 @@
+import "./adminFieldGuidance.js";
 import { APP_CONFIG } from "./config.js";
 import { invalidateStorefrontCache } from "./dataCache.js";
 import { optimizeImageForUpload } from "./imageOptimization.js";
