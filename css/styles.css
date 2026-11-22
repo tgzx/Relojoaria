@@ -2447,3 +2447,49 @@ html:has(.sheet-shell:not(.is-hidden)) {
     font-size: 16px;
   }
 }
+
+/* J Gold: controles de fechar no canto superior direito, com X na cor do tema.
+   Sem cor nativa azul do Safari e mantendo foco visível/acessível. */
+.modal-close {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 42%, transparent);
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+.modal-close:hover,
+.modal-close:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.modal-close:focus-visible {
+  outline-color: var(--color-accent);
+}
+/* O modal de detalhes rola; o botão permanece no topo à direita. */
+#close-product-modal {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  margin: 0 0 12px auto;
+}
+.sheet-header > .modal-close {
+  align-self: flex-start;
+  margin-inline-start: auto;
+}
+.install-prompt__close {
+  color: var(--color-accent);
+}
+
+/* O X do detalhe precisa ocupar uma caixa block para margin-left:auto funcionar. */
+#close-product-modal {
+  display: grid;
+}

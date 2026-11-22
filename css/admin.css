@@ -2254,3 +2254,29 @@ select:focus-visible,
     font-size: 16px;
   }
 }
+
+/* J Gold: X de todos os cinco modais administrativos acompanha a cor
+   secundária da loja (--admin-accent, dinâmica, e não o azul padrão). */
+.editor-header {
+  align-items: flex-start;
+}
+.editor-header > .modal-close-button {
+  appearance: none;
+  -webkit-appearance: none;
+  align-self: flex-start;
+  margin-inline-start: auto;
+  padding: 0;
+  color: var(--admin-accent);
+  border-color: color-mix(in srgb, var(--admin-accent) 42%, var(--admin-border));
+  font-size: 1.55rem;
+  line-height: 1;
+  text-align: center;
+}
+.editor-header > .modal-close-button:hover,
+.editor-header > .modal-close-button:focus-visible {
+  color: var(--admin-accent);
+  border-color: var(--admin-accent);
+}
+.editor-header > .modal-close-button:focus-visible {
+  outline-color: var(--admin-accent);
+}
