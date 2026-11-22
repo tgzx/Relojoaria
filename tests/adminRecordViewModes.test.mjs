@@ -11,7 +11,8 @@ const api=readFileSync(join(root,"js","storeApi.js"),"utf8");
 test("sticky: altura mobile independe da aba ativa e reduz 25%",()=>{
  assert.match(css,/\.admin-content \{ grid-auto-rows: max-content; \}/);
  assert.match(css,/height: 114px;\s*min-height: 114px;\s*max-height: 114px;/);
- assert.match(css,/grid-template-rows: 48px 48px;/);
+ assert.match(css,/grid-template-rows: 58px 44px;/);
+ assert.match(css,/padding-bottom: 12px;/);
  assert.match(css,/height: 44px;\s*max-height: 44px;/);
  assert.match(css,/height: 59px;\s*min-height: 59px;\s*max-height: 59px;/);
 });
@@ -33,7 +34,10 @@ test("tabela com coluna Ações e seletor nativo Editar / Excluir",()=>{
  assert.match(admin,/data-record-action-picker/);
  assert.match(admin,/querySelector\(action === "edit" \? "\.record-action-edit"/);
  assert.match(css,/\.records-display\[data-records-mode="table"\] \.record-action-picker \{display:block;\}/);
- assert.match(css,/\.section-records-table th:last-child,[\s\S]*?position:sticky/);
+ const start=css.indexOf("/* Tabela real: Ações rola com todas as demais colunas");
+ const end=css.indexOf("/* Na tabela mobile, largura previsível",start);
+ assert.ok(start>=0 && end>start,"bloco de tabela encontrado");
+ assert.doesNotMatch(css.slice(start,end),/position:\s*sticky|right:\s*0|z-index\s*:/,"Ações não pode ter sticky");
 });
 test("histórico de notificações não é excluído e exclusão tem filtro de loja",()=>{
  assert.match(api,/export async function adminDeleteNotification\(storeId, notificationId\)/);

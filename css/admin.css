@@ -3126,30 +3126,30 @@ body { min-height: 100dvh; }
     height: 114px;
     min-height: 114px;
     max-height: 114px;
-    padding: 6px 0;
+    padding: 4px 0;
     gap: 4px;
-    grid-template-rows: 48px 48px;
+    grid-template-rows: 58px 44px;
     overflow: visible;
   }
   .admin-shell .mobile-nav-compact,
   .admin-shell.is-mobile-condensed .mobile-nav-compact {
     min-width: 0;
     min-height: 0;
-    height: 48px;
-    max-height: 48px;
+    height: 58px;
+    max-height: 58px;
     padding: 0 10px;
     gap: 6px;
     align-items: center;
   }
-  .mobile-nav-store { min-height: 0; align-content: center; }
+  .mobile-nav-store { min-height: 0; height: 100%; box-sizing: border-box; align-self: stretch; align-content: center; padding-bottom: 12px; }
   .mobile-nav-store > * { min-width: 0; }
   .mobile-nav-actions { min-height: 0; height: 100%; align-items: center; }
-  .admin-tab-overflow-shell { height: 48px; min-height: 0; max-height: 48px; }
+  .admin-tab-overflow-shell { height: 44px; min-height: 0; max-height: 44px; }
   .bottom-nav .toolbar-actions,
   .admin-content > .bottom-nav:first-child .toolbar-actions {
-    height: 48px;
+    height: 44px;
     min-height: 0;
-    max-height: 48px;
+    max-height: 44px;
     padding-bottom: 0;
     align-items: center;
   }
@@ -3164,7 +3164,7 @@ body { min-height: 100dvh; }
     white-space: nowrap;
     align-self: center;
   }
-  .admin-tab-overflow-hint { min-height: 48px; height: 48px; max-height: 48px; }
+  .admin-tab-overflow-hint { min-height: 44px; height: 44px; max-height: 44px; }
 }
 @media (min-width: 760px) and (max-width: 1119px) {
   .admin-content > .bottom-nav:first-child {
@@ -3461,25 +3461,7 @@ body { min-height: 100dvh; }
 }
 
 
-/* No modo Tabela, o menu de ações deve permanecer alcançável mesmo quando
-   o usuário rola horizontalmente as outras colunas em telas estreitas. */
-.records-display[data-records-mode="table"] .section-records-table th:last-child,
-.records-display[data-records-mode="table"] .section-records-table td:last-child,
-.records-display[data-records-mode="table"] .records-product-list th:last-child,
-.records-display[data-records-mode="table"] .records-product-list td:last-child {
-  position:sticky;
-  right:0;
-  z-index:2;
-  box-shadow:-5px 0 8px rgba(0,0,0,.06);
-  min-width:132px;
-  width:132px;
-  background:var(--admin-surface-strong);
-}
-.records-display[data-records-mode="table"] .section-records-table th:last-child,
-.records-display[data-records-mode="table"] .records-product-list th:last-child {
-  background:var(--admin-surface-muted);
-  z-index:3;
-}
+/* Tabela real: Ações rola com todas as demais colunas, sem posição fixa. */
 .records-display[data-records-mode="table"] .record-action-picker {
   width:116px;
   min-width:0;
@@ -3501,23 +3483,6 @@ body { min-height: 100dvh; }
     font-size:.78rem;
     color:var(--admin-text-soft);
   }
-}
-
-
-/* Coluna sticky opaca: impedir que "Modo/Detalhes" apareça misturado com "Ações". */
-.records-display[data-records-mode="table"] .section-records-table th:last-child,
-.records-display[data-records-mode="table"] .records-product-list th:last-child {
-  background-color:#f0f1ef !important;
-  box-shadow:-7px 0 8px rgba(0,0,0,.07);
-  border-left:1px solid var(--admin-border);
-  white-space:nowrap;
-  overflow:visible;
-}
-.records-display[data-records-mode="table"] .section-records-table td:last-child,
-.records-display[data-records-mode="table"] .records-product-list td:last-child {
-  background-color:#fff !important;
-  box-shadow:-7px 0 8px rgba(0,0,0,.07);
-  border-left:1px solid var(--admin-border);
 }
 
 
