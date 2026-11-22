@@ -2636,3 +2636,80 @@ select:focus-visible,
 /* Manuais não precisam dos controles avançados da seção automática. */
 .section-form [data-section-automatic-only][hidden] { display: none !important; }
 .manual-products-selected-hint { margin: 8px 1px 0; color: var(--admin-text-soft); font-size: .74rem; line-height: 1.4; }
+
+/* Produtos do painel: paginação server-side e seleção que atravessa páginas. */
+.admin-product-result-range {
+  margin: 6px 0 0;
+  color: var(--admin-text-soft);
+  font-size: .86rem;
+}
+.admin-product-pagination {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr) minmax(96px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--admin-border);
+  background: var(--admin-surface-strong);
+}
+.admin-product-pagination span {
+  min-width: 0;
+  color: var(--admin-text-soft);
+  font-weight: 650;
+  text-align: center;
+  font-size: .88rem;
+}
+.admin-product-pagination .btn {
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: 10px;
+}
+.admin-product-pagination button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.admin-product-pagination button:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+.admin-product-list-error {
+  margin: 0;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #b42318;
+  background: rgba(180, 35, 24, .07);
+}
+.bulk-summary #clear-product-selection {
+  margin-inline-start: 10px;
+  min-height: 40px;
+}
+.table-card {
+  scroll-margin-top: 175px;
+}
+@media (max-width: 430px) {
+  .admin-product-pagination {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 6px;
+    padding: 12px 10px 14px;
+  }
+  .admin-product-pagination .btn {
+    padding-inline: 5px;
+    font-size: .81rem;
+  }
+  .admin-product-pagination span {
+    font-size: .79rem;
+  }
+}
+
+/* O cabeçalho da tabela fica oculto no mobile; oferecer seleção da página visível. */
+.product-page-selection { display: none; }
+@media (max-width: 759px) {
+  .product-page-selection {
+    display: flex;
+    justify-content: flex-start;
+    padding: 8px 14px 0;
+  }
+  .product-page-selection .btn { min-height: 44px; }
+}

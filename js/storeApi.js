@@ -349,24 +349,51 @@ export async function adminSearchSectionProducts(storeId, { search = "", page = 
   };
 }
 
-export async function adminListProducts(storeId, filters = {}) {
+export async function adminGetProductCounts(storeId) {
+  // Contadores globais do dashboard: apenas HEAD/count, sem carregar catálogo.
+  const base = () => supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId);
+  const [active, promotions, lowStock] = await Promise.all([
+    base().eq("is_active", true).eq("is_archived", false),
+    base().eq("is_promotion", true),
+    base().or("stock_status.eq.low_stock,stock_quantity.lte.3")
+  ]);
+  throwIfError(active, "Não foi possível contar os produtos ativos.");
+  throwIfError(promotions, "Não foi possível contar as promoções.");
+  throwIfError(lowStock, "Não foi possível contar o estoque baixo.");
+  return { active: active.count ?? 0, promotions: promotions.count ?? 0, lowStock: lowStock.count ?? 0 };
+}
+
+export async function adminListProducts(storeId, filters = {}, { page = 0, pageSize = 10, withCount = true } = {}) {
+  const size = Math.min(50, Math.max(1, Math.floor(Number(pageSize) || 10)));
+  const current = Math.max(0, Math.floor(Number(page) || 0));
+  const sectionId = String(filters.sectionId || "").trim();
   let query = supabase
     .from("products")
-    .select(ADMIN_PRODUCT_SELECT, { count: "exact" })
+    .select(
+      sectionId ? `${ADMIN_PRODUCT_SELECT}, section_products!inner(section_id)` : ADMIN_PRODUCT_SELECT,
+      withCount ? { count: "exact" } : {}
+    )
     .eq("store_id", storeId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: true });
 
-  if (filters.search) query = query.ilike("name", `%${filters.search}%`);
+  const term = String(filters.search || "").trim().slice(0, 100)
+    .replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+  if (term) query = query.ilike("name", `%${term}%`);
   if (filters.status === "active") query = query.eq("is_active", true).eq("is_archived", false);
   if (filters.status === "inactive") query = query.eq("is_active", false).eq("is_archived", false);
   if (filters.status === "archived") query = query.eq("is_archived", true);
   if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.brandId) query = query.eq("brand_id", filters.brandId);
+  if (sectionId) query = query.eq("section_products.section_id", sectionId);
 
-  const result = await query;
+  const from = current * size;
+  const result = await query.range(from, from + size - 1);
   return {
     data: mapProducts(throwIfError(result, "Não foi possível listar os produtos.")),
-    count: result.count || 0
+    count: result.count ?? null,
+    page: current,
+    pageSize: size
   };
 }
 

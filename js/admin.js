@@ -18,6 +18,7 @@ import {
   adminListCategories,
   adminListNotifications,
   adminListProducts,
+  adminGetProductCounts,
   adminSearchSectionProducts,
   adminListProductOptionGroups,
   adminListProductOptionSelections,
@@ -118,8 +119,10 @@ const adminState = {
   membership: null,
   store: null,
   settings: null,
-  products: [],
-  filteredProducts: [],
+  products: [], // Últimos 10, destinados ao dashboard (não é o catálogo inteiro).
+  filteredProducts: [], // Página atual do catálogo administrativo.
+  productCounts: { active: 0, promotions: 0, lowStock: 0 },
+  productPagination: { page: 0, pageSize: 10, total: 0, loaded: false, error: "" },
   categories: [],
   brands: [],
   productOptionGroups: [],
@@ -526,9 +529,10 @@ async function loadAdminData() {
     adminState.store = membership.store;
 
     const settingsPromise = withTimeout(getStoreSettings(membership.store.id).catch(() => null), 10000, "getStoreSettings");
-    const productsPromise = withTimeout(adminListProducts(membership.store.id, {}), 10000, "adminListProducts");
+    const productCountsPromise = withTimeout(adminGetProductCounts(membership.store.id), 10000, "adminGetProductCounts");
+    const productsPromise = withTimeout(adminListProducts(membership.store.id, {}, { page: 0, pageSize: 10 }), 10000, "adminListProducts");
     const filteredProductsPromise = hasActiveProductFilters()
-      ? withTimeout(adminListProducts(membership.store.id, adminState.productFilters), 10000, "adminListFilteredProducts")
+      ? withTimeout(adminListProducts(membership.store.id, adminState.productFilters, { page: 0, pageSize: 10 }), 10000, "adminListFilteredProducts")
       : productsPromise;
     const categoriesPromise = withTimeout(adminListCategories(membership.store.id), 10000, "adminListCategories");
     const brandsPromise = withTimeout(adminListBrands(membership.store.id), 10000, "adminListBrands");
@@ -539,10 +543,11 @@ async function loadAdminData() {
     const notificationsPromise = withTimeout(adminListNotifications(membership.store.id), 10000, "adminListNotifications");
     const pushSummaryPromise = withTimeout(adminListPushSubscriptionsSummary(membership.store.id), 10000, "adminListPushSubscriptionsSummary");
 
-    const [settings, productsRes, filteredProductsRes, categories, brands, optionGroups, optionValues, sections, banners, notifications, pushSummary] = await Promise.all([
+    const [settings, productsRes, filteredProductsRes, productCounts, categories, brands, optionGroups, optionValues, sections, banners, notifications, pushSummary] = await Promise.all([
       settingsPromise,
       productsPromise,
       filteredProductsPromise,
+      productCountsPromise,
       categoriesPromise,
       brandsPromise,
       optionGroupsPromise,
@@ -555,7 +560,11 @@ async function loadAdminData() {
 
     adminState.settings = settings;
     adminState.products = productsRes.data || [];
-    adminState.filteredProducts = filteredProductsRes.data || productsRes.data || [];
+    adminState.filteredProducts = filteredProductsRes.data || [];
+    adminState.productCounts = productCounts;
+    adminState.productPagination = {
+      page: 0, pageSize: 10, total: filteredProductsRes.count ?? 0, loaded: true, error: ""
+    };
     adminState.categories = categories || [];
     adminState.brands = brands || [];
     adminState.productOptionGroups = optionGroups || [];
@@ -994,11 +1003,9 @@ function renderCurrentTab() {
 }
 
 function renderDashboard() {
-  const activeProducts = adminState.products.filter((product) => product.is_active && !product.is_archived).length;
-  const promotions = adminState.products.filter((product) => product.is_promotion).length;
-  const lowStock = adminState.products.filter(
-    (product) => product.stock_status === "low_stock" || Number(product.stock_quantity) <= 3
-  ).length;
+  const activeProducts = adminState.productCounts.active;
+  const promotions = adminState.productCounts.promotions;
+  const lowStock = adminState.productCounts.lowStock;
 
   return `
     <section class="stat-grid">
@@ -1121,6 +1128,11 @@ function renderDashboard() {
 function renderProducts() {
   const products = getVisibleProducts();
   const hasProducts = products.length > 0;
+  const pagination = adminState.productPagination;
+  const pageCount = Math.max(1, Math.ceil(pagination.total / pagination.pageSize));
+  const from = pagination.total ? pagination.page * pagination.pageSize + 1 : 0;
+  const to = Math.min(pagination.total, (pagination.page + 1) * pagination.pageSize);
+  const wholePageSelected = hasProducts && products.every((item) => adminState.selectedProductIds.includes(item.id));
 
   return `
     <section class="panel-card toolbar">
@@ -1176,7 +1188,9 @@ function renderProducts() {
       adminState.selectedProductIds.length
         ? `
           <section class="bulk-toolbar">
-            <div class="bulk-summary">${adminState.selectedProductIds.length} item(ns) selecionado(s)</div>
+            <div class="bulk-summary">${adminState.selectedProductIds.length} item(ns) selecionado(s) entre as páginas
+              <button class="btn btn-secondary" type="button" id="clear-product-selection">Limpar seleção</button>
+            </div>
             <div class="bulk-actions">
               <button class="btn btn-secondary" type="button" data-bulk-action="activate">Ativar</button>
               <button class="btn btn-secondary" type="button" data-bulk-action="deactivate">Desativar</button>
@@ -1192,16 +1206,22 @@ function renderProducts() {
     <section class="table-card">
       <header>
         <span class="section-kicker">Lista operacional</span>
-        <h2>${products.length} produto(s)</h2>
+        <h2>${pagination.total} produto(s)</h2>
+        <p class="admin-product-result-range" id="products-page-status" role="status">${from}–${to} de ${pagination.total}</p>
       </header>
       ${
         hasProducts
           ? `
+            <div class="product-page-selection">
+              <button class="btn btn-secondary" type="button" id="select-page-products">
+                ${wholePageSelected ? "Desmarcar página" : "Selecionar página"}
+              </button>
+            </div>
             <div class="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th><input type="checkbox" id="select-all-products" aria-label="Selecionar todos os produtos" ${adminState.selectedProductIds.length === products.length ? "checked" : ""} /></th>
+                    <th><input type="checkbox" id="select-all-products" aria-label="Selecionar os 10 produtos desta página" ${wholePageSelected ? "checked" : ""} /></th>
                     <th>Produto</th>
                     <th>Preço</th>
                     <th>Status</th>
@@ -1254,6 +1274,14 @@ function renderProducts() {
             </div>
           `
       }
+      ${pagination.error ? `<p class="admin-product-list-error" role="alert">${escapeHtml(pagination.error)} <button id="retry-products-page" class="btn btn-secondary" type="button">Tentar novamente</button></p>` : ""}
+      <nav class="admin-product-pagination" aria-label="Paginação dos produtos">
+        <button class="btn btn-secondary" type="button" id="products-page-previous"
+          ${pagination.page === 0 ? "disabled" : ""}>Anterior</button>
+        <span>Página ${pagination.page + 1} de ${pageCount}</span>
+        <button class="btn btn-secondary" type="button" id="products-page-next"
+          ${pagination.page + 1 >= pageCount ? "disabled" : ""}>Próxima</button>
+      </nav>
     </section>
   `;
 }
@@ -2758,15 +2786,39 @@ function bindProductsTab() {
       sectionId: String(data.get("sectionId") || "")
     };
     adminState.productFilterRequestSeq += 1;
+    adminState.productPagination.page = 0;
+    adminState.productPagination.loaded = false;
+    adminState.selectedProductIds = []; // Novo filtro: seleção antiga não é mais pertinente.
     refreshFilteredProducts();
   });
 
   qs("#open-new-product")?.addEventListener("click", () => openProductEditor());
-  qs("#reload-products")?.addEventListener("click", refreshProducts);
-
-  qs("#select-all-products")?.addEventListener("change", (event) => {
-    adminState.selectedProductIds = event.currentTarget.checked ? getVisibleProducts().map((product) => product.id) : [];
+  qs("#reload-products")?.addEventListener("click", () => refreshProducts({ refreshCount: true }));
+  qs("#retry-products-page")?.addEventListener("click", () => refreshProducts({ refreshCount: true }));
+  qs("#clear-product-selection")?.addEventListener("click", () => {
+    adminState.selectedProductIds = [];
     renderAdminLayout();
+  });
+  for (const [selector, step] of [["#products-page-previous", -1], ["#products-page-next", 1]]) {
+    qs(selector)?.addEventListener("click", () => {
+      const nextPage = adminState.productPagination.page + step;
+      if (nextPage < 0 || nextPage * adminState.productPagination.pageSize >= adminState.productPagination.total) return;
+      adminState.productPagination.page = nextPage;
+      void refreshProducts({ preserveListPosition: true });
+    });
+  }
+
+  const togglePageSelection = (checked) => {
+    const currentIds = new Set(getVisibleProducts().map((product) => product.id));
+    adminState.selectedProductIds = checked
+      ? [...new Set([...adminState.selectedProductIds, ...currentIds])]
+      : adminState.selectedProductIds.filter((id) => !currentIds.has(id));
+    renderAdminLayout();
+  };
+  qs("#select-all-products")?.addEventListener("change", (event) => togglePageSelection(event.currentTarget.checked));
+  qs("#select-page-products")?.addEventListener("click", () => {
+    const currentPage = getVisibleProducts();
+    togglePageSelection(!currentPage.every((p) => adminState.selectedProductIds.includes(p.id)));
   });
 
   qsa("[data-select-product]").forEach((input) =>
@@ -3178,11 +3230,11 @@ function bindSettingsTab() {
   qs("#open-business-hours-editor")?.addEventListener("click", openBusinessHoursEditor);
 }
 
-async function refreshProducts({ preserveFilterFocus = false } = {}) {
+async function refreshProducts({ preserveFilterFocus = false, preserveListPosition = false, refreshCount = false } = {}) {
   const requestSeq = ++adminState.productFilterRequestSeq;
-
-  const response = await adminListProducts(adminState.store.id, adminState.productFilters);
-  if (requestSeq !== adminState.productFilterRequestSeq) return;
+  const paging = adminState.productPagination;
+  const countNeeded = refreshCount || !paging.loaded;
+  const currentPage = paging.page;
 
   const activeFilterControl = preserveFilterFocus
     ? document.activeElement?.closest?.("#products-filter-form [name]")
@@ -3193,43 +3245,65 @@ async function refreshProducts({ preserveFilterFocus = false } = {}) {
   const selectionStart = canRestoreSelection ? activeFilterControl.selectionStart : null;
   const selectionEnd = canRestoreSelection ? activeFilterControl.selectionEnd : null;
 
-  adminState.filteredProducts = response.data || [];
-  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.filteredProducts.some((product) => product.id === id)
-  );
-  renderAdminLayout();
+  try {
+    let response = await adminListProducts(adminState.store.id, adminState.productFilters, {
+      page: currentPage, pageSize: paging.pageSize, withCount: countNeeded
+    });
+    if (requestSeq !== adminState.productFilterRequestSeq) return;
+    if (response.count !== null) paging.total = response.count;
+    paging.loaded = true;
+    // Página removida por outro usuário ou por uma exclusão: recalcular a última disponível.
+    if (!response.data.length && currentPage > 0) {
+      if (response.count === null) {
+        response = await adminListProducts(adminState.store.id, adminState.productFilters, {
+          page: currentPage, pageSize: paging.pageSize, withCount: true
+        });
+        if (requestSeq !== adminState.productFilterRequestSeq) return;
+      }
+      paging.total = response.count ?? 0;
+      paging.page = Math.max(0, Math.ceil(paging.total / paging.pageSize) - 1);
+      if (paging.total > 0) {
+        response = await adminListProducts(adminState.store.id, adminState.productFilters, {
+          page: paging.page, pageSize: paging.pageSize, withCount: false
+        });
+        if (requestSeq !== adminState.productFilterRequestSeq) return;
+      }
+    }
+    adminState.filteredProducts = response.data || [];
+    paging.error = "";
+  } catch (error) {
+    if (requestSeq !== adminState.productFilterRequestSeq) return;
+    paging.error = error.message || "Não foi possível carregar esta página.";
+    paging.loaded = false;
+    adminState.filteredProducts = [];
+  }
 
+  renderAdminLayout();
+  if (preserveListPosition) {
+    window.requestAnimationFrame(() =>
+      qs(".table-card")?.scrollIntoView({ block: "start" })
+    );
+  }
   if (activeFilterName) {
     window.requestAnimationFrame(() => {
       const nextFilterForm = qs("#products-filter-form");
       const nextFilterControl = nextFilterForm?.elements?.namedItem(activeFilterName);
       const activeElement = document.activeElement;
       const userMovedFocus =
-        activeElement &&
-        activeElement !== document.body &&
-        activeElement !== document.documentElement;
+        activeElement && activeElement !== document.body && activeElement !== document.documentElement;
       if (!(nextFilterControl instanceof HTMLElement) || userMovedFocus) return;
-
       nextFilterControl.focus({ preventScroll: true });
       if (
         (nextFilterControl instanceof HTMLInputElement || nextFilterControl instanceof HTMLTextAreaElement) &&
-        selectionStart !== null &&
-        selectionEnd !== null
-      ) {
-        nextFilterControl.setSelectionRange(selectionStart, selectionEnd);
-      }
+        selectionStart !== null && selectionEnd !== null
+      ) nextFilterControl.setSelectionRange(selectionStart, selectionEnd);
     });
   }
 }
 
 function getVisibleProducts() {
-  const sectionId = adminState.productFilters.sectionId;
-  const productSource = adminState.filteredProducts.length || hasActiveProductFilters() ? adminState.filteredProducts : adminState.products;
-  if (!sectionId) return productSource;
-  const productIds = (adminState.sections.find((section) => section.id === sectionId)?.section_products || []).map(
-    (item) => item.product_id
-  );
-  return productSource.filter((product) => productIds.includes(product.id));
+  // Busca e todos os filtros (inclusive Seção) já são aplicados no Supabase.
+  return adminState.filteredProducts;
 }
 
 function openProductEditor(productId = null) {
@@ -4143,7 +4217,7 @@ async function removeExistingProductImage(imageId) {
 }
 
 async function duplicateProduct(productId) {
-  const source = adminState.products.find((item) => item.id === productId);
+  const source = findProductById(productId);
   if (!source) return;
 
   try {
@@ -4178,7 +4252,6 @@ async function duplicateProduct(productId) {
     showToast("Produto duplicado como rascunho.", "success");
     notifyStorefrontChanged("product-duplicate");
     await refreshProductsData();
-    prependUniqueProductState(duplicatedForState);
     renderAdminLayout();
   } catch (error) {
     console.error(error);
@@ -4197,7 +4270,9 @@ async function deleteProduct(productId) {
     showToast("Produto excluído.", "warning");
   }
   notifyStorefrontChanged("product-delete");
+  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) => id !== productId);
   await refreshProductsAndSectionsData();
+  renderAdminLayout();
 }
 
 async function applyBulkAction(action) {
@@ -4216,6 +4291,7 @@ async function applyBulkAction(action) {
   showToast("Ação em massa aplicada.", "success");
   notifyStorefrontChanged("product-bulk-update");
   await refreshProductsData();
+  renderAdminLayout();
 }
 
 async function saveSection(event) {
@@ -4743,19 +4819,36 @@ async function saveSettings(event) {
 }
 
 async function refreshProductsData() {
-  const allProductsPromise = adminListProducts(adminState.store.id, {});
-  const filteredProductsPromise = hasActiveProductFilters()
-    ? adminListProducts(adminState.store.id, adminState.productFilters)
-    : allProductsPromise;
-  const [allProductsRes, filteredProductsRes] = await Promise.all([
-    allProductsPromise,
-    filteredProductsPromise
+  const paging = adminState.productPagination;
+  const firstPage = adminListProducts(adminState.store.id, {}, { page: 0, pageSize: paging.pageSize });
+  const currentPage = paging.page;
+  const currentRows = currentPage === 0 && !hasActiveProductFilters()
+    ? firstPage
+    : adminListProducts(adminState.store.id, adminState.productFilters, {
+        page: currentPage, pageSize: paging.pageSize, withCount: true
+      });
+  const [recent, current, counts] = await Promise.all([
+    firstPage, currentRows, adminGetProductCounts(adminState.store.id)
   ]);
-  adminState.products = allProductsRes.data || [];
-  adminState.filteredProducts = filteredProductsRes.data || [];
-  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.filteredProducts.some((product) => product.id === id)
-  );
+  adminState.products = recent.data || [];
+  adminState.productCounts = counts;
+  paging.total = current.count ?? 0;
+  paging.loaded = true;
+  paging.error = "";
+  if (!current.data.length && currentPage > 0) {
+    paging.page = Math.max(0, Math.ceil(paging.total / paging.pageSize) - 1);
+    if (paging.total > 0) {
+      const last = await adminListProducts(adminState.store.id, adminState.productFilters, {
+        page: paging.page, pageSize: paging.pageSize, withCount: false
+      });
+      adminState.filteredProducts = last.data || [];
+    } else {
+      adminState.filteredProducts = [];
+    }
+  } else {
+    adminState.filteredProducts = current.data || [];
+  }
+  // Seleções permanecem entre páginas; só a ação em massa ou um novo filtro as limpa.
 }
 
 async function refreshSectionsData() {
@@ -4763,22 +4856,13 @@ async function refreshSectionsData() {
 }
 
 async function refreshProductsAndSectionsData() {
-  const allProductsPromise = adminListProducts(adminState.store.id, {});
-  const filteredProductsPromise = hasActiveProductFilters()
-    ? adminListProducts(adminState.store.id, adminState.productFilters)
-    : allProductsPromise;
-  const [allProductsRes, filteredProductsRes, sections] = await Promise.all([
-    allProductsPromise,
-    filteredProductsPromise,
+  const [_, sections] = await Promise.all([
+    refreshProductsData(),
     adminListSections(adminState.store.id)
   ]);
-  adminState.products = allProductsRes.data || [];
-  adminState.filteredProducts = filteredProductsRes.data || [];
   adminState.sections = sections || [];
-  adminState.selectedProductIds = adminState.selectedProductIds.filter((id) =>
-    adminState.filteredProducts.some((product) => product.id === id)
-  );
 }
+
 function renderOptions(options, selectedValue) {
   return options
     .map(
