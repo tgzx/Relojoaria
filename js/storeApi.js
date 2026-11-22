@@ -764,6 +764,14 @@ export async function adminSaveSection(payload) {
   return section;
 }
 
+export async function adminDeleteSection(storeId, sectionId) {
+  // Remover só a seção da loja autenticada. section_products usa ON DELETE CASCADE.
+  const result = await supabase.from("product_sections")
+    .delete().eq("store_id", storeId).eq("id", sectionId).select("id");
+  const rows = throwIfError(result, "Não foi possível excluir a seção.");
+  if (rows.length !== 1) throw new Error("Seção não encontrada ou sem permissão para excluir.");
+}
+
 export async function adminRefreshAutomaticSection(sectionId) {
   const sectionRes = await supabase.from("product_sections").select("*").eq("id", sectionId).single();
   const section = throwIfError(sectionRes, "Seção não encontrada.");

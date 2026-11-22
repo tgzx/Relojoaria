@@ -27,7 +27,7 @@ test("Filtros são aplicados no backend e o filtro de seção não depende dos p
 test("Dashboard usa contadores HEAD para o catálogo inteiro",()=>{
  assert.match(api,/export async function adminGetProductCounts/);
  assert.match(api,/select\("id", \{ count: "exact", head: true \}\)/);
- const view=admin.slice(admin.indexOf("function renderDashboard()"),admin.indexOf("function renderProducts()"));
+ const view=admin.slice(admin.indexOf("function renderDashboard()"),admin.indexOf("function renderProductsLegacy()"));
  assert.match(view,/adminState\.productCounts\.active/);
  assert.match(view,/adminState\.productCounts\.promotions/);
  assert.match(view,/adminState\.productCounts\.lowStock/);

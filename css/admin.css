@@ -2976,3 +2976,137 @@ body { min-height: 100dvh; }
   }
   .admin-tab-overflow-hint svg { width: 18px; height: 18px; }
 }
+
+/* 2026-11-22 — padrão único de workspaces administráveis (Registros/Criar/Editar). */
+.workspace-manager {
+  min-width: 0;
+  width: 100%;
+  gap: 14px;
+}
+.workspace-records-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+.workspace-records-heading h2 {
+  margin: 2px 0 0;
+}
+.workspace-records-heading .toolbar-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+.workspace-manager > .workspace-content {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 18px;
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-record-table-panel h3 {
+  margin: 0;
+  font-size: 1.12rem;
+}
+.workspace-record-table-panel .section-records-table {
+  table-layout: auto;
+}
+.workspace-record-table-panel .section-records-table th:last-child {
+  min-width: 140px;
+}
+.workspace-record-table-panel .section-records-table td {
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.workspace-back-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 2px;
+}
+.workspace-manager .section-workspace-tab {
+  max-width: 100%;
+}
+@media (min-width: 1024px) {
+  .workspace-manager--appearance .workspace-content:has(#banner-form) {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+@media (max-width: 759px) {
+  .workspace-manager .workspace-records-heading {
+    align-items: stretch;
+  }
+  .workspace-records-heading .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .workspace-records-heading .toolbar-actions .btn {
+    min-width: 0;
+  }
+  .workspace-record-table-panel .section-records-table td {
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .workspace-record-table-panel .section-records-table td:last-child {
+    min-width: 0;
+  }
+}
+
+/* Cadastro de produto no segundo tabset; preserva wizard de cinco etapas. */
+.workspace-inline-product {
+  min-width: 0;
+  width: 100%;
+}
+.workspace-inline-product .editor-backdrop {
+  display: none;
+}
+.workspace-inline-product .product-editor-inline {
+  position: relative;
+  inset: auto;
+  transform: none;
+  z-index: auto;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  min-height: 0;
+  margin: 0;
+  overflow: visible;
+  border: 1px solid var(--admin-border);
+  border-radius: 22px;
+  background: var(--admin-surface-strong);
+  box-shadow: var(--admin-shadow);
+}
+.workspace-inline-product .editor-header,
+.workspace-inline-product .editor-body,
+.workspace-inline-product .editor-content,
+.workspace-inline-product .editor-footer {
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-inline-product .editor-header,
+.workspace-inline-product .editor-footer {
+  position: relative;
+  inset: auto;
+}
+.workspace-inline-product .editor-body,
+.workspace-inline-product .editor-content {
+  overflow: visible;
+  max-height: none;
+}
+@media (max-width: 759px) {
+  .workspace-inline-product .product-editor-inline {
+    border-radius: 18px;
+  }
+  .workspace-inline-product .editor-header,
+  .workspace-inline-product .editor-body,
+  .workspace-inline-product .editor-footer {
+    padding-inline: 14px;
+  }
+  .workspace-inline-product .editor-footer {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}

@@ -8,7 +8,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const admin=readFileSync(join(root,"js","admin.js"),"utf8");
 const css=readFileSync(join(root,"css","admin.css"),"utf8");
 const password=admin.slice(admin.indexOf("function renderPasswordChangeModal()"),admin.indexOf("async function handlePasswordChangeSubmit("));
-const sections=admin.slice(admin.indexOf("function renderSectionsManager()"),admin.indexOf("function renderProductOptionsManager()"));
+const sections=admin.slice(admin.indexOf("function renderSectionsManager()"),admin.indexOf("function renderProductOptionsManagerLegacy()"));
 
 test("iOS: primeira abertura da senha não dispara o teclado automaticamente",()=>{
  assert.doesNotMatch(password,/input\[name=['"]password['"]\].*\.focus\(/);

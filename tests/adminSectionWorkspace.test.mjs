@@ -7,7 +7,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const admin=readFileSync(join(root,"js/admin.js"),"utf8");
 const css=readFileSync(join(root,"css/admin.css"),"utf8");
 test("Seções só mostra formulário na aba Criar/Editar",()=>{
- const f=admin.slice(admin.indexOf("function renderSectionsManager()"),admin.indexOf("function renderProductOptionsManager()"));
+ const f=admin.slice(admin.indexOf("function renderSectionsManager()"),admin.indexOf("function renderProductOptionsManagerLegacy()"));
  assert.match(f,/sectionView === "list"/);
  assert.match(f,/section-workspace-tabs/);
  assert.match(f,/sectionView === "form"/);

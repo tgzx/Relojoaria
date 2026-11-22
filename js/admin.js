@@ -12,6 +12,7 @@ import {
   adminDeleteBrand,
   adminDeleteCategory,
   adminDeleteProduct,
+  adminDeleteSection,
   adminDeleteProductImage,
   adminListBanners,
   adminListBrands,
@@ -175,6 +176,7 @@ const adminState = {
   pendingBackgroundRender: false,
   mobileTabScrollLeft: 0,
   sectionView: "list",
+  workspaceViews: { products: "list", categories: "list", brands: "list", options: "list", appearance: "list", notifications: "list" },
   previewNeedsRefresh: false,
   previewReady: false,
   previewRefreshTimer: 0,
@@ -272,6 +274,7 @@ function resetAdminSessionState() {
   adminState.productEditorDirty = false;
   adminState.businessHoursEditorDirty = false;
   adminState.productFilterRequestSeq = 0;
+  adminState.workspaceViews = { products: "list", categories: "list", brands: "list", options: "list", appearance: "list", notifications: "list" };
   qs("#admin-modal-root")?.remove();
   qs("#admin-hours-modal-root")?.remove();
   qs("#admin-password-modal-root")?.remove();
@@ -904,6 +907,9 @@ async function handleLogout() {
 
 function renderAdminLayout() {
   const root = qs("#admin-root");
+  const workspaceKey = adminState.currentAdminTab + ":" + (adminState.currentAdminTab === "sections" ? adminState.sectionView : (adminState.workspaceViews?.[adminState.currentAdminTab] || "list"));
+  const workspaceChanged = Boolean(window.__adminLastWorkspaceKey && window.__adminLastWorkspaceKey !== workspaceKey);
+  window.__adminLastWorkspaceKey = workspaceKey;
   // Captura síncrona: um scroll recém-feito pode não ter disparado o evento ainda.
   const currentTabStrip = root?.querySelector(".admin-tab-overflow-shell .toolbar-actions");
   if (currentTabStrip) adminState.mobileTabScrollLeft = currentTabStrip.scrollLeft;
@@ -983,6 +989,7 @@ function renderAdminLayout() {
   renderNotificationHistoryModal();
   renderNotificationPlanningModal();
   renderPasswordChangeModal();
+  if (workspaceChanged) scrollAdminMainToTop();
 }
 
 function renderTabButtons() {
@@ -1023,6 +1030,205 @@ function renderCurrentTab() {
     default:
       return renderDashboard();
   }
+}
+
+
+// Workspaces em abas — criação/edição sob demanda, preservando renderizadores e CRUD antigos.
+const MANAGER_WORKSPACES = {
+  categories: { singular: "categoria", plural: "Categorias", mode: "form", panels: { form: [1] } },
+  brands: { singular: "marca", plural: "Marcas", mode: "form", panels: { form: [1] } },
+  options: { singular: "opção", plural: "Opções", modes: ["group", "value"], panels: { group: [1], value: [3] } },
+  appearance: { singular: "banner", plural: "Banners", mode: "form", panels: { form: [0,1] } },
+  notifications: { singular: "notificação", plural: "Notificações", mode: "form", panels: { form: [0] } },
+  products: { singular: "produto", plural: "Produtos", mode: "form" }
+};
+function workspaceView(tab) {
+  return adminState.workspaceViews[tab] || "list";
+}
+function workspaceCount(tab) {
+  switch(tab) {
+    case "categories": return adminState.categories.length;
+    case "brands": return adminState.brands.length;
+    case "options": return adminState.productOptionGroups.length + adminState.productOptionValues.length;
+    case "appearance": return adminState.banners.length;
+    case "notifications": return adminState.notifications.length;
+    case "products": return adminState.productPagination.total;
+    default: return 0;
+  }
+}
+function workspaceTabs(tab) {
+  const config=MANAGER_WORKSPACES[tab];
+  const mode=workspaceView(tab);
+  const editing = ({
+    categories: adminState.editingCategory?.id, brands: adminState.editingBrand?.id,
+    appearance: adminState.editingBanner?.id, notifications: adminState.editingNotificationId,
+    options: mode === "group" ? adminState.editingOptionGroup?.id : adminState.editingOptionValue?.id,
+    products: adminState.editingProduct?.id
+  })[tab];
+  const label=tab==="options" ? mode==="group"?"grupo":"valor" : config.singular;
+  const title=editing?"Editar "+label:"Criar "+label;
+  return `
+    <div class="section-workspace-tabs" role="tablist" aria-label="Gerenciar ${escapeHtml(config.plural)}">
+      <button class="section-workspace-tab ${mode === "list" ? "is-active":""}" type="button"
+        role="tab" aria-selected="${mode === "list"}" id="${tab}-workspace-records"
+        data-workspace-tab="list" data-workspace-kind="${tab}">Registros
+        <span class="section-workspace-count">${workspaceCount(tab)}</span>
+      </button>
+      ${mode !== "list" ? `<button class="section-workspace-tab is-active" type="button"
+        role="tab" aria-selected="true" id="${tab}-workspace-editor"
+        data-workspace-tab="${mode}" data-workspace-kind="${tab}">${escapeHtml(title)}</button>` : ""}
+    </div>
+  `;
+}
+function workspaceActions(tab) {
+  const buttons=tab==="options" ? [
+    {mode:"group",label:"Criar grupo"}, {mode:"value",label:"Criar valor"}
+  ]:[{mode:"form",label:"Criar "+MANAGER_WORKSPACES[tab].singular}];
+  return `<div class="workspace-records-heading">
+    <div><span class="section-kicker">Gestão da loja</span><h2>${escapeHtml(MANAGER_WORKSPACES[tab].plural)}</h2></div>
+    <div class="toolbar-actions">
+    ${buttons.map((button)=>`<button class="btn btn-primary" type="button" data-workspace-create="${button.mode}" data-workspace-kind="${tab}">${escapeHtml(button.label)}</button>`).join("")}
+    </div>
+  </div>`;
+}
+function workspaceRow(item) {
+  return `<tr>
+    <td data-label="Registro"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.slug || "")}</small></td>
+    <td data-label="Detalhes">${escapeHtml(item.detail || "—")}</td>
+    <td data-label="Status"><span class="badge ${item.statusClass || (item.active ? "badge--success":"badge--muted")}">${escapeHtml(item.statusLabel || (item.active ? "Ativo":"Oculto"))}</span></td>
+    <td data-label="Ações"><div class="section-record-actions">${item.actions}</div></td>
+  </tr>`;
+}
+function workspaceRecordTable(heading, rows) {
+  return `<article class="panel-card workspace-record-table-panel">
+    <h3>${escapeHtml(heading)}</h3>
+    ${rows.length ? `<div class="section-records-scroll"><table class="section-records-table">
+      <thead><tr><th scope="col">Registro</th><th scope="col">Detalhes</th><th scope="col">Status</th><th scope="col">Ações</th></tr></thead>
+      <tbody>${rows.map(workspaceRow).join("")}</tbody>
+    </table></div>` : `<div class="section-records-empty">Nenhum registro cadastrado. Selecione Criar para começar.</div>`}
+  </article>`;
+}
+function workspaceEditButton(attr,id) {
+  return `<button class="btn btn-secondary btn-sm" type="button" ${attr}="${escapeHtml(id)}">Editar</button>`;
+}
+function workspaceDeleteButton(attr,id,label="Excluir") {
+  return `<button class="btn btn-danger btn-sm" type="button" ${attr}="${escapeHtml(id)}">${label}</button>`;
+}
+function workspaceRecords(tab) {
+  if (tab==="categories") return workspaceRecordTable("Categorias cadastradas",adminState.categories.map(x=>({
+    name:x.name,slug:x.slug,detail:x.description || "—",active:x.is_active,
+    actions:workspaceEditButton("data-edit-category",x.id)+workspaceDeleteButton("data-delete-category",x.id)
+  })));
+  if (tab==="brands") return workspaceRecordTable("Marcas cadastradas",adminState.brands.map(x=>({
+    name:x.name,slug:x.slug,detail:x.is_featured?"Em destaque":"Padrão",active:x.is_active,
+    actions:workspaceEditButton("data-edit-brand",x.id)+workspaceDeleteButton("data-delete-brand",x.id)
+  })));
+  if (tab==="appearance") return workspaceRecordTable("Banners cadastrados",adminState.banners.map(x=>({
+    name:x.title||"Banner sem título",detail:x.target_type==="hero"?"Destaque principal":x.target_type||"—",active:x.is_active,
+    actions:workspaceEditButton("data-edit-banner",x.id)+workspaceDeleteButton("data-delete-banner",x.id)
+  })));
+  if (tab==="options"){
+    const groups=workspaceRecordTable("Grupos de opções",getSortedProductOptionGroups().map(x=>({
+      name:x.name,slug:x.slug,detail:getProductOptionTypeLabel(x.type),active:x.is_active,
+      actions:workspaceEditButton("data-edit-option-group",x.id)+workspaceDeleteButton("data-disable-option-group",x.id,"Desativar")
+    })));
+    const values=workspaceRecordTable("Valores disponíveis",getSortedProductOptionValues().map(x=>({
+      name:x.label,slug:x.value,detail:getProductOptionGroup(x.group_id)?.name||"Grupo removido",active:x.is_active,
+      actions:workspaceEditButton("data-edit-option-value",x.id)+workspaceDeleteButton("data-disable-option-value",x.id,"Desativar")
+    })));
+    return groups+values;
+  }
+  if (tab==="notifications") return workspaceRecordTable("Todas as notificações",adminState.notifications.map(x=>({
+    name:x.title,detail:x.recurrence_rule?"Recorrente":x.scheduled_at?"Agendamento":getNotificationStatusLabel(x.status),
+    statusLabel:getNotificationStatusLabel(x.status),statusClass:getNotificationStatusClass(x.status),
+    actions:(["draft","scheduled","failed"].includes(x.status)?workspaceEditButton("data-edit-notification",x.id):"")+
+      (x.recurrence_rule?workspaceDeleteButton("data-stop-recurrence",x.id,"Encerrar recorrência"):"")+
+      (x.scheduled_at && !x.recurrence_rule && x.status==="scheduled"?workspaceDeleteButton("data-cancel-schedule",x.id,"Cancelar agendamento"):"")+
+      workspaceEditButton("data-send-notification",x.id).replace(">Editar</button>",">"+(x.status==="sent"?"Reenviar":"Enviar agora")+"</button>")
+  })));
+  return "";
+}
+function renderManagedWorkspace(tab, markup) {
+  const config=MANAGER_WORKSPACES[tab];
+  const parser=document.createElement("template");
+  parser.innerHTML=markup.trim();
+  const original=parser.content.firstElementChild;
+  if(!original) throw new Error("Estrutura de gestão ausente: "+tab);
+  const panels=[...original.children];
+  const view=workspaceView(tab);
+  const allowed=config.panels[view] || [];
+  const isList=view==="list";
+  const content=isList ? workspaceRecords(tab) + (tab==="notifications" ? [1,2].map(i=>panels[i]?.outerHTML||"").join("") : "") :
+    allowed.map(i=>panels[i]?.outerHTML||"").join("");
+  if(!content) throw new Error("Aba inválida para "+tab+"/"+view);
+  return `<section class="sections-workspace workspace-manager workspace-manager--${tab}">
+    ${workspaceTabs(tab)}
+    ${isList ? workspaceActions(tab) : ""}
+    <div class="${escapeHtml(original.className)} workspace-content" role="tabpanel" aria-label="${isList?"Registros":"Editor"}">${content}</div>
+    ${!isList ? `<div class="workspace-back-row"><button class="btn btn-secondary" type="button" data-workspace-back="${tab}">Voltar a registros</button></div>` : ""}
+  </section>`;
+}
+function renderProducts() {
+  return `<section class="sections-workspace workspace-manager workspace-manager--products">
+    ${workspaceTabs("products")}
+    ${workspaceView("products")==="list" ? renderProductsLegacy() :
+      `<div class="workspace-inline-product" id="product-workspace-editor-root" role="tabpanel" aria-label="Editor de produto por etapas"></div>`}
+  </section>`;
+}
+function renderCategoriesManager(){return renderManagedWorkspace("categories",renderCategoriesManagerLegacy());}
+function renderBrandsManager(){return renderManagedWorkspace("brands",renderBrandsManagerLegacy());}
+function renderProductOptionsManager(){return renderManagedWorkspace("options",renderProductOptionsManagerLegacy());}
+function renderAppearanceManager(){return renderManagedWorkspace("appearance",renderAppearanceManagerLegacy());}
+function renderNotifications(){return renderManagedWorkspace("notifications",renderNotificationsLegacy());}
+function canDiscardWorkspace(tab){
+  if (tab==="options") return confirmDiscardOptionDraft("group","grupo") && confirmDiscardOptionDraft("value","valor");
+  if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab===tab &&
+     !window.confirm("Descartar alterações não salvas?")) return false;
+  return true;
+}
+function setWorkspaceView(tab,view,{reset=true}={}){
+  if(!canDiscardWorkspace(tab))return false;
+  clearAdminFormDirty(tab);
+  if(tab==="options"){clearOptionFormDirty("group");clearOptionFormDirty("value");}
+  if(reset){
+    if(tab==="categories")adminState.editingCategory=createEmptyCategoryDraft();
+    if(tab==="brands")adminState.editingBrand=createEmptyBrandDraft();
+    if(tab==="appearance"){adminState.editingBanner=createEmptyBannerDraft();adminState.pendingBannerFile=null;}
+    if(tab==="notifications")adminState.editingNotificationId=null;
+    if(tab==="options"){
+      if(view==="group")adminState.editingOptionGroup=createEmptyOptionGroupDraft();
+      if(view==="value")adminState.editingOptionValue=createEmptyOptionValueDraft();
+    }
+  }
+  adminState.workspaceViews[tab]=view;
+  renderAdminLayout();
+  return true;
+}
+function bindManagementWorkspaces() {
+  qsa("[data-workspace-create]").forEach(button=>button.addEventListener("click",()=>{
+    setWorkspaceView(button.dataset.workspaceKind,button.dataset.workspaceCreate);
+  }));
+  qsa("[data-workspace-tab]").forEach(button=>button.addEventListener("click",()=>{
+    const tab=button.dataset.workspaceKind,view=button.dataset.workspaceTab;
+    if(workspaceView(tab)!==view)setWorkspaceView(tab,view);
+  }));
+  qsa("[data-workspace-back]").forEach(button=>button.addEventListener("click",()=>{
+    const tab=button.dataset.workspaceBack;
+    if(tab==="products"){closeProductEditor();return;}
+    setWorkspaceView(tab,"list");
+  }));
+  qs("[data-product-editor-reopen]")?.addEventListener("click",()=>renderProductEditor());
+  const tabs=qs(".workspace-manager > .section-workspace-tabs");
+  tabs?.addEventListener("keydown",(event)=>{
+    if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;
+    const items=[...tabs.querySelectorAll('[role="tab"]')];
+    const index=items.indexOf(document.activeElement);
+    if(index<0||items.length<2)return;
+    const next=event.key==="Home"?0:event.key==="End"?items.length-1:
+      (index+(event.key==="ArrowRight"?1:-1)+items.length)%items.length;
+    event.preventDefault();
+    items[next].click();
+  });
 }
 
 function renderDashboard() {
@@ -1148,7 +1354,7 @@ function renderDashboard() {
   `;
 }
 
-function renderProducts() {
+function renderProductsLegacy() {
   const products = getVisibleProducts();
   const hasProducts = products.length > 0;
   const pagination = adminState.productPagination;
@@ -1360,6 +1566,7 @@ function renderSectionsManager() {
                     </td>
                     <td data-label="Ações"><div class="section-record-actions">
                       <button class="btn btn-secondary" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
+                      <button class="btn btn-danger" type="button" data-delete-section="${escapeHtml(item.id)}">Excluir</button>
                       ${item.selection_mode === "automatic"
                         ? `<button class="btn btn-secondary" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>`
                         : ""}
@@ -1499,7 +1706,7 @@ function renderSectionsManager() {
   `;
 }
 
-function renderProductOptionsManager() {
+function renderProductOptionsManagerLegacy() {
   const groupDraft = adminState.editingOptionGroup || createEmptyOptionGroupDraft();
   const valueDraft = adminState.editingOptionValue || createEmptyOptionValueDraft();
   const groups = getSortedProductOptionGroups();
@@ -1634,7 +1841,7 @@ function renderProductOptionGroupOptions(selectedId = "") {
     .join("");
 }
 
-function renderCategoriesManager() {
+function renderCategoriesManagerLegacy() {
   const category = adminState.editingCategory || createEmptyCategoryDraft();
 
   return `
@@ -1709,7 +1916,7 @@ function renderCategoriesManager() {
   `;
 }
 
-function renderBrandsManager() {
+function renderBrandsManagerLegacy() {
   const brand = adminState.editingBrand || createEmptyBrandDraft();
 
   return `
@@ -1784,7 +1991,7 @@ function renderBrandsManager() {
   `;
 }
 
-function renderAppearanceManager() {
+function renderAppearanceManagerLegacy() {
   const banner = adminState.editingBanner || createEmptyBannerDraft();
   const hasDraftContent = Boolean(banner.id || banner.title || banner.subtitle || banner.image_url);
   const previewBanner = hasDraftContent ? banner : adminState.banners[0] || createEmptyBannerDraft();
@@ -1951,7 +2158,7 @@ function renderAppearanceManager() {
   `;
 }
 
-function renderNotifications() {
+function renderNotificationsLegacy() {
   const targetOptions = getNotificationTargetOptions();
   const recentNotifications = getRegularNotifications().slice(0, 5);
   const scheduledNotifications = getScheduledNotifications();
@@ -2683,6 +2890,7 @@ function navigateAdminTab(nextTab) {
   adminState.pendingBackgroundRender = false;
   adminState.currentAdminTab = nextTab;
   if (nextTab === "sections") adminState.sectionView = "list";
+  if (MANAGER_WORKSPACES[nextTab]) adminState.workspaceViews[nextTab] = "list";
   renderAdminLayout();
   scrollAdminMainToTop();
 }
@@ -2708,6 +2916,7 @@ function bindAdminLayoutEvents() {
     button.addEventListener("click", () => navigateAdminTab(button.dataset.goTab));
   });
 
+  bindManagementWorkspaces();
   bindProductsTab();
   bindSectionTab();
   bindCategoryTab();
@@ -2999,6 +3208,10 @@ function bindSectionTab() {
     })
   );
 
+  qsa("[data-delete-section]").forEach((button) =>
+    button.addEventListener("click", () => removeSection(button.dataset.deleteSection))
+  );
+
   qsa("[data-refresh-section]").forEach((button) =>
     button.addEventListener("click", () => refreshSection(button.dataset.refreshSection))
   );
@@ -3025,6 +3238,7 @@ function bindCategoryTab() {
       adminState.editingCategory = structuredClone(
         adminState.categories.find((item) => item.id === button.dataset.editCategory) || createEmptyCategoryDraft()
       );
+      adminState.workspaceViews.categories = "form";
       renderAdminLayout();
     })
   );
@@ -3048,6 +3262,7 @@ function bindBrandTab() {
       adminState.editingBrand = structuredClone(
         adminState.brands.find((item) => item.id === button.dataset.editBrand) || createEmptyBrandDraft()
       );
+      adminState.workspaceViews.brands = "form";
       renderAdminLayout();
     })
   );
@@ -3152,6 +3367,7 @@ function bindProductOptionsTab() {
       adminState.editingOptionGroup = structuredClone(
         getProductOptionGroup(button.dataset.editOptionGroup) || createEmptyOptionGroupDraft()
       );
+      adminState.workspaceViews.options = "group";
       renderAdminLayout();
       qs("#option-group-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     })
@@ -3164,6 +3380,7 @@ function bindProductOptionsTab() {
         (adminState.productOptionValues || []).find((item) => item.id === button.dataset.editOptionValue) ||
           createEmptyOptionValueDraft()
       );
+      adminState.workspaceViews.options = "value";
       renderAdminLayout();
       qs("#option-value-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     })
@@ -3206,6 +3423,7 @@ function bindAppearanceTab() {
       adminState.editingBanner = structuredClone(
         adminState.banners.find((item) => item.id === button.dataset.editBanner) || createEmptyBannerDraft()
       );
+      adminState.workspaceViews.appearance = "form";
       renderAdminLayout();
     })
   );
@@ -3271,6 +3489,8 @@ function editNotification(notificationId) {
   const notification = adminState.notifications.find((item) => item.id === notificationId);
   if (!notification) return;
   adminState.editingNotificationId = notificationId;
+  adminState.currentAdminTab = "notifications";
+  adminState.workspaceViews.notifications = "form";
   renderAdminLayout();
   qs("#notification-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -3445,7 +3665,9 @@ function openProductEditor(productId = null) {
     : createEmptyProductDraft();
 
   adminState.productEditorDirty = false;
-  setAdminModalOpen("product-editor", true);
+  adminState.currentAdminTab = "products";
+  adminState.workspaceViews.products = "form";
+  renderAdminLayout();
   renderProductEditor();
   window.requestAnimationFrame(() => qs("#close-editor-button")?.focus());
 }
@@ -3694,7 +3916,8 @@ function renderProductEditor() {
   const imageOperation = adminState.productImageOperation;
   const isImageOperationBusy = Boolean(imageOperation);
   const isEditorBusy = isSavingProduct || isImageOperationBusy;
-  let root = qs("#admin-modal-root");
+  const inlineProductEditor = Boolean(qs("#product-workspace-editor-root"));
+  let root = qs("#product-workspace-editor-root") || qs("#admin-modal-root");
   if (!root) {
     root = document.createElement("div");
     root.id = "admin-modal-root";
@@ -3704,7 +3927,7 @@ function renderProductEditor() {
 
   root.innerHTML = `
     <div class="editor-backdrop" id="editor-backdrop"></div>
-    <section class="editor-shell product-editor-shell ${isEditorBusy ? "is-busy" : ""}" role="dialog" aria-modal="true" aria-labelledby="product-editor-title" aria-busy="${isEditorBusy ? "true" : "false"}">
+    <section class="editor-shell product-editor-shell ${inlineProductEditor ? "product-editor-inline" : ""} ${isEditorBusy ? "is-busy" : ""}" role="${inlineProductEditor ? "region" : "dialog"}" aria-modal="${!inlineProductEditor}" aria-labelledby="product-editor-title" aria-busy="${isEditorBusy ? "true" : "false"}">
       <header class="editor-header">
         <div>
           <span class="section-kicker">Cadastro em etapas</span>
@@ -4120,8 +4343,11 @@ function closeProductEditor(force = false) {
   adminState.isSavingProduct = false;
   adminState.productSaveMode = null;
   adminState.productImageOperation = null;
-  qs("#admin-modal-root").innerHTML = "";
+  const root = qs("#product-workspace-editor-root") || qs("#admin-modal-root");
+  if (root) root.innerHTML = "";
   setAdminModalOpen("product-editor", false);
+  adminState.workspaceViews.products = "list";
+  if (adminState.currentAdminTab === "products") renderAdminLayout();
 }
 
 async function saveProduct(publish) {
@@ -4466,6 +4692,23 @@ async function saveSection(event) {
   renderAdminLayout();
 }
 
+async function removeSection(sectionId) {
+  const target = adminState.sections.find((item) => item.id === sectionId);
+  if (!target) return;
+  if (!window.confirm('Excluir a seção "' + target.title + '"? Os produtos continuam cadastrados, mas esta seção e seus vínculos serão removidos da vitrine.')) return;
+  try {
+    await adminDeleteSection(adminState.store.id, sectionId);
+    if (adminState.editingSection?.id === sectionId) adminState.editingSection = createEmptySectionDraft();
+    adminState.sectionView = "list";
+    await refreshSectionsData();
+    notifyStorefrontChanged("section-delete");
+    renderAdminLayout();
+    showToast("Seção excluída.", "success");
+  } catch (error) {
+    showToast(error.message || "Não foi possível excluir a seção.", "danger");
+  }
+}
+
 async function refreshSection(sectionId) {
   await adminRefreshAutomaticSection(sectionId);
   showToast("Seção automática atualizada.", "success");
@@ -4519,6 +4762,7 @@ async function saveProductOptionGroup(event) {
     return;
   }
 
+  try {
   await adminSaveProductOptionGroup({
     id: String(data.get("id") || "") || undefined,
     store_id: adminState.store.id,
@@ -4538,9 +4782,11 @@ async function saveProductOptionGroup(event) {
 
   adminState.editingOptionGroup = createEmptyOptionGroupDraft();
   clearOptionFormDirty("group");
+  adminState.workspaceViews.options = "list";
   await refreshProductOptionsData();
   showToast("Grupo salvo.", "success");
   renderAdminLayout();
+  } catch (error) { showToast(error.message || "Não foi possível salvar o grupo.", "danger"); }
 }
 
 async function saveProductOptionValue(event) {
@@ -4558,6 +4804,7 @@ async function saveProductOptionValue(event) {
     return;
   }
 
+  try {
   await adminSaveProductOptionValue({
     id: String(data.get("id") || "") || undefined,
     store_id: adminState.store.id,
@@ -4572,9 +4819,11 @@ async function saveProductOptionValue(event) {
 
   adminState.editingOptionValue = createEmptyOptionValueDraft();
   clearOptionFormDirty("value");
+  adminState.workspaceViews.options = "list";
   await refreshProductOptionsData();
   showToast("Valor salvo.", "success");
   renderAdminLayout();
+  } catch (error) { showToast(error.message || "Não foi possível salvar o valor.", "danger"); }
 }
 
 async function disableProductOptionGroup(groupId) {
@@ -4595,7 +4844,7 @@ async function disableProductOptionValue(valueId) {
 
 async function saveCategory(event) {
   event.preventDefault();
-  clearAdminFormDirty("categories");
+  try {
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveCategory({
@@ -4608,11 +4857,17 @@ async function saveCategory(event) {
     is_active: form.querySelector("[name='is_active']").checked,
     sort_order: Number(data.get("sort_order") || 0)
   });
+  clearAdminFormDirty("categories");
+  adminState.workspaceViews.categories = "list";
   showToast("Categoria salva.", "success");
   adminState.editingCategory = createEmptyCategoryDraft();
   notifyStorefrontChanged("category-save");
   adminState.categories = await adminListCategories(adminState.store.id);
   renderAdminLayout();
+  } catch(error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível salvar o registro.", "danger");
+  }
 }
 
 async function removeCategory(categoryId) {
@@ -4626,7 +4881,7 @@ async function removeCategory(categoryId) {
 
 async function saveBrand(event) {
   event.preventDefault();
-  clearAdminFormDirty("brands");
+  try {
   const form = event.currentTarget;
   const data = new FormData(form);
   await adminSaveBrand({
@@ -4639,11 +4894,17 @@ async function saveBrand(event) {
     is_active: form.querySelector("[name='is_active']").checked,
     sort_order: Number(data.get("sort_order") || 0)
   });
+  clearAdminFormDirty("brands");
+  adminState.workspaceViews.brands = "list";
   showToast("Marca salva.", "success");
   notifyStorefrontChanged("brand-save");
   adminState.editingBrand = createEmptyBrandDraft();
   adminState.brands = await adminListBrands(adminState.store.id);
   renderAdminLayout();
+  } catch(error) {
+    console.error(error);
+    showToast(error.message || "Não foi possível salvar o registro.", "danger");
+  }
 }
 
 async function removeBrand(brandId) {
@@ -4657,7 +4918,6 @@ async function removeBrand(brandId) {
 
 async function saveBanner(event) {
   event.preventDefault();
-  clearAdminFormDirty("appearance");
   const form = event.currentTarget;
   const data = new FormData(form);
   const previousImageUrl = String(adminState.editingBanner?.image_url || "");
@@ -4717,6 +4977,8 @@ async function saveBanner(event) {
     adminState.pendingBannerFile = null;
     adminState.editingBanner = createEmptyBannerDraft();
     adminState.banners = await adminListBanners(adminState.store.id);
+    clearAdminFormDirty("appearance");
+    adminState.workspaceViews.appearance = "list";
     renderAdminLayout();
   } catch (error) {
     if (uploadedPath) {
@@ -4748,7 +5010,6 @@ async function removeBanner(bannerId) {
 
 async function saveNotification(event) {
   event.preventDefault();
-  clearAdminFormDirty("notifications");
   const form = event.currentTarget;
   const data = new FormData(form);
   const targetUrl = String(data.get("target_url") || "").trim();
@@ -4804,6 +5065,8 @@ async function saveNotification(event) {
       );
     }
     adminState.notifications = await adminListNotifications(adminState.store.id);
+    clearAdminFormDirty("notifications");
+    adminState.workspaceViews.notifications = "list";
     renderAdminLayout();
   } catch (error) {
     console.error(error);
