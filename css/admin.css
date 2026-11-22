@@ -3678,6 +3678,40 @@ body { min-height: 100dvh; }
   }
 }
 
+/* Notificações: data e hora separadas evitam o conteúdo interno do
+   datetime-local do iOS ultrapassar a borda mesmo com width:100%. */
+.notification-schedule-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-schedule-part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-schedule-part > span {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--admin-text-soft);
+}
+.notification-form .notification-schedule-part > input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  inline-size: 100%;
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  max-inline-size: 100%;
+  font-size: 16px;
+  padding-inline: 12px;
+}
+
 /* Campos nativos iOS/WebKit de data nunca devem exceder as colunas. */
 .admin-content input:is([type="date"],[type="datetime-local"],[type="time"]),
 .editor-shell input:is([type="date"],[type="datetime-local"],[type="time"]) {

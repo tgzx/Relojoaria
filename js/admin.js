@@ -2343,6 +2343,8 @@ function renderNotificationsLegacy() {
   const bodyValue = editingNotification?.body || "";
   const targetValue = editingNotification?.target_url || "";
   const scheduledValue = toDateTimeLocalValue(editingNotification?.scheduled_at || "");
+  const scheduledDateValue = scheduledValue.slice(0, 10);
+  const scheduledTimeValue = scheduledValue.slice(11, 16);
   const recurrenceValue = editingNotification?.recurrence_rule || "";
   const submitLabel = scheduledValue || recurrenceValue ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
   return `
@@ -2373,7 +2375,17 @@ function renderNotificationsLegacy() {
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Agendar envio</span>
-              <input type="datetime-local" name="scheduled_at" value="${escapeHtml(scheduledValue)}" />
+              <div class="notification-schedule-controls">
+                <div class="notification-schedule-part">
+                  <span>Data</span>
+                  <input type="date" name="scheduled_date" aria-label="Data do envio" value="${escapeHtml(scheduledDateValue)}" />
+                </div>
+                <div class="notification-schedule-part">
+                  <span>Horário</span>
+                  <input type="time" name="scheduled_time" aria-label="Horário do envio" value="${escapeHtml(scheduledTimeValue)}" />
+                </div>
+              </div>
+              <input type="hidden" name="scheduled_at" value="${escapeHtml(scheduledValue)}" />
             </label>
             <label class="admin-field">
               <span>Recorrência</span>
@@ -3606,8 +3618,19 @@ function bindAppearanceTab() {
   );
 }
 
+function syncNotificationScheduledAt(form) {
+  if (!form) return { incomplete: false };
+  const date = form.elements.namedItem("scheduled_date")?.value || "";
+  const time = form.elements.namedItem("scheduled_time")?.value || "";
+  const combined = form.elements.namedItem("scheduled_at");
+  if (combined) combined.value = date && time ? `${date}T${time}` : "";
+  return { incomplete: Boolean(date) !== Boolean(time) };
+}
+
 function bindNotificationsTab() {
   const notificationForm = qs("#notification-form");
+  notificationForm?.addEventListener("input", () => syncNotificationScheduledAt(notificationForm));
+  notificationForm?.addEventListener("change", () => syncNotificationScheduledAt(notificationForm));
   bindDirtyFormState("#notification-form", "notifications");
   notificationForm?.addEventListener("submit", saveNotification);
   notificationForm?.addEventListener("input", updateNotificationSubmitLabel);
@@ -5189,6 +5212,12 @@ async function removeBanner(bannerId) {
 async function saveNotification(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  const { incomplete } = syncNotificationScheduledAt(form);
+  if (incomplete) {
+    showToast("Para agendar, informe tanto a data quanto o horário.", "danger");
+    form.elements.namedItem(form.elements.namedItem("scheduled_date")?.value ? "scheduled_time" : "scheduled_date")?.focus();
+    return;
+  }
   const data = new FormData(form);
   const targetUrl = String(data.get("target_url") || "").trim();
   const scheduledAt = parseDateTimeLocalValue(String(data.get("scheduled_at") || ""));

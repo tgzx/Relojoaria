@@ -123,7 +123,8 @@ const GUIDE = {
     title: ["Ex.: Novidades na vitrine", "Título da notificação recebida pelo visitante."],
     body: ["Ex.: Confira os lançamentos da semana", "Mensagem curta que acompanha a notificação."],
     target_url: ["Ex.: https://loja.com/#produtos", "Página aberta quando o cliente toca na notificação."],
-    scheduled_at: ["", "Data e horário de envio agendado; deixe vazio se não precisar."],
+    scheduled_date: ["", "Data do envio agendado. Preencha também o horário ou deixe ambos vazios para salvar um rascunho."],
+    scheduled_time: ["", "Horário do envio agendado. Preencha também a data ou deixe ambos vazios."],
     recurrence_rule: ["", "Regra de repetição para notificações recorrentes."]
   },
   "settings-form": {
