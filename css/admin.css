@@ -2999,3 +2999,40 @@ select:focus-visible,
     transform: none;
   }
 }
+
+/* QA: controles nativos compactos em formulários administrativos.
+   Não mascarar overflow: dar largura encolhível real para inputs e containers. */
+.admin-field,
+.admin-field > input,
+.admin-field > select,
+.admin-field > textarea,
+.inline-grid > *,
+.notification-form,
+.notification-form > *,
+.notification-side-card,
+.notification-planning-grid,
+.notification-bucket,
+.notification-bucket .list-stack,
+.sections-workspace-panel,
+.sections-records-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-form input[type="datetime-local"],
+.notification-form input[type="text"],
+.notification-form select,
+#banner-form input[type="url"],
+#banner-form select,
+#banner-upload-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-form input[type="datetime-local"] {
+  padding-inline: 10px;
+  font-variant-numeric: tabular-nums;
+}
+#banner-upload-input {
+  line-height: normal;
+}
