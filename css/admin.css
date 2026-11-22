@@ -3806,3 +3806,134 @@ body { min-height: 100dvh; }
   background: var(--admin-surface-muted);
 }
 .record-action-menu [data-record-menu-choice="delete"] {color: #a42d2d;}
+/* 22/11 — tablet: abas com setas funcionais e topbar estável durante scroll. */
+.admin-tab-overflow-hint {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+@media (max-width: 1119px) {
+  .admin-tab-overflow-shell.can-scroll-left .admin-tab-overflow-hint--left,
+  .admin-tab-overflow-shell.can-scroll-right .admin-tab-overflow-hint--right {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .admin-tab-overflow-hint:focus-visible {
+    outline: 2px solid var(--admin-accent);
+    outline-offset: -2px;
+    border-radius: 8px;
+  }
+}
+@media (min-width: 760px) and (max-width: 1119px) {
+  .admin-content > .bottom-nav:first-child {
+    top: var(--admin-tab-sticky-top, var(--admin-header-height));
+    min-width: 0;
+  }
+  .admin-tab-overflow-shell {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+    align-items: center;
+    column-gap: 4px;
+    min-width: 0;
+  }
+  .admin-tab-overflow-shell > .toolbar-actions {
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 0;
+  }
+  .admin-tab-overflow-hint {
+    position: static;
+    display: flex;
+    visibility: hidden;
+    width: 28px;
+    height: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--admin-text);
+    pointer-events: none;
+  }
+  .admin-tab-overflow-shell.can-scroll-left .admin-tab-overflow-hint--left,
+  .admin-tab-overflow-shell.can-scroll-right .admin-tab-overflow-hint--right {
+    visibility: visible;
+  }
+  .admin-tab-overflow-hint svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.35;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+@media (max-width: 759px) {
+  .admin-tab-overflow-hint { min-height: 44px; height: 44px; }
+}
+
+/* Em tablet/desktop, somente cartões de Produtos ganham respiro lateral.
+   O modo Tabela conserva a largura e a rolagem originais. */
+@media (min-width: 760px) {
+  .records-display[data-records-mode="cards"] .records-product-list .table-scroll {
+    box-sizing: border-box;
+    padding-inline: clamp(16px, 2vw, 24px);
+  }
+}
+
+/* Editor de produto DENTRO de Produtos/Criar: não reutilizar a altura
+   fixa do modal. A grade fixa encolhia o corpo e fazia prévia/ações se
+   sobreporem em tablets paisagem com pouca altura. */
+.workspace-inline-product .product-editor-inline {
+  height: auto;
+  max-height: none;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  overflow: visible;
+}
+.workspace-inline-product .editor-body {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 20px;
+}
+.workspace-inline-product .editor-content,
+.workspace-inline-product .panel-form,
+.workspace-inline-product .editor-preview { min-width: 0; }
+.workspace-inline-product .editor-footer {
+  position: relative;
+  bottom: auto;
+  z-index: 1;
+  padding-top: 14px;
+  padding-bottom: 18px;
+}
+@media (min-width: 760px) and (max-width: 900px) {
+  .workspace-inline-product .editor-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Máscara discreta: evita mostrar letras isoladas da próxima aba
+   entre a faixa rolável e a seta (tablet paisagem). */
+@media (min-width: 760px) and (max-width: 1119px) {
+  .admin-tab-overflow-shell.can-scroll-right::after,
+  .admin-tab-overflow-shell.can-scroll-left::before {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    height: 45px;
+    width: 42px;
+    pointer-events: none;
+  }
+  .admin-tab-overflow-shell.can-scroll-right::after {
+    right: 32px;
+    background: linear-gradient(90deg, transparent, var(--admin-surface-strong) 46%);
+  }
+  .admin-tab-overflow-shell.can-scroll-left::before {
+    left: 32px;
+    background: linear-gradient(270deg, transparent, var(--admin-surface-strong) 46%);
+  }
+}

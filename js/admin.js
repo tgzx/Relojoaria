@@ -987,9 +987,9 @@ function renderAdminLayout() {
               </div>
             </div>
             <div class="admin-tab-overflow-shell">
-              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--left" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="m15 5.5-6.5 6.5 6.5 6.5" /></svg></span>
+              <button class="admin-tab-overflow-hint admin-tab-overflow-hint--left" type="button" aria-label="Ver abas anteriores" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5.5-6.5 6.5 6.5 6.5" /></svg></button>
               <div class="toolbar-actions">${renderTabButtons()}</div>
-              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--right" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="m9 5.5 6.5 6.5-6.5 6.5" /></svg></span>
+              <button class="admin-tab-overflow-hint admin-tab-overflow-hint--right" type="button" aria-label="Ver próximas abas" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5.5 6.5 6.5-6.5 6.5" /></svg></button>
             </div>
           </section>
           ${renderCurrentTab()}
@@ -3113,6 +3113,7 @@ function bindAdminLayoutEvents() {
   bindMobileAdminActions();
   bindMobileAdminChrome();
   bindMobileTabOverflowHints();
+  bindIndependentSidebarScroll();
   qs("#dashboard-add-product")?.addEventListener("click", () => openProductEditor());
   qs("#reload-preview-iframe")?.addEventListener("click", () => refreshPreviewFrame());
   qs("#open-preview-external-inline")?.addEventListener("click", () => window.open("./index.html", "_blank", "noopener"));
@@ -3133,6 +3134,20 @@ function bindAdminLayoutEvents() {
   bindNotificationsTab();
   bindSettingsTab();
   bindQuickFormScrollActions();
+}
+
+function bindIndependentSidebarScroll() {
+  const sidebar = qs(".admin-sidebar");
+  if (!sidebar) return;
+  // WebKit can propagate wheel to the document when a fixed sidebar has
+  // no overflow or reaches its ends, despite overscroll-behavior:contain.
+  sidebar.addEventListener("wheel", (event) => {
+    if (!window.matchMedia("(min-width: 1120px)").matches) return;
+    const max = Math.max(0, sidebar.scrollHeight - sidebar.clientHeight);
+    const atTop = sidebar.scrollTop <= 1 && event.deltaY < 0;
+    const atBottom = sidebar.scrollTop >= max - 1 && event.deltaY > 0;
+    if (max < 1 || atTop || atBottom) event.preventDefault();
+  }, { passive: false });
 }
 
 function bindMobileAdminActions() {
@@ -3169,10 +3184,25 @@ function bindMobileTabOverflowHints() {
   const update = () => {
     if (!strip.isConnected || controller.signal.aborted) return;
     const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
-    const mobileOverflow = window.matchMedia("(max-width: 759px)").matches && maxScroll > 3;
-    shell.classList.toggle("can-scroll-left", mobileOverflow && strip.scrollLeft > 2);
-    shell.classList.toggle("can-scroll-right", mobileOverflow && strip.scrollLeft < maxScroll - 2);
+    const horizontalNav = window.matchMedia("(max-width: 1119px)").matches;
+    const hasOverflow = horizontalNav && maxScroll > 3;
+    const canLeft = hasOverflow && strip.scrollLeft > 2;
+    const canRight = hasOverflow && strip.scrollLeft < maxScroll - 2;
+    shell.classList.toggle("can-scroll-left", canLeft);
+    shell.classList.toggle("can-scroll-right", canRight);
+    for (const [direction, enabled] of [["left", canLeft], ["right", canRight]]) {
+      const button = shell.querySelector(`.admin-tab-overflow-hint--${direction}`);
+      if (!button) continue;
+      button.tabIndex = enabled ? 0 : -1;
+      button.disabled = !enabled;
+    }
   };
+
+  for (const [direction, sign] of [["left", -1], ["right", 1]]) {
+    shell.querySelector(`.admin-tab-overflow-hint--${direction}`)?.addEventListener("click", () => {
+      strip.scrollBy({ left: sign * Math.max(160, Math.floor(strip.clientWidth * .7)), behavior: "smooth" });
+    }, { signal: controller.signal });
+  }
 
   strip.addEventListener("scroll", () => {
     adminState.mobileTabScrollLeft = strip.scrollLeft;
@@ -3208,17 +3238,25 @@ function bindMobileAdminChrome() {
 
   const controller = new AbortController();
   const update = () => {
-    const isMobileChrome = window.matchMedia("(max-width: 1119px)").matches;
-    // No celular, o cabeçalho compacto permanece visível desde o início.
-    // Em tablets, mantém a antiga transição apenas depois da rolagem.
-    const shouldCondense = window.matchMedia("(max-width: 759px)").matches ||
-      (isMobileChrome && window.scrollY > 96);
-    shell.classList.toggle("is-mobile-condensed", shouldCondense);
+    // Tablet: conservar o cabeçalho estável ao rolar, sem colapsar topbar
+    // e alterar o offset sticky das abas no meio do gesto.
+    const isPhone = window.matchMedia("(max-width: 759px)").matches;
+    const isTabletNav = window.matchMedia("(min-width: 760px) and (max-width: 1119px)").matches;
+    shell.classList.toggle("is-mobile-condensed", isPhone);
+    const topbar = qs("#admin-topbar");
+    if (isTabletNav && topbar) {
+      shell.style.setProperty("--admin-tab-sticky-top", `${Math.ceil(topbar.getBoundingClientRect().height)}px`);
+    } else {
+      shell.style.removeProperty("--admin-tab-sticky-top");
+    }
   };
 
   window.addEventListener("scroll", update, { passive: true, signal: controller.signal });
   window.addEventListener("resize", update, { signal: controller.signal });
-  window.__adminMobileChromeCleanup = () => controller.abort();
+  const topbar = qs("#admin-topbar");
+  const observer = typeof ResizeObserver === "function" && topbar ? new ResizeObserver(update) : null;
+  if (observer && topbar) observer.observe(topbar);
+  window.__adminMobileChromeCleanup = () => { controller.abort(); observer?.disconnect(); };
   update();
 }
 

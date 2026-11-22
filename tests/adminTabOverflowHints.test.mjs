@@ -18,9 +18,10 @@ test("abas horizontais têm indicadores de scroll em ambos os sentidos",()=>{
 test("indicadores só aparecem onde há overflow correspondente",()=>{
  const bind=admin.slice(admin.indexOf("function bindMobileTabOverflowHints()"),admin.indexOf("function bindMobileAdminChrome()"));
  assert.match(bind,/maxScroll = Math\.max\(0, strip\.scrollWidth - strip\.clientWidth\)/);
- assert.match(bind,/mobileOverflow = window\.matchMedia\("\(max-width: 759px\)"\)\.matches && maxScroll > 3/);
- assert.match(bind,/can-scroll-left", mobileOverflow && strip\.scrollLeft > 2/);
- assert.match(bind,/can-scroll-right", mobileOverflow && strip\.scrollLeft < maxScroll - 2/);
+ assert.match(bind,/horizontalNav = window\.matchMedia\("\(max-width: 1119px\)"\)\.matches/);
+ assert.match(bind,/hasOverflow = horizontalNav && maxScroll > 3/);
+ assert.match(bind,/canLeft = hasOverflow && strip\.scrollLeft > 2/);
+ assert.match(bind,/canRight = hasOverflow && strip\.scrollLeft < maxScroll - 2/);
  assert.match(css,/\.admin-tab-overflow-shell\.can-scroll-left/);
  assert.match(css,/\.admin-tab-overflow-shell\.can-scroll-right/);
 });
@@ -38,8 +39,8 @@ test("re-render fecha listeners/observers anteriores e preserva navegação",()=
 });
 
 test("chevrons SVG em colunas simétricas e com alinhamento geométrico",()=>{
- assert.match(admin,/admin-tab-overflow-hint--left" aria-hidden="true"><svg viewBox="0 0 24 24"/);
- assert.match(admin,/admin-tab-overflow-hint--right" aria-hidden="true"><svg viewBox="0 0 24 24"/);
+ assert.match(admin,/admin-tab-overflow-hint--left" type="button" aria-label="Ver abas anteriores"/);
+ assert.match(admin,/admin-tab-overflow-hint--right" type="button" aria-label="Ver próximas abas"/);
  assert.match(css,/grid-template-columns: 26px minmax\(0,1fr\) 26px;/);
  assert.match(css,/\.admin-tab-overflow-hint svg \{/);
  assert.match(css,/\.admin-tab-overflow-hint svg \{ width: 18px; height: 18px; \}/);

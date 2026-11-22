@@ -1225,6 +1225,21 @@ body.theme-dark .product-badge--warning {
   outline-offset: 2px;
 }
 
+/* Mesmo rodapé: créditos nas extremidades somente em tablet/desktop.
+   Mobile permanece empilhado e centralizado. */
+@media (min-width: 760px) {
+  .footer-credit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    text-align: left;
+  }
+  .footer-credit__copyright,
+  .footer-credit__author { min-width: 0; }
+  .footer-credit__author { justify-content: flex-end; }
+}
+
 .text-link {
   color: var(--color-footer-link);
   text-decoration: none;
@@ -2659,4 +2674,24 @@ html:has(.sheet-shell:not(.is-hidden)) {
 /* Remove a margem nativa de <figure> para aproveitar a largura útil da foto no mobile. */
 .product-modal__main-image {
   margin: 0;
+}
+
+/* PWA: faixa fixa na largura real do viewport, sem centralização por
+   left:50% em um contêiner shrink-to-fit no tablet/desktop. */
+@media (min-width: 760px) {
+  .install-prompt {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    width: 100%;
+    padding-inline: 16px;
+    transform: none;
+    display: flex;
+    justify-content: center;
+  }
+  .install-prompt__card {
+    width: min(420px, 100%);
+    margin-inline: auto;
+  }
 }

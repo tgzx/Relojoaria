@@ -53,8 +53,8 @@ test("banner: botão de arquivo alinhado sem exceder o cartão",()=>{
 test("setas: colunas iguais, centro vertical e ícones SVG, sem glifos tipográficos",()=>{
  assert.match(css,/grid-template-columns: 26px minmax\(0,1fr\) 26px/);
  assert.match(css,/\.admin-tab-overflow-hint svg \{ width: 18px; height: 18px; \}/);
- assert.match(admin,/admin-tab-overflow-hint--left" aria-hidden="true"><svg/);
- assert.match(admin,/admin-tab-overflow-hint--right" aria-hidden="true"><svg/);
+ assert.match(admin,/admin-tab-overflow-hint--left" type="button" aria-label="Ver abas anteriores"/);
+ assert.match(admin,/admin-tab-overflow-hint--right" type="button" aria-label="Ver próximas abas"/);
 });
 test("todos os controles editáveis de data e hora no painel usam máscara numérica, nunca o picker nativo",()=>{
  assert.doesNotMatch(admin,/<input\s+type=["'](?:date|time|datetime-local|month|week)["']/);
