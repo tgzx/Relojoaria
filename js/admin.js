@@ -263,6 +263,8 @@ function resetAdminSessionState() {
   resetOptionDirtyForms();
   adminState.editingOptionGroup = null;
   adminState.editingOptionValue = null;
+  adminState.editingSection = null;
+  adminState.sectionEditorOpen = false;
   adminState.editingProduct = null;
   adminState.pendingProductFiles = [];
   adminState.isSavingProduct = false;
