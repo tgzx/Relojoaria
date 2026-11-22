@@ -2343,7 +2343,8 @@ function renderNotificationsLegacy() {
   const bodyValue = editingNotification?.body || "";
   const targetValue = editingNotification?.target_url || "";
   const scheduledValue = toDateTimeLocalValue(editingNotification?.scheduled_at || "");
-  const scheduledDateValue = scheduledValue.slice(0, 10);
+  const scheduledDateIso = scheduledValue.slice(0, 10);
+  const scheduledDateValue = scheduledDateIso ? `${scheduledDateIso.slice(8, 10)}/${scheduledDateIso.slice(5, 7)}/${scheduledDateIso.slice(0, 4)}` : "";
   const scheduledTimeValue = scheduledValue.slice(11, 16);
   const recurrenceValue = editingNotification?.recurrence_rule || "";
   const submitLabel = scheduledValue || recurrenceValue ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
@@ -2378,11 +2379,11 @@ function renderNotificationsLegacy() {
               <div class="notification-schedule-controls">
                 <div class="notification-schedule-part">
                   <span>Data</span>
-                  <input type="date" name="scheduled_date" aria-label="Data do envio" value="${escapeHtml(scheduledDateValue)}" />
+                  <input type="text" name="scheduled_date" aria-label="Data do envio" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/AAAA" value="${escapeHtml(scheduledDateValue)}" />
                 </div>
                 <div class="notification-schedule-part">
                   <span>Horário</span>
-                  <input type="time" name="scheduled_time" aria-label="Horário do envio" value="${escapeHtml(scheduledTimeValue)}" />
+                  <input type="text" name="scheduled_time" aria-label="Horário do envio" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" value="${escapeHtml(scheduledTimeValue)}" />
                 </div>
               </div>
               <input type="hidden" name="scheduled_at" value="${escapeHtml(scheduledValue)}" />
@@ -3618,18 +3619,45 @@ function bindAppearanceTab() {
   );
 }
 
+function formatScheduleDigits(value, type) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, type === "date" ? 8 : 4);
+  if (type === "time") return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join("/");
+}
+
 function syncNotificationScheduledAt(form) {
-  if (!form) return { incomplete: false };
-  const date = form.elements.namedItem("scheduled_date")?.value || "";
-  const time = form.elements.namedItem("scheduled_time")?.value || "";
+  if (!form) return { incomplete: false, invalid: false };
+  const dateField = form.elements.namedItem("scheduled_date");
+  const timeField = form.elements.namedItem("scheduled_time");
+  const date = String(dateField?.value || "").trim();
+  const time = String(timeField?.value || "").trim();
   const combined = form.elements.namedItem("scheduled_at");
-  if (combined) combined.value = date && time ? `${date}T${time}` : "";
-  return { incomplete: Boolean(date) !== Boolean(time) };
+  const incomplete = Boolean(date) !== Boolean(time);
+  const dateMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date);
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  let validDate = false;
+  let isoDate = "";
+  if (dateMatch) {
+    const day = Number(dateMatch[1]), month = Number(dateMatch[2]), year = Number(dateMatch[3]);
+    const calendar = new Date(year, month - 1, day);
+    validDate = year >= 1900 && year <= 9999 &&
+      calendar.getFullYear() === year && calendar.getMonth() === month - 1 && calendar.getDate() === day;
+    if (validDate) isoDate = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+  }
+  const invalid = Boolean(date || time) && !incomplete && (!validDate || !timeMatch);
+  if (combined) combined.value = !incomplete && !invalid && date && time ? `${isoDate}T${time}` : "";
+  return { incomplete, invalid, invalidDate: Boolean(date) && !validDate, invalidTime: Boolean(time) && !timeMatch };
 }
 
 function bindNotificationsTab() {
   const notificationForm = qs("#notification-form");
-  notificationForm?.addEventListener("input", () => syncNotificationScheduledAt(notificationForm));
+  notificationForm?.addEventListener("input", (event) => {
+    const field = event.target;
+    if (field?.name === "scheduled_date" || field?.name === "scheduled_time") {
+      field.value = formatScheduleDigits(field.value, field.name === "scheduled_date" ? "date" : "time");
+    }
+    syncNotificationScheduledAt(notificationForm);
+  });
   notificationForm?.addEventListener("change", () => syncNotificationScheduledAt(notificationForm));
   bindDirtyFormState("#notification-form", "notifications");
   notificationForm?.addEventListener("submit", saveNotification);
@@ -5212,10 +5240,13 @@ async function removeBanner(bannerId) {
 async function saveNotification(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const { incomplete } = syncNotificationScheduledAt(form);
-  if (incomplete) {
-    showToast("Para agendar, informe tanto a data quanto o horário.", "danger");
-    form.elements.namedItem(form.elements.namedItem("scheduled_date")?.value ? "scheduled_time" : "scheduled_date")?.focus();
+  const schedule = syncNotificationScheduledAt(form);
+  if (schedule.incomplete || schedule.invalid) {
+    showToast(schedule.incomplete
+      ? "Para agendar, informe tanto a data quanto o horário."
+      : "Confira a data (DD/MM/AAAA) e o horário (HH:mm) antes de agendar.", "danger");
+    form.elements.namedItem(schedule.invalidDate || !form.elements.namedItem("scheduled_date")?.value
+      ? "scheduled_date" : "scheduled_time")?.focus();
     return;
   }
   const data = new FormData(form);

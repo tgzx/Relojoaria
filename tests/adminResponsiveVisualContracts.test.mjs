@@ -30,17 +30,20 @@ test("horários: cards e inputs de time podem encolher sem vazamento",()=>{
  assert.match(css,/\.hours-time-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); justify-content: stretch; \}/);
  assert.match(css,/\.hours-editor-shell \.admin-field input\[type="time"\] \{[^}]*max-width: 100%/s);
 });
-test("notificações: calendário e relógio independentes cabem no iPhone e preservam scheduled_at",()=>{
+test("notificações: agenda por texto numérico não usa picker iOS e preserva scheduled_at",()=>{
  assert.match(css,/\.notification-bucket__header \{ flex-wrap: wrap;/);
  assert.match(css,/\.notification-bucket__actions \{ flex-wrap: wrap;/);
  assert.match(css,/\.notification-schedule-controls \{[\s\S]*?grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)/);
  assert.match(css,/\.notification-form \.notification-schedule-part > input \{[\s\S]*?min-inline-size: 0/);
- assert.match(admin,/<input type="date" name="scheduled_date"/);
- assert.match(admin,/<input type="time" name="scheduled_time"/);
+ assert.match(admin,/<input type="text" name="scheduled_date"[^>]+inputmode="numeric"/);
+ assert.match(admin,/<input type="text" name="scheduled_time"[^>]+inputmode="numeric"/);
+ assert.doesNotMatch(admin,/<input type="date" name="scheduled_date"/);
+ assert.doesNotMatch(admin,/<input type="time" name="scheduled_time"/);
  assert.match(admin,/<input type="hidden" name="scheduled_at"/);
+ assert.match(admin,/function formatScheduleDigits\(value, type\)/);
  assert.match(admin,/function syncNotificationScheduledAt\(form\)/);
- assert.match(admin,/combined\.value = date && time \? `\$\{date\}T\$\{time\}` : ""/);
- assert.match(admin,/if \(incomplete\) \{[\s\S]*?Para agendar, informe tanto a data quanto o horário/);
+ assert.match(admin,/combined\.value = !incomplete && !invalid && date && time/);
+ assert.match(admin,/schedule\.incomplete \|\| schedule\.invalid/);
 });
 test("banner: botão de arquivo alinhado sem exceder o cartão",()=>{
  assert.match(css,/\.admin-field input\[type="file"\]::file-selector-button \{[^}]*vertical-align: middle/s);
