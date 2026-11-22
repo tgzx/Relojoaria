@@ -12,7 +12,7 @@ test("sticky: altura mobile independe da aba ativa e reduz 25%",()=>{
  assert.match(css,/\.admin-content \{ grid-auto-rows: max-content; \}/);
  assert.match(css,/height: 122px;\s*min-height: 122px;\s*max-height: 122px;/);
  assert.match(css,/grid-template-rows: 58px 44px;/);
- assert.match(css,/padding-bottom: 12px;/);
+ assert.match(css,/\.mobile-nav-store \{[^}]*padding-bottom: 8px;/);
  assert.match(css,/height: 44px;\s*max-height: 44px;/);
  assert.match(css,/height: 59px;\s*min-height: 59px;\s*max-height: 59px;/);
 });
@@ -102,4 +102,14 @@ test("Barra sticky reserva folga superior e inferior sem botões menores",()=>{
  assert.match(css,/padding: 4px 0 12px/);
  assert.match(css,/grid-template-rows: 58px 44px/);
  assert.match(css,/min-height: 44px/);
+});
+test("Tabelas preservam largura legível e reservam só o necessário para a seta de ações",()=>{
+ assert.match(css,/\.section-records-table \{[\s\S]*?min-width:820px;/);
+ assert.match(css,/\.records-product-list table \{[\s\S]*?min-width:1000px;/);
+ assert.match(css,/\.section-records-table th:not\(:first-child\):not\(:last-child\)[\s\S]*?min-width: 120px/);
+ assert.match(css,/\.section-records-table td:last-child \{[\s\S]*?width: 88px;/);
+ assert.match(css,/\.records-product-list td:last-child \{[\s\S]*?width: 88px;/);
+});
+test("Configurações separa a ajuda do título da primeira ajuda de campo",()=>{
+ assert.match(css,/\.settings-grid > \.panel-card > \.admin-object-title-row \{ margin-bottom: 18px; \}/);
 });

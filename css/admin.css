@@ -3141,7 +3141,7 @@ body { min-height: 100dvh; }
     gap: 6px;
     align-items: center;
   }
-  .mobile-nav-store { min-height: 0; height: 100%; box-sizing: border-box; align-self: stretch; align-content: center; padding-bottom: 12px; }
+  .mobile-nav-store { min-height: 0; height: 100%; box-sizing: border-box; align-self: stretch; align-content: center; padding-bottom: 8px; }
   .mobile-nav-store > * { min-width: 0; }
   .mobile-nav-actions { min-height: 0; height: 100%; align-items: center; }
   .admin-tab-overflow-shell { height: 44px; min-height: 0; max-height: 44px; }
@@ -3312,7 +3312,7 @@ body { min-height: 100dvh; }
 .records-display[data-records-mode="table"] .section-records-table {
   display:table !important;
   width:100%;
-  min-width:640px;
+  min-width:820px;
   table-layout:auto;
   border-collapse:collapse;
 }
@@ -3331,8 +3331,14 @@ body { min-height: 100dvh; }
   overflow-wrap:anywhere;
 }
 .records-display[data-records-mode="table"] .section-records-table td::before {display:none !important;}
-.records-display[data-records-mode="table"] .section-records-table th:last-child {min-width:150px;}
-.records-display[data-records-mode="table"] .section-records-table td:last-child {min-width:150px;}
+.records-display[data-records-mode="table"] .section-records-table th:not(:first-child):not(:last-child),
+.records-display[data-records-mode="table"] .section-records-table td:not(:first-child):not(:last-child) { min-width: 120px; }
+.records-display[data-records-mode="table"] .section-records-table th:last-child,
+.records-display[data-records-mode="table"] .section-records-table td:last-child {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+}
 /* Produto tinha apresentação de cartão implícita no mobile; agora ambos os
    modos ficam explícitos e independentes da largura do viewport. */
 .records-display[data-records-mode="cards"] .records-product-list .table-scroll {overflow:visible;max-width:100%;}
@@ -3392,7 +3398,7 @@ body { min-height: 100dvh; }
 .records-display[data-records-mode="table"] .records-product-list table {
   display:table !important;
   width:100%;
-  min-width:940px;
+  min-width:1000px;
   border-collapse:collapse;
 }
 .records-display[data-records-mode="table"] .records-product-list thead {display:table-header-group !important;}
@@ -3409,7 +3415,22 @@ body { min-height: 100dvh; }
   vertical-align:middle;
 }
 .records-display[data-records-mode="table"] .records-product-list td::before {display:none !important;}
-.records-display[data-records-mode="table"] .records-product-list td:last-child {min-width:150px;}
+.records-display[data-records-mode="table"] .records-product-list th:nth-child(2),
+.records-display[data-records-mode="table"] .records-product-list td:nth-child(2) { min-width: 230px; }
+.records-display[data-records-mode="table"] .records-product-list th:nth-child(3),
+.records-display[data-records-mode="table"] .records-product-list td:nth-child(3) { min-width: 100px; }
+.records-display[data-records-mode="table"] .records-product-list th:nth-child(4),
+.records-display[data-records-mode="table"] .records-product-list td:nth-child(4) { min-width: 118px; }
+.records-display[data-records-mode="table"] .records-product-list th:nth-child(5),
+.records-display[data-records-mode="table"] .records-product-list td:nth-child(5) { min-width: 124px; }
+.records-display[data-records-mode="table"] .records-product-list th:nth-child(6),
+.records-display[data-records-mode="table"] .records-product-list td:nth-child(6) { min-width: 146px; }
+.records-display[data-records-mode="table"] .records-product-list th:last-child,
+.records-display[data-records-mode="table"] .records-product-list td:last-child {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+}
 .records-product-list > header {display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;}
 .records-product-list > header .record-view-switch {margin-left:auto;}
 @media (max-width:759px) {
@@ -3597,6 +3618,8 @@ body { min-height: 100dvh; }
   width: 100%;
 }
 .admin-object-title-row > *:first-child { min-width: 0; }
+/* A ajuda do título não deve encostar na ajuda do primeiro campo. */
+.settings-grid > .panel-card > .admin-object-title-row { margin-bottom: 18px; }
 .admin-object-help-trigger,
 .admin-field-help-trigger.admin-object-help-trigger {
   position: static;
