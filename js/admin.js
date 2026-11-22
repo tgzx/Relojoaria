@@ -1765,7 +1765,7 @@ function renderAppearanceManager() {
           </label>
           <label class="admin-field">
             <span>Upload de imagem</span>
-            <input type="file" id="banner-upload-input" accept=".jpg,.jpeg,.png,.webp" />
+            <input type="file" class="admin-file-input" id="banner-upload-input" accept=".jpg,.jpeg,.png,.webp" />
           </label>
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
@@ -1831,7 +1831,9 @@ function renderAppearanceManager() {
             </label>
             <label class="admin-field">
               <span>Tipo</span>
-              <input type="text" name="target_type" value="${escapeHtml(banner.target_type || "hero")}" />
+              <select name="target_type" required>
+                <option value="hero">Destaque principal</option>
+              </select>
             </label>
           </div>
           <div class="inline-grid inline-grid--2">
@@ -2601,7 +2603,9 @@ function renderPasswordChangeModal() {
   qs("#close-password-change")?.addEventListener("click", closePasswordChangeModal);
   qs("#cancel-password-change")?.addEventListener("click", closePasswordChangeModal);
   qs("#password-change-form")?.addEventListener("submit", handlePasswordChangeSubmit);
-  qs("#password-change-form input[name='password']")?.focus();
+  // Não abrir o teclado virtual ao exibir o cartão (Safari/iOS).
+  // Focar um controle não editável preserva navegação por teclado e leitor de tela.
+  window.requestAnimationFrame(() => qs("#close-password-change")?.focus({ preventScroll: true }));
 }
 
 async function handlePasswordChangeSubmit(event) {
@@ -4621,7 +4625,8 @@ async function saveBanner(event) {
       image_contrast: Number(data.get("image_contrast") || 1.05),
       overlay_strength: Number(data.get("overlay_strength") || 0.56),
       target_url: String(data.get("target_url") || ""),
-      target_type: String(data.get("target_type") || "hero"),
+      // O gerenciador atual renderiza somente o banner principal. Não persistir tipos arbitrários.
+      target_type: "hero",
       is_active: form.querySelector("[name='is_active']").checked,
       sort_order: Number(data.get("sort_order") || 0),
       starts_at: String(data.get("starts_at") || "") || null,
