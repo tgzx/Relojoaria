@@ -111,6 +111,16 @@ const BUSINESS_HOURS_DAYS = [
 ];
 
 const NOTIFICATION_PAGE_SIZE = 5;
+const SECTION_TYPE_OPTIONS = [
+  { value: "custom", label: "Personalizada" },
+  { value: "featured", label: "Destaques" },
+  { value: "promotion", label: "Promoções" },
+  { value: "newest", label: "Novidades" },
+  { value: "best_seller", label: "Mais vendidos" },
+  { value: "low_stock", label: "Últimas unidades" },
+  { value: "category", label: "Por categoria" },
+  { value: "brand", label: "Por marca" }
+];
 const PASSWORD_MIN_LENGTH = 8;
 
 const adminState = {
@@ -164,6 +174,7 @@ const adminState = {
   dirtyOptionForms: { group: false, value: false },
   pendingBackgroundRender: false,
   mobileTabScrollLeft: 0,
+  sectionView: "list",
   previewNeedsRefresh: false,
   previewReady: false,
   previewRefreshTimer: 0,
@@ -893,6 +904,9 @@ async function handleLogout() {
 
 function renderAdminLayout() {
   const root = qs("#admin-root");
+  // Captura síncrona: um scroll recém-feito pode não ter disparado o evento ainda.
+  const currentTabStrip = root?.querySelector(".admin-tab-overflow-shell .toolbar-actions");
+  if (currentTabStrip) adminState.mobileTabScrollLeft = currentTabStrip.scrollLeft;
   if (adminState.currentAdminTab === "preview" && root?.querySelector(".preview-frame")) {
     syncPreviewStatus();
     return;
@@ -950,9 +964,9 @@ function renderAdminLayout() {
               </div>
             </div>
             <div class="admin-tab-overflow-shell">
-              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--left" aria-hidden="true">‹</span>
+              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--left" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="m15 5.5-6.5 6.5 6.5 6.5" /></svg></span>
               <div class="toolbar-actions">${renderTabButtons()}</div>
-              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--right" aria-hidden="true">›</span>
+              <span class="admin-tab-overflow-hint admin-tab-overflow-hint--right" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="m9 5.5 6.5 6.5-6.5 6.5" /></svg></span>
             </div>
           </section>
           ${renderCurrentTab()}
@@ -961,6 +975,10 @@ function renderAdminLayout() {
     </div>
   `;
 
+  // O menu é recriado com innerHTML: restaure antes do próximo frame/pintura.
+  // Nunca reposicionar a faixa automaticamente ao trocar aba.
+  const nextTabStrip = root.querySelector(".admin-tab-overflow-shell .toolbar-actions");
+  if (nextTabStrip) nextTabStrip.scrollLeft = adminState.mobileTabScrollLeft;
   bindAdminLayoutEvents();
   renderNotificationHistoryModal();
   renderNotificationPlanningModal();
@@ -1293,45 +1311,75 @@ function renderProducts() {
 
 function renderSectionsManager() {
   const section = adminState.editingSection || createEmptySectionDraft();
+  const sectionView = adminState.sectionView === "form" ? "form" : "list";
 
   return `
-    <section class="manager-grid">
-      <article class="panel-card">
+    <section class="sections-workspace">
+      <div class="section-workspace-tabs" role="tablist" aria-label="Gerenciar seções">
+        <button class="section-workspace-tab ${sectionView === "list" ? "is-active" : ""}" type="button"
+          role="tab" id="section-workspace-tab-list" aria-controls="section-records-panel"
+          aria-selected="${sectionView === "list"}" tabindex="${sectionView === "list" ? 0 : -1}" data-section-view="list">
+          Seções cadastradas <span class="section-workspace-count">${adminState.sections.length}</span>
+        </button>
+        ${sectionView === "form" ? `
+          <button class="section-workspace-tab is-active" type="button" role="tab"
+            id="section-workspace-tab-editor" aria-controls="section-editor-panel"
+            aria-selected="true" tabindex="0" data-section-view="form">
+            ${section.id ? "Editar seção" : "Nova seção"}
+          </button>` : ""}
+      </div>
+      ${sectionView === "list" ? `
+      <article class="panel-card" id="section-records-panel" role="tabpanel"
+        aria-labelledby="section-workspace-tab-list">
         <div class="section-card__header">
           <div>
             <span class="section-kicker">Home pública</span>
             <h2>Seções da vitrine</h2>
           </div>
-          <button class="btn btn-primary" type="button" id="new-section-button">Nova seção</button>
+          <button class="btn btn-primary" type="button" id="new-section-button">Criar seção</button>
         </div>
-        <div class="list-stack">
-          ${adminState.sections
-            .map(
-              (item) => `
-                <article class="section-card">
-                  <div class="section-card__header">
-                    <div>
-                      <strong class="section-card__title">${escapeHtml(item.title)}</strong>
-                      <small>${escapeHtml(item.selection_mode)} · ${escapeHtml(item.layout)}</small>
-                    </div>
-                    <span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativa" : "Oculta"}</span>
-                  </div>
-                  <div class="section-card__footer">
-                    <button class="btn btn-secondary" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
-                    ${
-                      item.selection_mode === "automatic"
+        ${adminState.sections.length ? `
+          <div class="section-records-scroll">
+            <table class="section-records-table">
+              <thead><tr>
+                <th scope="col">Nome</th>
+                <th scope="col">Modo</th>
+                <th scope="col">Layout</th>
+                <th scope="col">Situação</th>
+                <th scope="col">Ações</th>
+              </tr></thead>
+              <tbody>
+                ${adminState.sections.map((item) => `
+                  <tr>
+                    <td data-label="Nome"><strong>${escapeHtml(item.title)}</strong>
+                      <small>${escapeHtml(item.slug || "")}</small></td>
+                    <td data-label="Modo">${item.selection_mode === "automatic" ? "Automático" : "Manual"}</td>
+                    <td data-label="Layout">${escapeHtml(({ horizontal_carousel: "Carrossel", grid: "Grade", compact_list: "Lista compacta", hero_cards: "Cards hero" })[item.layout] || item.layout || "—")}</td>
+                    <td data-label="Situação">
+                      <span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativa" : "Oculta"}</span>
+                    </td>
+                    <td data-label="Ações"><div class="section-record-actions">
+                      <button class="btn btn-secondary" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
+                      ${item.selection_mode === "automatic"
                         ? `<button class="btn btn-secondary" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>`
-                        : ""
-                    }
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
-        </div>
-      </article>
-
-      <article class="panel-card">
+                        : ""}
+                    </div></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="section-records-empty">
+            <strong>Nenhuma seção cadastrada ainda.</strong>
+            <p>Use <b>Criar seção</b> para organizar os produtos na página inicial da loja.
+              Após salvar, a seção aparecerá nesta lista e poderá ser editada.</p>
+          </div>
+        `}
+      </article>` : `
+      <div id="section-records-panel" role="tabpanel" aria-labelledby="section-workspace-tab-list" hidden></div>
+      <article class="panel-card section-editor-card" id="section-editor-panel" role="tabpanel"
+        aria-labelledby="section-workspace-tab-editor">
         <span class="section-kicker">Configuração</span>
         <h2>${section.id ? "Editar seção" : "Nova seção"}</h2>
         <form id="section-form" class="section-form">
@@ -1351,7 +1399,7 @@ function renderSectionsManager() {
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Tipo</span>
-              <input type="text" name="type" value="${escapeHtml(section.type || "custom")}" />
+              <select name="type" required>${renderOptions(SECTION_TYPE_OPTIONS, section.type || "custom")}</select>
             </label>
             <label class="admin-field">
               <span>Ordem</span>
@@ -1446,7 +1494,7 @@ function renderSectionsManager() {
             }
           </div>
         </form>
-      </article>
+      </article>`}
     </section>
   `;
 }
@@ -1765,7 +1813,7 @@ function renderAppearanceManager() {
           </label>
           <label class="admin-field">
             <span>Upload de imagem</span>
-            <input type="file" id="banner-upload-input" accept=".jpg,.jpeg,.png,.webp" />
+            <input type="file" class="admin-file-input" id="banner-upload-input" accept=".jpg,.jpeg,.png,.webp" />
           </label>
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
@@ -1831,7 +1879,7 @@ function renderAppearanceManager() {
             </label>
             <label class="admin-field">
               <span>Tipo</span>
-              <input type="text" name="target_type" value="${escapeHtml(banner.target_type || "hero")}" />
+              <select name="target_type" required><option value="hero">Destaque principal</option></select>
             </label>
           </div>
           <div class="inline-grid inline-grid--2">
@@ -2601,7 +2649,8 @@ function renderPasswordChangeModal() {
   qs("#close-password-change")?.addEventListener("click", closePasswordChangeModal);
   qs("#cancel-password-change")?.addEventListener("click", closePasswordChangeModal);
   qs("#password-change-form")?.addEventListener("submit", handlePasswordChangeSubmit);
-  qs("#password-change-form input[name='password']")?.focus();
+  // Safari/iOS: não abrir teclado virtual ao mostrar o modal.
+  window.requestAnimationFrame(() => qs("#close-password-change")?.focus({ preventScroll: true }));
 }
 
 async function handlePasswordChangeSubmit(event) {
@@ -2633,6 +2682,7 @@ function navigateAdminTab(nextTab) {
   clearAdminFormDirty();
   adminState.pendingBackgroundRender = false;
   adminState.currentAdminTab = nextTab;
+  if (nextTab === "sections") adminState.sectionView = "list";
   renderAdminLayout();
   scrollAdminMainToTop();
 }
@@ -2724,20 +2774,10 @@ function bindMobileTabOverflowHints() {
     resizeObserver?.disconnect();
   };
 
+  // Somente recalcule os indicadores: restaurar no RAF moveria a barra
+  // depois do clique/gesto, gerando salto e anulando scroll recente.
   window.requestAnimationFrame(() => {
     if (!strip.isConnected || controller.signal.aborted) return;
-    strip.scrollLeft = adminState.mobileTabScrollLeft;
-    if (window.matchMedia("(max-width: 759px)").matches) {
-      // Se a aba ativa ficou fora da faixa visível após o re-render, revelá-la.
-      const active = strip.querySelector(".tab-button.is-active");
-      if (active) {
-        const bounds = active.getBoundingClientRect();
-        const viewport = strip.getBoundingClientRect();
-        if (bounds.right > viewport.right - 8) strip.scrollLeft += bounds.right - viewport.right + 8;
-        else if (bounds.left < viewport.left + 8) strip.scrollLeft -= viewport.left - bounds.left + 8;
-      }
-    }
-    adminState.mobileTabScrollLeft = strip.scrollLeft;
     update();
   });
 }
@@ -2909,10 +2949,40 @@ function bindProductsTab() {
 
 function bindSectionTab() {
   bindDirtyFormState("#section-form", "sections");
+  qs(".section-workspace-tabs")?.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = qsa(".section-workspace-tabs [role='tab']");
+    const index = tabs.indexOf(document.activeElement);
+    if (index < 0 || tabs.length < 2) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
+      (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    if (next === index) return;
+    const target = tabs[next].dataset.sectionView;
+    tabs[next].click();
+    // Se uma confirmação foi cancelada, o tab anterior continua ativo.
+    window.requestAnimationFrame(() => qs(`.section-workspace-tabs [data-section-view="${adminState.sectionView}"]`)?.focus({ preventScroll: true }));
+  });
+  qsa("[data-section-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetView = button.dataset.sectionView;
+      if (targetView === adminState.sectionView) return;
+      if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === "sections" &&
+          !window.confirm("Descartar as alterações não salvas desta seção?")) return;
+      clearAdminFormDirty("sections");
+      adminState.sectionView = targetView;
+      if (targetView === "list") {
+        manualSectionPicker.reset();
+        adminState.editingSection = createEmptySectionDraft();
+      }
+      renderAdminLayout();
+    });
+  });
   qs("#new-section-button")?.addEventListener("click", () => {
     clearAdminFormDirty("sections");
     manualSectionPicker.reset();
     adminState.editingSection = createEmptySectionDraft();
+    adminState.sectionView = "form";
     renderAdminLayout();
   });
 
@@ -2924,6 +2994,7 @@ function bindSectionTab() {
       adminState.editingSection = structuredClone(
         adminState.sections.find((item) => item.id === button.dataset.editSection) || createEmptySectionDraft()
       );
+      adminState.sectionView = "form";
       renderAdminLayout();
     })
   );
@@ -4355,7 +4426,6 @@ async function applyBulkAction(action) {
 
 async function saveSection(event) {
   event.preventDefault();
-  clearAdminFormDirty("sections");
   const form = event.currentTarget;
   const formData = new FormData(form);
   const selectedProductIds = manualSectionPicker.selectedIds();
@@ -4366,7 +4436,7 @@ async function saveSection(event) {
     title: String(formData.get("title") || "").trim(),
     slug: String(formData.get("slug") || "").trim() || slugify(String(formData.get("title") || "")),
     description: String(formData.get("description") || ""),
-    type: String(formData.get("type") || "custom"),
+    type: SECTION_TYPE_OPTIONS.some((option) => option.value === formData.get("type")) ? String(formData.get("type")) : "custom",
     is_active: form.querySelector("[name='is_active']").checked,
     sort_order: Number(formData.get("sort_order") || 0),
     selection_mode: String(formData.get("selection_mode") || "manual"),
@@ -4379,13 +4449,21 @@ async function saveSection(event) {
     refreshNow: String(formData.get("selection_mode") || "manual") === "automatic"
   };
 
-  await adminSaveSection(payload);
+  try {
+    await adminSaveSection(payload);
+    await refreshSectionsData();
+  } catch (error) {
+    showToast(error.message || "Não foi possível salvar a seção.", "danger");
+    return; // Preservar o formulário e os campos para nova tentativa.
+  }
+  clearAdminFormDirty("sections");
   showToast("Seção salva com sucesso.", "success");
   manualSectionPicker.reset();
   adminState.editingSection = createEmptySectionDraft();
-  notifyStorefrontChanged("section-save");
-  await refreshSectionsData();
+  adminState.sectionView = "list";
   adminState.currentAdminTab = "sections";
+  notifyStorefrontChanged("section-save");
+  renderAdminLayout();
 }
 
 async function refreshSection(sectionId) {
@@ -4621,7 +4699,7 @@ async function saveBanner(event) {
       image_contrast: Number(data.get("image_contrast") || 1.05),
       overlay_strength: Number(data.get("overlay_strength") || 0.56),
       target_url: String(data.get("target_url") || ""),
-      target_type: String(data.get("target_type") || "hero"),
+      target_type: "hero", // destino válido; nunca aceitar texto arbitrário
       is_active: form.querySelector("[name='is_active']").checked,
       sort_order: Number(data.get("sort_order") || 0),
       starts_at: String(data.get("starts_at") || "") || null,

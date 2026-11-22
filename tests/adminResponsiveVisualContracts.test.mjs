@@ -1,0 +1,47 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+const admin=readFileSync(join(root,"js","admin.js"),"utf8");
+const css=readFileSync(join(root,"css","admin.css"),"utf8");
+const password=admin.slice(admin.indexOf("function renderPasswordChangeModal()"),admin.indexOf("async function handlePasswordChangeSubmit("));
+const sections=admin.slice(admin.indexOf("function renderSectionsManager()"),admin.indexOf("function renderProductOptionsManager()"));
+
+test("iOS: primeira abertura da senha não dispara o teclado automaticamente",()=>{
+ assert.doesNotMatch(password,/input\[name=['"]password['"]\].*\.focus\(/);
+ assert.match(password,/close-password-change.*focus\(\{ preventScroll: true \}\)/);
+});
+test("banner: target_type é select e persistência tem enum válida",()=>{
+ assert.match(admin,/<select name="target_type" required><option value="hero">Destaque principal<\/option><\/select>/);
+ assert.match(admin,/target_type: "hero"/);
+ assert.doesNotMatch(admin,/<input type="text" name="target_type"/);
+});
+test("seções: tipo de domínio também é enum e não texto arbitrário",()=>{
+ assert.match(sections,/<select name="type" required>/);
+ assert.match(admin,/SECTION_TYPE_OPTIONS\.some\(\(option\) => option\.value === formData\.get\("type"\)\)/);
+ assert.match(admin,/value: "best_seller"/);
+ assert.match(admin,/value: "low_stock"/);
+});
+test("horários: cards e inputs de time podem encolher sem vazamento",()=>{
+ assert.match(css,/\.hours-editor-grid \{ grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 260px\), 1fr\)\); \}/);
+ assert.match(css,/\.hours-time-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); justify-content: stretch; \}/);
+ assert.match(css,/\.hours-editor-shell \.admin-field input\[type="time"\] \{[^}]*max-width: 100%/s);
+});
+test("notificações: cartão, ações e input de agendamento são responsivos",()=>{
+ assert.match(css,/\.notification-bucket__header \{ flex-wrap: wrap;/);
+ assert.match(css,/\.notification-bucket__actions \{ flex-wrap: wrap;/);
+ assert.match(css,/\.notification-form input\[type="datetime-local"\]/);
+});
+test("banner: botão de arquivo alinhado sem exceder o cartão",()=>{
+ assert.match(css,/\.admin-field input\[type="file"\]::file-selector-button \{[^}]*vertical-align: middle/s);
+ assert.match(css,/#banner-upload-input \{/);
+});
+test("setas: colunas iguais, centro vertical e ícones SVG, sem glifos tipográficos",()=>{
+ assert.match(css,/grid-template-columns: 26px minmax\(0,1fr\) 26px/);
+ assert.match(css,/\.admin-tab-overflow-hint svg \{ width: 18px; height: 18px; \}/);
+ assert.match(admin,/admin-tab-overflow-hint--left" aria-hidden="true"><svg/);
+ assert.match(admin,/admin-tab-overflow-hint--right" aria-hidden="true"><svg/);
+});

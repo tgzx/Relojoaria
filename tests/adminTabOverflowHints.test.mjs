@@ -8,7 +8,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const admin=readFileSync(join(root,"js","admin.js"),"utf8");
 const css=readFileSync(join(root,"css","admin.css"),"utf8");
 
-test("abas horizontais têm indicadores sobrepostos para ambos os sentidos",()=>{
+test("abas horizontais têm indicadores de scroll em ambos os sentidos",()=>{
  assert.match(admin,/class="admin-tab-overflow-shell"/);
  assert.match(admin,/admin-tab-overflow-hint--left/);
  assert.match(admin,/admin-tab-overflow-hint--right/);
@@ -31,5 +31,25 @@ test("re-render fecha listeners/observers anteriores e preserva navegação",()=
  assert.match(bind,/new ResizeObserver\(update\)/);
  assert.match(bind,/controller\.abort\(\)/);
  assert.match(bind,/resizeObserver\?\.disconnect\(\)/);
- assert.match(bind,/scrollLeft = adminState\.mobileTabScrollLeft/);
+ assert.match(admin,/if \(currentTabStrip\) adminState\.mobileTabScrollLeft = currentTabStrip\.scrollLeft/);
+ assert.match(admin,/if \(nextTabStrip\) nextTabStrip\.scrollLeft = adminState\.mobileTabScrollLeft/);
+ assert.doesNotMatch(bind,/strip\.scrollLeft \+=/,"não pode deslocar automaticamente a aba ativa");
+ assert.doesNotMatch(bind,/strip\.scrollLeft = adminState\.mobileTabScrollLeft/,"não restaurar tardiamente em RAF");
+});
+
+test("chevrons SVG em colunas simétricas e com alinhamento geométrico",()=>{
+ assert.match(admin,/admin-tab-overflow-hint--left" aria-hidden="true"><svg viewBox="0 0 24 24"/);
+ assert.match(admin,/admin-tab-overflow-hint--right" aria-hidden="true"><svg viewBox="0 0 24 24"/);
+ assert.match(css,/grid-template-columns: 26px minmax\(0,1fr\) 26px;/);
+ assert.match(css,/\.admin-tab-overflow-hint svg \{/);
+ assert.match(css,/\.admin-tab-overflow-hint svg \{ width: 18px; height: 18px; \}/);
+});
+test("scrollLeft é lido antes do innerHTML e restaurado antes dos binds",()=>{
+ const render=admin.slice(admin.indexOf("function renderAdminLayout()"),admin.indexOf("function renderTabButtons()"));
+ const capture=render.indexOf("currentTabStrip.scrollLeft");
+ const rewrite=render.indexOf("root.innerHTML =");
+ const restore=render.indexOf("nextTabStrip.scrollLeft");
+ const bind=render.indexOf("bindAdminLayoutEvents()");
+ assert.ok(capture>=0 && capture<rewrite);
+ assert.ok(restore>rewrite && restore<bind);
 });
