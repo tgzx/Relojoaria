@@ -68,9 +68,15 @@ a {
 .auth-screen,
 .access-denied-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
+}
+.admin-shell-loading {
+  width: 100%;
+  align-content: center;
+  justify-content: center;
 }
 
 .admin-loading-card,
