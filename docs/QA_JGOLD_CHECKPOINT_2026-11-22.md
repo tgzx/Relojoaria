@@ -1,11 +1,11 @@
 # Caderno-espelho de QA — VitrineZap / J Gold Relojoaria — 22/11/2026
 
 > **ATENÇÃO:** registro persistente provisório no repositório, para não perder requisitos.
-> Não substitui o caderno local existente em `<Documentos>/AI_Planejamento_de_Trabalho/`.
+> Não substitui o caderno local **`<Documentos>/AI_Planejamento_de_Trabalho/vitrinezap-qa-ampliado-2026-11-21`**, cujo plano recente é `115_TABSET_SECOES_E_LOADING_PLANO.md`. Caderno de entrega relacionado: `<Documentos>/AI_Planejamento_de_Trabalho/vitrinezap-entrega-cloudflare-2026-11-21`.
 > PC Controller não respondeu nesta rodada (erro interno em `ps`/diretório);
 > tablet/MCP também respondeu 429. Assim que houver acesso, consultar
 > `<Documentos>/AI_Memory_Vault/90_SYSTEM/AI_PREINSTRUCTION.md`, índice raiz,
-> localizar caderno J Gold existente e fazer **upsert** deste checkpoint lá,
+> abrir o caderno QA ampliado e fazer **upsert** deste checkpoint lá,
 > preservando notas anteriores, sem criar caderno paralelo.
 
 ## Contexto e proteção de produção
@@ -82,3 +82,25 @@
 - **Arquivos alterados:** `js/admin.js`, `css/admin.css`, testes e este espelho.
 - **Testes executados:** verificações estáticas de contratos CSS/JS; inspeção real de job GitHub e logs; sem teste visual em navegador autenticado.
 - **Regra de encerramento:** não declarar "testado visualmente", "deploy feito" ou "agendamento funcionando" enquanto pendências correspondentes existirem.
+
+## Atualização de QA automatizado e inspeção visual — 22/11/2026
+
+- GitHub Actions de QA no branch de correção: **PASS** — execução `45029239819`.
+- `node --check` de `js/admin.js`, `js/app.js` e `js/storeApi.js`: **PASS**.
+- `node --test` dos contratos administrativos: **12/12 PASS**.
+- Smoke test Chromium **com HTML produzido pelos renderizadores reais de `js/admin.js`** (dados de teste, sem backend): **34 estados/viewports PASS**, zero overflow horizontal de cartões/inputs; verificadas geometria vertical das setas.
+- Viewports verificados: **320, 375, 390, 430, 768 e 1440 px** conforme cada cenário, módulos de Seções, Notificações, Banners, Horários, Senha e setas.
+- Capturas geradas e inspecionadas: artefato `jgold-admin-visual-smoke-screenshots` do run 45029239819; 34 PNGs.
+- Inspeção visual humana das montagens mobile/desktop: tabela de Seções legível e aba de criação separada; setas centralizadas na faixa; file picker alinhado; inputs de horário e datas contidos; modais com scroll e footer adequados aos estados simulados.
+- **Limite da validação:** Chromium com DOM real e dados simulados, não sessão administrativa autenticada da implantação; iOS Safari físico e tela de teclado ainda requerem teste.
+- A rotina de envio agendado **não foi alterada**. No GitHub Actions real ela rodou 4 vezes/24h apesar do cron cinco-minutos; último log `processed:0`. Falta decidir scheduler confiável depois da entrega/infra atual.
+
+### Correção encontrada durante o teste de contrato
+
+- A picklist de tipo da seção inicialmente não incluía `best_seller` e `low_stock` já existentes no seed. Foram adicionados; evita conversão silenciosa de tipo ao editar registros históricos.
+
+### Situação de entrega
+
+- Correções de código implementadas em branch isolada e QA automatizado/visual simulado concluídos.
+- **Pendente:** incorporar no caderno local e testar Safari real/autenticação admin antes de publicar os ajustes.
+- Sem alterações no banco de dados ou disparos push.
