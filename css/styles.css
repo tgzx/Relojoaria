@@ -1143,6 +1143,7 @@ body.theme-dark .product-badge--warning {
 
 .footer-shell {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   align-items: center;
@@ -1163,6 +1164,65 @@ body.theme-dark .product-badge--warning {
 .footer-shell p {
   margin: 0;
   line-height: 1.6;
+}
+
+/* Assinatura discreta do desenvolvedor, sempre após as informações da loja. */
+.footer-credit {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding-top: 16px;
+  margin-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--color-footer-text) 18%, transparent);
+  text-align: center;
+}
+
+.footer-shell .footer-credit p {
+  margin: 0;
+}
+
+.footer-credit__copyright {
+  color: var(--color-footer-text);
+  font-size: .75rem;
+  letter-spacing: .01em;
+}
+
+.footer-credit__author {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 7px;
+  font-size: .8125rem;
+  color: var(--color-footer-text);
+}
+
+.footer-credit__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  padding-inline: 4px;
+  color: var(--color-footer-link);
+  font-weight: 600;
+  text-decoration: none;
+  text-underline-offset: .2em;
+}
+
+.footer-credit__link svg {
+  flex: 0 0 auto;
+}
+
+.footer-credit__link:hover {
+  text-decoration: underline;
+}
+
+.footer-credit__link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .text-link {
