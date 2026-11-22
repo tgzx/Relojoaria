@@ -1640,8 +1640,12 @@ th {
 }
 
 .password-change-shell .panel-form {
+  min-height: 0;
   padding: clamp(18px, 3vw, 28px);
   gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .password-change-shell .editor-footer-actions {
