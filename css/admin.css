@@ -2412,3 +2412,8 @@ select:focus-visible,
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Slug e SKU: campos técnicos do produto preservados para eventual reexibição. */
+.product-internal-identifiers[hidden] {
+  display: none !important;
+}

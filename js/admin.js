@@ -47,6 +47,7 @@ import {
   uploadProductImage
 } from "./storeApi.js";
 import {
+  ensureProductIdentifiers,
   escapeHtml,
   formatCurrency,
   formatDateTime,
@@ -3549,7 +3550,8 @@ function renderProductEditor() {
                 <span>Nome *</span>
                 <input type="text" name="name" value="${escapeHtml(draft.name || "")}" required />
               </label>
-              <div class="inline-grid inline-grid--2">
+              <!-- Identificadores técnicos preservados e ocultos; remova hidden para reexibir. -->
+              <div class="inline-grid inline-grid--2 product-internal-identifiers" hidden>
                 <label class="admin-field">
                   <span>Slug</span>
                   <input type="text" name="slug" value="${escapeHtml(draft.slug || "")}" />
@@ -3800,10 +3802,6 @@ function bindProductEditorEvents() {
     event.currentTarget.value = "";
     renderProductEditor();
   });
-  qs("#product-editor-form [name='name']")?.addEventListener("input", (event) => {
-    const slugInput = qs("#product-editor-form [name='slug']");
-    if (!slugInput.value.trim()) slugInput.value = slugify(event.currentTarget.value);
-  });
   qsa("[data-editor-step]").forEach((button) =>
     button.addEventListener("click", () => {
       persistEditorDraftFromDom();
@@ -3952,7 +3950,8 @@ async function saveProduct(publish) {
     return;
   }
 
-  draft.slug = draft.slug || slugify(draft.name);
+  // Slug/SKU são técnicos: gerar apenas no primeiro salvamento e preservar os já gravados.
+  Object.assign(draft, ensureProductIdentifiers(draft));
 
   if (publish && (draft.price === null || draft.price === undefined || Number.isNaN(Number(draft.price)))) {
     showToast("Informe um preço válido antes de publicar.", "warning");
@@ -4033,6 +4032,8 @@ async function saveProduct(publish) {
     }
     adminState.isSavingProduct = false;
     adminState.productSaveMode = null;
+    // Uma tentativa com falha deve reabilitar os botões sem perder os IDs já gerados.
+    renderProductEditor();
     showToast(error.message || "Não foi possível salvar o produto.", "danger");
   }
 }

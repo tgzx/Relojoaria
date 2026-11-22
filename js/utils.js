@@ -129,6 +129,26 @@ export function slugify(value = "") {
     .replace(/^-+|-+$/g, "");
 }
 
+// Identificadores técnicos de produtos são criados uma única vez no primeiro salvamento.
+// O sufixo usa 64 bits do CSPRNG do navegador: nomes iguais não geram slugs iguais,
+// sem SELECT extra e sem mudar os identificadores de produtos já cadastrados.
+export function ensureProductIdentifiers(product = {}, randomHex = () =>
+  Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, "0")).join("")
+) {
+  const slug = String(product.slug || "").trim();
+  const sku = String(product.sku || "").trim();
+  if (slug && sku) return { slug, sku };
+
+  const suffix = String(randomHex()).toLowerCase();
+  if (!/^[a-f0-9]{16}$/.test(suffix)) {
+    throw new Error("Não foi possível gerar um identificador seguro para o produto.");
+  }
+  return {
+    slug: slug || `${slugify(product.name) || "produto"}-${suffix}`,
+    sku: sku || `JG-${suffix.toUpperCase()}`
+  };
+}
+
 export function escapeHtml(value = "") {
   return String(value)
     .replaceAll("&", "&amp;")
