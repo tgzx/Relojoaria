@@ -2423,3 +2423,27 @@ html:has(.sheet-shell:not(.is-hidden)) {
 /* Transient feedback is non-interactive; it must not prevent clicking targets. */
 .toast-root { pointer-events: none; max-width: calc(100vw - 28px); }
 .toast-root .toast { max-width: 100%; overflow-wrap: anywhere; }
+
+/* iOS Safari: campos com fonte abaixo de 16px ampliam a tela ao receber foco.
+   Restrito a dispositivos touch-first. Mantemos o zoom por pinça acessível. */
+@media (hover: none) and (pointer: coarse) {
+  :is(
+    input:not([type]),
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="week"],
+    textarea,
+    select
+  ) {
+    font-size: 16px;
+  }
+}

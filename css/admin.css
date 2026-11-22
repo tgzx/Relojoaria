@@ -2230,3 +2230,27 @@ select:focus-visible,
   overflow-wrap: anywhere;
   box-shadow: 0 3px 12px rgba(17, 17, 17, 0.12);
 }
+
+/* iOS Safari: campos com fonte abaixo de 16px ampliam a tela ao receber foco.
+   Restrito a dispositivos touch-first. Mantemos o zoom por pinça acessível. */
+@media (hover: none) and (pointer: coarse) {
+  :is(
+    input:not([type]),
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="week"],
+    textarea,
+    select
+  ) {
+    font-size: 16px;
+  }
+}
