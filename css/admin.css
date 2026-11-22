@@ -3548,3 +3548,101 @@ body { min-height: 100dvh; }
   font-size:.84rem;
 }
 .records-display[data-records-mode="cards"] .record-actions-unavailable {display:none;}
+
+
+/* Consistência com Seções: cabeçalho e CTA Criar dentro do painel principal.
+   Tabelas internas usam a superfície do mesmo card, sem bordas aninhadas. */
+.workspace-manager .workspace-records-container {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 20px;
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-manager .workspace-records-container > .workspace-records-heading {
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+}
+.workspace-manager .workspace-records-container > .workspace-records-heading > div:first-child {
+  min-width: 0;
+  flex: 1 1 170px;
+}
+.workspace-manager .workspace-records-container .workspace-list-tables {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0,1fr);
+  min-width: 0;
+}
+.workspace-manager .workspace-records-container .workspace-record-table-panel {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.workspace-manager .workspace-records-container .workspace-record-table-panel + .workspace-record-table-panel {
+  padding-top: 20px;
+  border-top: 1px solid var(--admin-border);
+}
+@media (max-width: 759px) {
+  .workspace-manager .workspace-records-container > .workspace-records-heading {
+    align-items: stretch;
+  }
+  .workspace-manager .workspace-records-container .workspace-records-heading .toolbar-actions {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .workspace-manager .workspace-records-container .workspace-records-heading .record-view-switch {
+    flex: 0 0 auto;
+  }
+}
+
+
+/* Cards simples não têm subtítulo visível; remover o recuo que era reservado a ele. */
+.workspace-manager:not(.workspace-manager--options) .workspace-records-container .section-records-scroll {
+  margin-top: 0;
+}
+
+/* Evita repetir o mesmo título duas vezes no card principal.
+   Grupos e Valores em Opções mantêm seus próprios subtítulos. */
+.workspace-manager:not(.workspace-manager--options) .workspace-records-container
+  .workspace-record-table-panel > h3 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 759px) {
+  /* Em Opções há dois criadores; ambos ocupam uma linha organizada,
+     abaixo do rádio Cards/Tabela, sem um botão isolado. */
+  .workspace-manager--options .workspace-records-container
+    .workspace-records-heading .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    align-items: center;
+    gap: 8px;
+  }
+  .workspace-manager--options .workspace-records-container
+    .workspace-records-heading .toolbar-actions .record-view-switch {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .workspace-manager--options .workspace-records-container
+    .workspace-records-heading .toolbar-actions .btn {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+    justify-content: center;
+  }
+}

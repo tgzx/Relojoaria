@@ -1101,9 +1101,9 @@ function workspaceActions(tab) {
   const buttons=tab==="options" ? [
     {mode:"group",label:"Criar grupo"}, {mode:"value",label:"Criar valor"}
   ]:[{mode:"form",label:"Criar "+MANAGER_WORKSPACES[tab].singular}];
-  return `<div class="workspace-records-heading">
+  return `<div class="section-card__header workspace-records-heading">
     <div><span class="section-kicker">Gestão da loja</span><h2>${escapeHtml(MANAGER_WORKSPACES[tab].plural)}</h2></div>
-    <div class="toolbar-actions">
+    <div class="section-card__header-actions toolbar-actions">
     ${renderRecordViewSwitch(tab)}
     ${buttons.map((button)=>`<button class="btn btn-primary" type="button" data-workspace-create="${button.mode}" data-workspace-kind="${tab}">${escapeHtml(button.label)}</button>`).join("")}
     </div>
@@ -1229,12 +1229,16 @@ function renderManagedWorkspace(tab, markup) {
   const view=workspaceView(tab);
   const allowed=config.panels[view] || [];
   const isList=view==="list";
-  const content=isList ? workspaceRecords(tab) + (tab==="notifications" ? [1,2].map(i=>panels[i]?.outerHTML||"").join("") : "") :
+  // Segue o padrão de Seções: título, seletor e Criar pertencem ao mesmo card dos registros.
+  // Painéis auxiliares (notificações) continuam fora do card principal.
+  const content=isList ? `<article class="panel-card workspace-records-container">
+      ${workspaceActions(tab)}
+      <div class="workspace-list-tables">${workspaceRecords(tab)}</div>
+    </article>` + (tab==="notifications" ? [1,2].map(i=>panels[i]?.outerHTML||"").join("") : "") :
     allowed.map(i=>panels[i]?.outerHTML||"").join("");
   if(!content) throw new Error("Aba inválida para "+tab+"/"+view);
   return `<section class="sections-workspace workspace-manager workspace-manager--${tab} records-display" data-records-mode="${currentRecordView(tab)}">
     ${workspaceTabs(tab)}
-    ${isList ? workspaceActions(tab) : ""}
     <div class="${escapeHtml(original.className)} workspace-content" role="tabpanel" aria-label="${isList?"Registros":"Editor"}">${content}</div>
     ${!isList ? `<div class="workspace-back-row"><button class="btn btn-secondary" type="button" data-workspace-back="${tab}">Voltar a registros</button></div>` : ""}
   </section>`;

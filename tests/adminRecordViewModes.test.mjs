@@ -64,3 +64,16 @@ test("dirty state: comparar formulário real evita perder alterações sem event
  assert.match(admin,/if \(hasUnsavedAdminForm\(adminState\.currentAdminTab\)\)/);
  assert.match(admin,/if \(hasUnsavedAdminForm\("sections"\)/);
 });
+
+test("Criar e Cards/Tabela pertencem ao card principal, padrão Seções",()=>{
+ const start=admin.indexOf("function renderManagedWorkspace(tab, markup)");
+ const end=admin.indexOf("function renderProducts()",start);
+ const section=admin.slice(start,end);
+ assert.ok(section.includes("workspace-records-container"),"main card");
+ assert.ok(section.includes("workspaceActions(tab)"),"create toolbar inside template");
+ assert.ok(section.includes("workspace-list-tables"),"record tables inside main card");
+ assert.ok(!section.includes('isList ? workspaceActions(tab) : ""'),"no external Create toolbar");
+ assert.match(css,/\.workspace-manager \.workspace-records-container \{/);
+ assert.match(css,/\.workspace-manager \.workspace-records-container \.workspace-record-table-panel \{/);
+ assert.match(css,/\.workspace-manager--options \.workspace-records-container/);
+});
