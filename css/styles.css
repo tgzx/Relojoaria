@@ -2001,6 +2001,7 @@ body.theme-dark .product-badge--warning {
 
   .footer-shell {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     padding: 18px;
     border-radius: 0;
