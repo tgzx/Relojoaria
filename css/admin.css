@@ -3126,8 +3126,9 @@ body { min-height: 100dvh; }
     height: 122px;
     min-height: 122px;
     max-height: 122px;
-    padding: 4px 0 12px;
-    gap: 4px;
+    /* Simetria visual: faixa superior -> abas = abas -> borda inferior. */
+    padding: 4px 0 8px;
+    gap: 8px;
     grid-template-rows: 58px 44px;
     overflow: visible;
   }

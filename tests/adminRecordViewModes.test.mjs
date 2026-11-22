@@ -99,7 +99,8 @@ test("Datas e horários não forçam overflow em colunas mobile",()=>{
 });
 test("Barra sticky reserva folga superior e inferior sem botões menores",()=>{
  assert.match(css,/height: 122px;\s*min-height: 122px;\s*max-height: 122px/);
- assert.match(css,/padding: 4px 0 12px/);
+ assert.match(css,/padding: 4px 0 8px/);
+ assert.match(css,/gap: 8px;\s*grid-template-rows: 58px 44px/);
  assert.match(css,/grid-template-rows: 58px 44px/);
  assert.match(css,/min-height: 44px/);
 });
