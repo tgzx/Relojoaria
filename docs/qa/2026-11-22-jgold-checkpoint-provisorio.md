@@ -47,3 +47,10 @@ Arquivos afetados:
 
 ## Bloqueios atuais
 Acesso ao Windows/PC Controller indisponível por falha interna da ferramenta; não conseguimos ler ou atualizar fisicamente o caderno nem comparar os arquivos locais do checkpoint 115. Sem acesso confirmado à organização Supabase Hotmail da J Gold por conectores, logo pipeline de agendamento ainda **não confirmado**.
+
+## Reorientação explícita do usuário — publicação obrigatória
+- **Não confundir código corrigido com site corrigido.** O usuário quer mudanças visíveis em `https://j-gold-relojoaria-oficial.pages.dev/`, não só PR.
+- `Cloudflare Pages` está em modo **Direct Upload** e **não publica por push/merge**. Procedimento confirmado em `DEPLOY_CLOUDFLARE.md`: validar projeto e conta Hotmail, gerar pacote com `node scripts/build-cloudflare-pages.mjs`, executar `wrangler pages deploy <pacote> --project-name j-gold-relojoaria-oficial --branch main --profile jgold` com ID de conta correto, sem trocar `js/config.js` de produção.
+- **Agendamento de notificações: SOMENTE ANÁLISE.** Não alterar fluxo, cron, Edge Function, banco, secrets nem disparar push nesta tarefa. Correção visual de notificações permanece dentro do escopo.
+- Publicação bloqueada nesta conversa: PC Controller foi testado com `ps`, `list_directory`, `browser_list_sessions` e `start_ps`; todas chamadas retornaram `The tool failed internally`. Tablet MCP retornou 429, Browser conectado exige contexto de extensão. Nenhum conector Cloudflare conectado. **Não alegar deploy ou QA online.**
+- Quando acesso voltar, ler Vault e caderno local primeiro; checar git status e as alterações locais do checkpoint 115 antes de integrar o patch remoto; publicar e inspecionar UI com print real. Não tocar conta Gmail legada.
