@@ -54,3 +54,43 @@ Acesso ao Windows/PC Controller indisponível por falha interna da ferramenta; n
 - **Agendamento de notificações: SOMENTE ANÁLISE.** Não alterar fluxo, cron, Edge Function, banco, secrets nem disparar push nesta tarefa. Correção visual de notificações permanece dentro do escopo.
 - Publicação bloqueada nesta conversa: PC Controller foi testado com `ps`, `list_directory`, `browser_list_sessions` e `start_ps`; todas chamadas retornaram `The tool failed internally`. Tablet MCP retornou 429, Browser conectado exige contexto de extensão. Nenhum conector Cloudflare conectado. **Não alegar deploy ou QA online.**
 - Quando acesso voltar, ler Vault e caderno local primeiro; checar git status e as alterações locais do checkpoint 115 antes de integrar o patch remoto; publicar e inspecionar UI com print real. Não tocar conta Gmail legada.
+
+## Atualização de execução confirmada — 22/11/2026 10h47 BRT
+
+**Correções mantidas exclusivamente no PR draft #1 / branch isolada.**
+
+- JS: modal Senha abre com foco no botão Fechar (evita teclado automático);
+  tabs de Seções Registros e Criar/Editar; tipos do banner controlados;
+  tipos de seções agora incluem **best_seller** e **low_stock**, preservando registros já existentes.
+- CSS: chevrons geométricos ao final das regras móveis para corrigir
+  alinhamento pelo centro real (não pela tipografia); dimensões responsivas de
+  Horários, Notificações, upload e Banners; loading com `100dvh`.
+- Testes de CI GitHub Actions: run **45029239819 PASS**.
+  - Sintaxe JavaScript (admin, app, storeApi): PASS.
+  - Contratos `node:test`: **12/12 PASS**.
+  - Chromium real com **renderizadores de `js/admin.js`**, dados simulados,
+    **34 estados/viewports PASS**, largura **320/375/390/430/768/1440**, zero
+    overflow horizontal detectado; eixos verticais de ambos chevrons testados.
+  - Capturas: artefato **`jgold-admin-visual-smoke-screenshots`**, 34 imagens PNG,
+    inspecionadas em montagens mobile e desktop nesta sessão; nenhuma invasão
+    de campos, e tabset, upload, modais e setas visualmente coerentes nos estados simulados.
+  - **Limite:** não substitui QA autenticado e Safari iOS físico.
+- Análise do agendamento ampliada:
+  - GitHub Actions programado a cada 5 min, porém histórico consultado teve
+    apenas **4 execuções agendadas nas últimas 24h**. Portanto não há garantia
+    de pontualidade para mensagens agendadas.
+  - Run `45025093048` em 22/11 às 12:59 UTC, concluído PASS;
+    log de função retornou `{"ok":true,"processed":0,"results":[]}`.
+  - **Não foi possível verificar qual URL real de Supabase está nos secrets**
+    de GitHub Actions. O projeto PROD correto é `qufuwkgtkblevayhpjsb`;
+    o projeto antigo inativo `xchqcpnmynwlodbkgmzy` NÃO prova que
+    produção esteja inativa. Verificar conta/segredos posteriormente.
+  - Não houve disparo real nem alteração do agendador nesta tarefa.
+- Caderno local **ainda não tocado** devido falha da conexão. Este arquivo
+  é o único checkpoint provisório do repositório; fazer upsert no caderno
+  `<Documentos>\AI_Planejamento_de_Trabalho\vitrinezap-qa-ampliado-2026-11-21`,
+  a partir do checkpoint 115 após reconciliação do Git local.
+- **Cloudflare Pages Direct Upload**: mudanças NÃO estão publicadas.
+  Quando PC voltar, comparar branch com changes locais, executar
+  `node scripts/build-cloudflare-pages.mjs` e procedimento
+  `DEPLOY_CLOUDFLARE.md`, seguido de prints na URL publicada.
