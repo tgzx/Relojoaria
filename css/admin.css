@@ -3123,10 +3123,10 @@ body { min-height: 100dvh; }
   .admin-content > .bottom-nav:first-child,
   .admin-shell.is-mobile-condensed .admin-content > .bottom-nav:first-child {
     box-sizing: border-box;
-    height: 114px;
-    min-height: 114px;
-    max-height: 114px;
-    padding: 4px 0;
+    height: 122px;
+    min-height: 122px;
+    max-height: 122px;
+    padding: 4px 0 12px;
     gap: 4px;
     grid-template-rows: 58px 44px;
     overflow: visible;
@@ -3242,26 +3242,7 @@ body { min-height: 100dvh; }
 .workspace-records-heading .toolbar-actions { flex-wrap:wrap; align-items:center; min-width:0; }
 .record-actions-cell {display:flex;align-items:center;justify-content:flex-start;gap:8px;min-width:0;max-width:100%;}
 .record-inline-actions {display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-width:0;}
-.record-action-picker {
-  display:none;
-  box-sizing:border-box;
-  width:132px;
-  min-width:112px;
-  max-width:100%;
-  min-height:42px;
-  padding:8px 22px 8px 12px;
-  border:1px solid var(--admin-border);
-  border-radius:11px;
-  background:var(--admin-surface-strong);
-  color:var(--admin-text);
-  font:inherit;
-  font-size:.9rem;
-  font-weight:650;
-  cursor:pointer;
-}
 .records-display[data-records-mode="table"] .record-inline-actions {display:none !important;}
-.records-display[data-records-mode="table"] .record-action-picker {display:block;}
-.records-display[data-records-mode="cards"] .record-action-picker {display:none;}
 .records-display[data-records-mode="cards"] .section-records-scroll {overflow:visible;max-width:100%;}
 .records-display[data-records-mode="cards"] .section-records-table,
 .records-display[data-records-mode="cards"] .section-records-table tbody {
@@ -3462,12 +3443,6 @@ body { min-height: 100dvh; }
 
 
 /* Tabela real: Ações rola com todas as demais colunas, sem posição fixa. */
-.records-display[data-records-mode="table"] .record-action-picker {
-  width:116px;
-  min-width:0;
-  min-height:44px;
-  padding-inline:8px 18px;
-}
 @media (max-width:759px) {
   .records-display[data-records-mode="table"] .section-records-scroll::before {
     display:block;
@@ -3611,3 +3586,159 @@ body { min-height: 100dvh; }
     justify-content: center;
   }
 }
+
+/* 22/11/2026: objeto com ajuda contextual no extremo direito, separada do título. */
+.admin-object-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.admin-object-title-row > *:first-child { min-width: 0; }
+.admin-object-help-trigger,
+.admin-field-help-trigger.admin-object-help-trigger {
+  position: static;
+  flex: 0 0 40px;
+  justify-self: end;
+  align-self: start;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  font-size: 1.12rem;
+  line-height: 1;
+  border-width: 1.5px;
+}
+.workspace-manager .workspace-records-heading,
+#section-records-panel > .section-card__header {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 40px;
+  gap: 12px;
+  align-items: start;
+}
+.workspace-manager .workspace-records-heading > div:first-child,
+#section-records-panel > .section-card__header > div:first-child {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.workspace-manager .workspace-records-heading > .admin-object-help-trigger,
+#section-records-panel > .section-card__header > .admin-object-help-trigger {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+.workspace-manager .workspace-records-heading > .section-card__header-actions,
+#section-records-panel > .section-card__header > .section-card__header-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  width: 100%;
+}
+.product-editor-shell .editor-header > .admin-object-help-trigger {
+  margin-inline-start: auto;
+}
+.product-editor-shell .editor-header > .admin-object-help-trigger + .modal-close-button {
+  margin-inline-start: 0;
+}
+@media (max-width: 759px) {
+  .workspace-manager .workspace-records-heading,
+  #section-records-panel > .section-card__header {
+    grid-template-columns: minmax(0,1fr) 40px;
+  }
+}
+
+/* Campos nativos iOS/WebKit de data nunca devem exceder as colunas. */
+.admin-content input:is([type="date"],[type="datetime-local"],[type="time"]),
+.editor-shell input:is([type="date"],[type="datetime-local"],[type="time"]) {
+  display: block;
+  box-sizing: border-box;
+  inline-size: 100%;
+  width: 100%;
+  min-inline-size: 0;
+  min-width: 0;
+  max-inline-size: 100%;
+  max-width: 100%;
+}
+.admin-content input[type="datetime-local"]::-webkit-date-and-time-value,
+.editor-shell input[type="datetime-local"]::-webkit-date-and-time-value {
+  min-width: 0;
+}
+@media (max-width: 759px) {
+  .admin-content .inline-grid:has(input:is([type="datetime-local"],[type="date"])) {
+    grid-template-columns: minmax(0,1fr) !important;
+  }
+  .admin-content .inline-grid:has(input:is([type="datetime-local"],[type="date"])) > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* Dropdown de ações: um botão de seta, menu em portal fixo fora do scroll da tabela. */
+.record-action-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  display: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border: 1px solid var(--admin-border);
+  border-radius: 11px;
+  background: var(--admin-surface-strong);
+  color: var(--admin-text);
+  cursor: pointer;
+}
+.record-action-trigger:hover,
+.record-action-trigger[aria-expanded="true"] {
+  border-color: var(--admin-accent);
+  background: var(--admin-surface-muted);
+}
+.record-action-trigger:focus-visible,
+.record-action-menu [role="menuitem"]:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+.records-display[data-records-mode="table"] .record-action-trigger {display: grid;}
+.records-display[data-records-mode="cards"] .record-action-trigger {display: none;}
+.record-action-menu {
+  position: fixed;
+  z-index: 1200;
+  display: grid;
+  min-width: 172px;
+  max-width: min(256px,calc(100vw - 16px));
+  padding: 5px;
+  gap: 2px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: var(--admin-surface-strong);
+  box-shadow: 0 16px 34px rgba(0,0,0,.18);
+}
+.record-action-menu [role="menuitem"] {
+  display: block;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--admin-text);
+  padding: 12px 14px;
+  width: 100%;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.record-action-menu [role="menuitem"]:hover,
+.record-action-menu [role="menuitem"]:focus-visible {
+  background: var(--admin-surface-muted);
+}
+.record-action-menu [data-record-menu-choice="delete"] {color: #a42d2d;}

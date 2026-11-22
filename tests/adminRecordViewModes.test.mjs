@@ -10,7 +10,7 @@ const api=readFileSync(join(root,"js","storeApi.js"),"utf8");
 
 test("sticky: altura mobile independe da aba ativa e reduz 25%",()=>{
  assert.match(css,/\.admin-content \{ grid-auto-rows: max-content; \}/);
- assert.match(css,/height: 114px;\s*min-height: 114px;\s*max-height: 114px;/);
+ assert.match(css,/height: 122px;\s*min-height: 122px;\s*max-height: 122px;/);
  assert.match(css,/grid-template-rows: 58px 44px;/);
  assert.match(css,/padding-bottom: 12px;/);
  assert.match(css,/height: 44px;\s*max-height: 44px;/);
@@ -27,13 +27,13 @@ test("todos os módulos de registros usam Cards/Tabela sem persistência remota"
  assert.match(admin,/area\.dataset\.recordsMode = input\.value/);
  assert.doesNotMatch(admin.slice(admin.indexOf("function bindRecordViewControls()"),admin.indexOf("function workspaceRow(item)")),/await |supabase|fetch\(/i);
 });
-test("tabela com coluna Ações e seletor nativo Editar / Excluir",()=>{
- assert.match(admin,/function renderRecordActionPicker\(name, canEdit/);
- assert.match(admin,/<option value="edit"/);
- assert.match(admin,/<option value="delete"/);
- assert.match(admin,/data-record-action-picker/);
- assert.match(admin,/querySelector\(action === "edit" \? "\.record-action-edit"/);
- assert.match(css,/\.records-display\[data-records-mode="table"\] \.record-action-picker \{display:block;\}/);
+test("tabela com seta acionável e menu real Editar / Excluir",()=>{
+ assert.match(admin,/function renderRecordActionTrigger\(name, canEdit/);
+ assert.match(admin,/data-record-menu-choice="edit"/);
+ assert.match(admin,/data-record-menu-choice="delete"/);
+ assert.match(admin,/data-record-action-trigger/);
+ assert.match(admin,/const target=choice.dataset.recordMenuChoice==="edit"\?edit/);
+ assert.match(css,/\.records-display\[data-records-mode="table"\] \.record-action-trigger \{display: grid;\}/);
  const start=css.indexOf("/* Tabela real: Ações rola com todas as demais colunas");
  const end=css.indexOf("/* Na tabela mobile, largura previsível",start);
  assert.ok(start>=0 && end>start,"bloco de tabela encontrado");
@@ -80,4 +80,26 @@ test("Criar e Cards/Tabela pertencem ao card principal, padrão Seções",()=>{
  assert.match(css,/\.workspace-manager \.workspace-records-container \{/);
  assert.match(css,/\.workspace-manager \.workspace-records-container \.workspace-record-table-panel \{/);
  assert.match(css,/\.workspace-manager--options \.workspace-records-container/);
+});
+
+test("Objeto tem ajuda ? contextual no canto oposto ao título",()=>{
+ for(const tab of ["products","sections","categories","brands","options","appearance","notifications"]){
+   assert.match(admin,new RegExp(tab+': ".+Ex\\.:'));
+ }
+ assert.match(admin,/function renderObjectHelp\(tab\)/);
+ assert.match(admin,/admin-object-help-trigger/);
+ assert.match(admin,/data-admin-field-help=/);
+ assert.match(css,/\.workspace-manager \.workspace-records-heading > \.admin-object-help-trigger/);
+ assert.match(css,/grid-column: 2;/);
+});
+test("Datas e horários não forçam overflow em colunas mobile",()=>{
+ assert.match(css,/input:is\(\[type="date"\],\[type="datetime-local"\],\[type="time"\]\)/);
+ assert.match(css,/inline-size: 100%/);
+ assert.match(css,/\.inline-grid:has\(input:is\(\[type="datetime-local"\],\[type="date"\]\)\)/);
+});
+test("Barra sticky reserva folga superior e inferior sem botões menores",()=>{
+ assert.match(css,/height: 122px;\s*min-height: 122px;\s*max-height: 122px/);
+ assert.match(css,/padding: 4px 0 12px/);
+ assert.match(css,/grid-template-rows: 58px 44px/);
+ assert.match(css,/min-height: 44px/);
 });

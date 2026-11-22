@@ -1097,12 +1097,33 @@ function workspaceTabs(tab) {
     </div>
   `;
 }
+
+const OBJECT_HELP_TEXT = {
+  products: "Produtos são os itens oferecidos na vitrine, com fotos, preços e disponibilidade. Ex.: Relógio Orient automático, com estoque e botão de atendimento.",
+  sections: "Seções organizam conjuntos de produtos na página inicial. Ex.: Novidades, Promoções ou Relógios mais vendidos, escolhidos manualmente ou por regra automática.",
+  categories: "Categorias agrupam produtos por tipo e ajudam na navegação e nos filtros. Ex.: Relógios masculinos, femininos ou acessórios.",
+  brands: "Marcas identificam os fabricantes ou linhas dos produtos. Ex.: Orient, Casio ou Technos; podem aparecer como filtro e destaque.",
+  options: "Opções definem características e escolhas reutilizáveis dos produtos. Ex.: crie um grupo Cor ou Pulseira e depois os valores Prata, Preto ou Couro.",
+  appearance: "Banners são os destaques visuais da página inicial, com imagem, título, link e período de exibição. Ex.: campanha de Natal ou coleção recém-chegada.",
+  notifications: "Notificações enviam novidades a dispositivos inscritos. Ex.: avisar sobre lançamentos, promoções ou agendar uma mensagem para sexta-feira.",
+  settings: "Configurações controlam dados e recursos públicos da loja, como nome, WhatsApp, horários de atendimento e cores da vitrine."
+};
+function renderObjectHelp(tab) {
+  const help = OBJECT_HELP_TEXT[tab];
+  if (!help) return "";
+  const label = MANAGER_WORKSPACES?.[tab]?.plural || (tab === "sections" ? "Seções" : tab === "settings" ? "Configurações" : "Produtos");
+  return `<button class="admin-field-help-trigger admin-object-help-trigger" type="button"
+     aria-label="Ajuda sobre ${escapeHtml(label)}" aria-expanded="false"
+     aria-controls="admin-field-help-popover" data-admin-field-help="${escapeHtml(help)}">?</button>`;
+}
+
 function workspaceActions(tab) {
   const buttons=tab==="options" ? [
     {mode:"group",label:"Criar grupo"}, {mode:"value",label:"Criar valor"}
   ]:[{mode:"form",label:"Criar "+MANAGER_WORKSPACES[tab].singular}];
   return `<div class="section-card__header workspace-records-heading">
     <div><span class="section-kicker">Gestão da loja</span><h2>${escapeHtml(MANAGER_WORKSPACES[tab].plural)}</h2></div>
+    ${renderObjectHelp(tab)}
     <div class="section-card__header-actions toolbar-actions">
     ${renderRecordViewSwitch(tab)}
     ${buttons.map((button)=>`<button class="btn btn-primary" type="button" data-workspace-create="${button.mode}" data-workspace-kind="${tab}">${escapeHtml(button.label)}</button>`).join("")}
@@ -1123,22 +1144,93 @@ function renderRecordViewSwitch(tab) {
       value="table" ${current === "table" ? "checked" : ""}/><span>Tabela</span></label>
   </fieldset>`;
 }
-function renderRecordActionPicker(name, canEdit = true, actionLabel = "Excluir", canRemove = true) {
-  if (!canEdit && !canRemove) return '<span class="record-actions-unavailable">Histórico</span>';
-  return `<select class="record-action-picker" data-record-action-picker
-    aria-label="Ações para ${escapeHtml(name || "registro")}">
-      <option value="">Ações</option>
-      <option value="edit" ${canEdit ? "" : "disabled"}>Editar</option>
-      <option value="delete" ${canRemove ? "" : "disabled"}>${escapeHtml(actionLabel)}</option>
-    </select>`;
+
+let activeRecordActionMenu = null;
+function closeRecordActionMenu(restoreFocus = false) {
+  const current = activeRecordActionMenu;
+  if (!current) return;
+  activeRecordActionMenu = null;
+  document.removeEventListener("pointerdown", current.outside, true);
+  document.removeEventListener("keydown", current.keys, true);
+  window.removeEventListener("scroll", current.scroll, true);
+  window.removeEventListener("resize", current.scroll);
+  current.trigger.setAttribute("aria-expanded", "false");
+  current.menu.remove();
+  if (restoreFocus && current.trigger.isConnected) current.trigger.focus();
 }
+function positionRecordActionMenu(trigger, menu) {
+  const rect=trigger.getBoundingClientRect(), width=menu.offsetWidth, height=menu.offsetHeight;
+  menu.style.left=Math.max(8,Math.min(window.innerWidth-width-8,rect.right-width))+"px";
+  menu.style.top=(rect.bottom+height+14 <= window.innerHeight?rect.bottom+6:Math.max(8,rect.top-height-6))+"px";
+}
+function openRecordActionMenu(trigger) {
+  if (activeRecordActionMenu?.trigger === trigger) return closeRecordActionMenu(true);
+  closeRecordActionMenu();
+  const source = trigger.closest(".record-actions-cell")?.querySelector(".record-inline-actions");
+  const edit = source?.querySelector(".record-action-edit:not([disabled])");
+  const remove = source?.querySelector(".record-action-delete:not([disabled])");
+  if (!edit && !remove) return;
+  const menu = document.createElement("div");
+  menu.id = "record-action-popup";
+  menu.className = "record-action-menu";
+  menu.setAttribute("role","menu");
+  menu.setAttribute("aria-label",trigger.getAttribute("aria-label") || "Ações");
+  menu.innerHTML = [
+    edit ? '<button type="button" role="menuitem" data-record-menu-choice="edit">Editar</button>' : "",
+    remove ? '<button type="button" role="menuitem" data-record-menu-choice="delete">' + escapeHtml(remove.textContent.trim() || "Excluir") + '</button>' : ""
+  ].join("");
+  document.body.appendChild(menu);
+  positionRecordActionMenu(trigger, menu);
+  trigger.setAttribute("aria-expanded","true");
+  menu.addEventListener("click", event => {
+    const choice=event.target.closest("[data-record-menu-choice]");
+    if (!choice) return;
+    const target=choice.dataset.recordMenuChoice==="edit"?edit:choice.dataset.recordMenuChoice==="delete"?remove:null;
+    closeRecordActionMenu();
+    if (target?.isConnected && !target.disabled) target.click();
+  });
+  const outside=event=>{if(!menu.contains(event.target)&&!trigger.contains(event.target))closeRecordActionMenu();};
+  const scroll=()=>{
+    if(!trigger.isConnected) return closeRecordActionMenu();
+    const b=trigger.getBoundingClientRect();
+    if(b.bottom<0 || b.top>window.innerHeight) return closeRecordActionMenu();
+    positionRecordActionMenu(trigger,menu);
+  };
+  const keys=event=>{
+    if(event.key==="Escape"){event.preventDefault();closeRecordActionMenu(true);}
+    else if(event.key==="Tab")closeRecordActionMenu();
+    else if(["ArrowUp","ArrowDown"].includes(event.key)){
+      event.preventDefault();
+      const items=[...menu.querySelectorAll('[role="menuitem"]')];
+      const index=items.indexOf(document.activeElement);
+      items[(index+(event.key==="ArrowDown"?1:items.length-1))%items.length]?.focus();
+    }
+  };
+  activeRecordActionMenu={trigger,menu,outside,scroll,keys};
+  document.addEventListener("pointerdown",outside,true);
+  document.addEventListener("keydown",keys,true);
+  window.addEventListener("scroll",scroll,true);
+  window.addEventListener("resize",scroll);
+  menu.querySelector('[role="menuitem"]')?.focus({preventScroll:true});
+}
+function renderRecordActionTrigger(name, canEdit = true, actionLabel = "Excluir", canRemove = true) {
+  if (!canEdit && !canRemove) return '<span class="record-actions-unavailable">Histórico</span>';
+  return `<button type="button" class="record-action-trigger" data-record-action-trigger
+     aria-label="Ações para ${escapeHtml(name || "registro")}" aria-haspopup="menu"
+     aria-expanded="false" aria-controls="record-action-popup" title="Editar ou ${escapeHtml(actionLabel)}">
+     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+       <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+     </svg>
+   </button>`;
+}
+
 function renderRowActionCell(name, actions) {
   const canEdit = /class="[^"]*\brecord-action-edit\b/.test(actions);
   const canRemove = /class="[^"]*\brecord-action-delete\b/.test(actions);
   const actionLabel = /data-disable-option-(?:group|value)/.test(actions) ? "Desativar" : "Excluir";
   return `<div class="record-actions-cell">
     <div class="section-record-actions record-inline-actions">${actions}</div>
-    ${renderRecordActionPicker(name, canEdit, actionLabel, canRemove)}
+    ${renderRecordActionTrigger(name, canEdit, actionLabel, canRemove)}
   </div>`;
 }
 function bindRecordViewControls() {
@@ -1149,15 +1241,8 @@ function bindRecordViewControls() {
     const area = input.closest(".records-display");
     if (area) area.dataset.recordsMode = input.value;
   }));
-  qsa("[data-record-action-picker]").forEach((picker) => picker.addEventListener("change", () => {
-    const action = picker.value;
-    picker.value = "";
-    const cell = picker.closest("td");
-    if (!cell) return;
-    const target = cell.querySelector(action === "edit" ? ".record-action-edit" :
-      action === "delete" ? ".record-action-delete" : ".record-action-unknown");
-    if (target && !target.disabled) target.click();
-  }));
+  closeRecordActionMenu();
+  qsa("[data-record-action-trigger]").forEach((button) => button.addEventListener("click", () => openRecordActionMenu(button)));
 }
 
 function workspaceRow(item) {
@@ -1231,6 +1316,17 @@ function renderManagedWorkspace(tab, markup) {
   const isList=view==="list";
   // Segue o padrão de Seções: título, seletor e Criar pertencem ao mesmo card dos registros.
   // Painéis auxiliares (notificações) continuam fora do card principal.
+  if (!isList) {
+    const panel = panels[allowed[0]];
+    const heading = panel?.querySelector("h2");
+    if (heading && !panel.querySelector(".admin-object-help-trigger")) {
+      const row = document.createElement("div");
+      row.className = "admin-object-title-row";
+      heading.before(row);
+      row.appendChild(heading);
+      row.insertAdjacentHTML("beforeend", renderObjectHelp(tab));
+    }
+  }
   const content=isList ? `<article class="panel-card workspace-records-container">
       ${workspaceActions(tab)}
       <div class="workspace-list-tables">${workspaceRecords(tab)}</div>
@@ -1440,9 +1536,9 @@ function renderProductsLegacy() {
 
   return `
     <section class="panel-card toolbar">
-      <div>
-        <span class="section-kicker">Busca e organização</span>
-        <h2>Produtos</h2>
+      <div class="admin-object-title-row">
+        <div><span class="section-kicker">Busca e organização</span><h2>Produtos</h2></div>
+        ${renderObjectHelp("products")}
       </div>
       <form id="products-filter-form" class="toolbar-filters">
         <label class="admin-field">
@@ -1561,7 +1657,7 @@ function renderProductsLegacy() {
                               <button class="btn btn-secondary record-action-edit" type="button" data-edit-product="${escapeHtml(product.id)}">Editar</button>
                               <button class="btn btn-secondary" type="button" data-duplicate-product="${escapeHtml(product.id)}">Duplicar</button>
                               <button class="btn btn-danger record-action-delete" type="button" data-delete-product="${escapeHtml(product.id)}">Excluir</button>
-                            </div>${renderRecordActionPicker(product.name,true,"Excluir",true)}</div>
+                            </div>${renderRecordActionTrigger(product.name,true,"Excluir",true)}</div>
                           </td>
                         </tr>
                       `
@@ -1618,6 +1714,7 @@ function renderSectionsManager() {
             <span class="section-kicker">Home pública</span>
             <h2>Seções da vitrine</h2>
           </div>
+          ${renderObjectHelp("sections")}
           <div class="section-card__header-actions">${renderRecordViewSwitch("sections")}<button class="btn btn-primary" type="button" id="new-section-button">Criar seção</button></div>
         </div>
         ${adminState.sections.length ? `
@@ -1646,7 +1743,7 @@ function renderSectionsManager() {
                       ${item.selection_mode === "automatic"
                         ? `<button class="btn btn-secondary" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>`
                         : ""}
-                    </div>${renderRecordActionPicker(item.title,true,"Excluir",true)}</div></td>
+                    </div>${renderRecordActionTrigger(item.title,true,"Excluir",true)}</div></td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -1664,7 +1761,7 @@ function renderSectionsManager() {
       <article class="panel-card section-editor-card" id="section-editor-panel" role="tabpanel"
         aria-labelledby="section-workspace-tab-editor">
         <span class="section-kicker">Configuração</span>
-        <h2>${section.id ? "Editar seção" : "Nova seção"}</h2>
+        <div class="admin-object-title-row"><h2>${section.id ? "Editar seção" : "Nova seção"}</h2>${renderObjectHelp("sections")}</div>
         <form id="section-form" class="section-form">
           <input type="hidden" name="id" value="${escapeHtml(section.id || "")}" />
           <label class="admin-field">
@@ -2626,7 +2723,7 @@ function renderSettings() {
     <section class="settings-grid">
       <article class="panel-card">
         <span class="section-kicker">Dados da loja</span>
-        <h2>Configurações públicas</h2>
+        <div class="admin-object-title-row"><h2>Configurações públicas</h2>${renderObjectHelp("settings")}</div>
         <form id="settings-form" class="settings-form">
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
@@ -4013,6 +4110,7 @@ function renderProductEditor() {
           <span class="section-kicker">Cadastro em etapas</span>
           <h2 id="product-editor-title">${draft.id ? "Editar produto" : "Novo produto"}</h2>
         </div>
+        ${renderObjectHelp("products")}
         <button class="modal-close-button" type="button" id="close-editor-button" aria-label="Fechar editor de produto" ${isEditorBusy ? "disabled" : ""}>×</button>
       </header>
       <div class="editor-body">
