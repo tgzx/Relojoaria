@@ -111,6 +111,20 @@ const BUSINESS_HOURS_DAYS = [
 ];
 
 const NOTIFICATION_PAGE_SIZE = 5;
+const SECTION_TYPE_OPTIONS = [
+  { value: "custom", label: "Personalizada" },
+  { value: "featured", label: "Destaques" },
+  { value: "promotion", label: "Promoções" },
+  { value: "newest", label: "Novidades" },
+  { value: "category", label: "Por categoria" },
+  { value: "brand", label: "Por marca" }
+];
+const SECTION_LAYOUT_OPTIONS = [
+  { value: "horizontal_carousel", label: "Carrossel" },
+  { value: "grid", label: "Grade" },
+  { value: "compact_list", label: "Lista compacta" },
+  { value: "hero_cards", label: "Cards hero" }
+];
 const PASSWORD_MIN_LENGTH = 8;
 
 const adminState = {
@@ -133,6 +147,7 @@ const adminState = {
   pushSummary: { count: 0, data: [] },
   editingProduct: null,
   editingSection: null,
+  sectionEditorOpen: false,
   editingCategory: null,
   editingBrand: null,
   editingOptionGroup: null,
@@ -1293,44 +1308,42 @@ function renderProducts() {
 
 function renderSectionsManager() {
   const section = adminState.editingSection || createEmptySectionDraft();
-
-  return `
-    <section class="manager-grid">
-      <article class="panel-card">
-        <div class="section-card__header">
+  const isEditorOpen = adminState.sectionEditorOpen;
+  const recordsMarkup = `
+      <article class="panel-card sections-records-panel">
+        <div class="section-card__header sections-records-heading">
           <div>
             <span class="section-kicker">Home pública</span>
             <h2>Seções da vitrine</h2>
+            <p class="muted-copy">Consulte as seções cadastradas e escolha Criar para abrir o formulário.</p>
           </div>
-          <button class="btn btn-primary" type="button" id="new-section-button">Nova seção</button>
+          <button class="btn btn-primary" type="button" id="new-section-button">Criar</button>
         </div>
-        <div class="list-stack">
-          ${adminState.sections
-            .map(
-              (item) => `
-                <article class="section-card">
-                  <div class="section-card__header">
-                    <div>
-                      <strong class="section-card__title">${escapeHtml(item.title)}</strong>
-                      <small>${escapeHtml(item.selection_mode)} · ${escapeHtml(item.layout)}</small>
-                    </div>
-                    <span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativa" : "Oculta"}</span>
-                  </div>
-                  <div class="section-card__footer">
-                    <button class="btn btn-secondary" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
-                    ${
-                      item.selection_mode === "automatic"
-                        ? `<button class="btn btn-secondary" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>`
-                        : ""
-                    }
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+        <div class="table-scroll sections-table-scroll">
+          <table class="sections-records-table">
+            <thead>
+              <tr><th>Seção</th><th>Modo</th><th>Layout</th><th>Status</th><th>Ações</th></tr>
+            </thead>
+            <tbody>
+              ${adminState.sections.length
+                ? adminState.sections.map((item) => `
+                  <tr>
+                    <td data-label="Seção"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.slug || "")}</small></td>
+                    <td data-label="Modo">${escapeHtml(item.selection_mode === "automatic" ? "Automático" : "Manual")}</td>
+                    <td data-label="Layout">${escapeHtml(SECTION_LAYOUT_OPTIONS.find((layout) => layout.value === item.layout)?.label || item.layout || "—")}</td>
+                    <td data-label="Status"><span class="badge ${item.is_active ? "badge--success" : "badge--muted"}">${item.is_active ? "Ativa" : "Oculta"}</span></td>
+                    <td data-label="Ações"><div class="sections-row-actions">
+                      <button class="btn btn-secondary btn-sm" type="button" data-edit-section="${escapeHtml(item.id)}">Editar</button>
+                      ${item.selection_mode === "automatic" ? `<button class="btn btn-secondary btn-sm" type="button" data-refresh-section="${escapeHtml(item.id)}">Atualizar regra</button>` : ""}
+                    </div></td>
+                  </tr>`).join("")
+                : `<tr><td colspan="5" class="sections-table-empty">Nenhuma seção cadastrada. Use Criar para adicionar a primeira.</td></tr>`}
+            </tbody>
+          </table>
         </div>
       </article>
-
+  `;
+  const editorMarkup = isEditorOpen ? `
       <article class="panel-card">
         <span class="section-kicker">Configuração</span>
         <h2>${section.id ? "Editar seção" : "Nova seção"}</h2>
@@ -1351,7 +1364,9 @@ function renderSectionsManager() {
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Tipo</span>
-              <input type="text" name="type" value="${escapeHtml(section.type || "custom")}" />
+              <select name="type" required>
+                ${renderOptions(SECTION_TYPE_OPTIONS, section.type || "custom")}
+              </select>
             </label>
             <label class="admin-field">
               <span>Ordem</span>
@@ -1447,6 +1462,16 @@ function renderSectionsManager() {
           </div>
         </form>
       </article>
+  ` : "";
+  return `
+    <section class="sections-workspace">
+      <div class="sections-subtabs" role="tablist" aria-label="Gestão de seções">
+        <button class="sections-subtab ${isEditorOpen ? "" : "is-active"}" type="button" role="tab" aria-selected="${!isEditorOpen}" data-section-workspace-tab="records">Registros</button>
+        ${isEditorOpen ? `<button class="sections-subtab is-active" type="button" role="tab" aria-selected="true" data-section-workspace-tab="editor">${section.id ? "Editar seção" : "Criar seção"}</button>` : ""}
+      </div>
+      <div class="sections-workspace-panel" role="tabpanel">
+        ${isEditorOpen ? editorMarkup : recordsMarkup}
+      </div>
     </section>
   `;
 }
@@ -2637,6 +2662,11 @@ function navigateAdminTab(nextTab) {
   clearAdminFormDirty();
   adminState.pendingBackgroundRender = false;
   adminState.currentAdminTab = nextTab;
+  if (nextTab === "sections") {
+    adminState.sectionEditorOpen = false;
+    adminState.editingSection = null;
+    manualSectionPicker.reset();
+  }
   renderAdminLayout();
   scrollAdminMainToTop();
 }
@@ -2913,10 +2943,23 @@ function bindProductsTab() {
 
 function bindSectionTab() {
   bindDirtyFormState("#section-form", "sections");
+  qsa("[data-section-workspace-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.sectionWorkspaceTab !== "records" || !adminState.sectionEditorOpen) return;
+      if (adminState.hasUnsavedAdminFormChanges && adminState.dirtyAdminTab === "sections" &&
+          !window.confirm("Descartar as alterações não salvas da seção?")) return;
+      clearAdminFormDirty("sections");
+      manualSectionPicker.reset();
+      adminState.editingSection = null;
+      adminState.sectionEditorOpen = false;
+      renderAdminLayout();
+    });
+  });
   qs("#new-section-button")?.addEventListener("click", () => {
     clearAdminFormDirty("sections");
     manualSectionPicker.reset();
     adminState.editingSection = createEmptySectionDraft();
+    adminState.sectionEditorOpen = true;
     renderAdminLayout();
   });
 
@@ -2928,6 +2971,7 @@ function bindSectionTab() {
       adminState.editingSection = structuredClone(
         adminState.sections.find((item) => item.id === button.dataset.editSection) || createEmptySectionDraft()
       );
+      adminState.sectionEditorOpen = true;
       renderAdminLayout();
     })
   );
@@ -4370,7 +4414,7 @@ async function saveSection(event) {
     title: String(formData.get("title") || "").trim(),
     slug: String(formData.get("slug") || "").trim() || slugify(String(formData.get("title") || "")),
     description: String(formData.get("description") || ""),
-    type: String(formData.get("type") || "custom"),
+    type: SECTION_TYPE_OPTIONS.some((option) => option.value === formData.get("type")) ? String(formData.get("type")) : "custom",
     is_active: form.querySelector("[name='is_active']").checked,
     sort_order: Number(formData.get("sort_order") || 0),
     selection_mode: String(formData.get("selection_mode") || "manual"),
@@ -4390,6 +4434,8 @@ async function saveSection(event) {
   notifyStorefrontChanged("section-save");
   await refreshSectionsData();
   adminState.currentAdminTab = "sections";
+  adminState.sectionEditorOpen = false;
+  renderAdminLayout();
 }
 
 async function refreshSection(sectionId) {
