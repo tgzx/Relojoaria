@@ -56,7 +56,7 @@ test("Rodapé mantém celular e separa extremos no tablet; PWA fica centralizado
  assert.match(publicCss,/\.install-prompt__card \{\s*width: min\(420px, 100%\)/);
  assert.match(adminHtml,/admin\.css\?v=20261122-password-scroll-short/);
  assert.match(adminHtml,/admin\.js\?v=20261122-tablet-ui-final/);
- assert.match(publicHtml,/styles\.css\?v=20261122-tablet-ui-final/);
+ assert.match(publicHtml,/styles\.css\?v=20261122-catalog-nav-balance/);
 });
 
 test("Editor de produto distribui cinco ações uniformemente no tablet sem afetar mobile",()=>{

@@ -42,5 +42,5 @@ test("Assinatura é centralizada, responsiva e tem foco visível",()=>{
  assert.match(css,/\.footer-credit__author \{[\s\S]*?justify-content: center/);
  assert.match(css,/\.footer-credit__link:focus-visible \{[\s\S]*?outline: 2px solid currentColor/);
  assert.match(css,/\.footer-shell \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\);/);
- assert.match(html,/\.\/css\/styles\.css\?v=20261122-tablet-ui-final/);
+ assert.match(html,/\.\/css\/styles\.css\?v=20261122-catalog-nav-balance/);
 });

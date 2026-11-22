@@ -1924,12 +1924,12 @@ body.theme-dark .product-badge--warning {
 
   .section-nav {
     top: var(--header-height);
-    padding: 6px 0 4px;
+    padding: 12px 0;
   }
 
   .section-nav-track {
     gap: 8px;
-    padding: 2px 0 0;
+    padding: 0;
   }
 
   .chip {
