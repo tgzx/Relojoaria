@@ -68,9 +68,15 @@ a {
 .auth-screen,
 .access-denied-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
+}
+.admin-shell-loading {
+  width: 100%;
+  align-content: center;
+  justify-content: center;
 }
 
 .admin-loading-card,
@@ -153,6 +159,35 @@ a {
   min-height: 132px;
   padding: 14px;
   resize: vertical;
+}
+
+/* Alinhar botão e nome do arquivo no eixo vertical, sem estourar o formulário. */
+.admin-field input[type="file"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 50px;
+  padding: 5px 6px;
+  line-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-field input[type="file"]::file-selector-button {
+  height: 38px;
+  min-height: 38px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  background: var(--admin-surface-muted);
+  color: var(--admin-text);
+  font: inherit;
+  font-weight: 600;
+  line-height: normal;
+  vertical-align: middle;
+  cursor: pointer;
 }
 
 .admin-field--switch {
@@ -656,14 +691,29 @@ th {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
+}
+.notification-bucket__header > strong {
+  flex: 1 1 90px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .notification-bucket__actions {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-bucket__actions .btn {
+  min-width: 0;
+  white-space: normal;
 }
 
 .notification-history-shell {
@@ -1072,11 +1122,12 @@ th {
 .hours-editor-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
 }
 
 .hours-day-card {
   display: grid;
+  min-width: 0;
   gap: 14px;
   padding: 16px;
   border-radius: 18px;
@@ -1125,9 +1176,10 @@ th {
 
 .hours-time-grid {
   display: grid;
+  min-width: 0;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 100px));
-  justify-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 .hours-time-grid--split {
@@ -1143,6 +1195,8 @@ th {
 }
 
 .hours-editor-shell .admin-field input[type="time"] {
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
   padding-inline: 12px;
 }
@@ -2783,3 +2837,208 @@ select:focus-visible,
 
 /* Fora do mobile, não renderizar chevrons nem capturar cliques. */
 .admin-tab-overflow-hint { display: none; pointer-events: none; }
+
+/* QA 2026-11-22: subtabs de Seções, registros e editor separados. */
+.sections-workspace {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.sections-subtabs {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--admin-border);
+}
+.sections-subtab {
+  min-height: 46px;
+  padding: 10px 18px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--admin-text-soft);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sections-subtab.is-active {
+  border-bottom-color: var(--admin-primary);
+  color: var(--admin-text);
+  background: var(--admin-surface-strong);
+}
+.sections-subtab:focus-visible {
+  outline: 2px solid var(--admin-primary);
+  outline-offset: -2px;
+}
+.sections-workspace-panel { min-width: 0; padding-top: 16px; }
+.sections-workspace-panel > .panel-card { min-width: 0; }
+.sections-records-heading {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.sections-records-heading > div { min-width: 0; flex: 1 1 230px; }
+.sections-records-heading p { margin: 2px 0 0; }
+.sections-records-heading .btn { flex: 0 0 auto; }
+.sections-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.sections-records-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: .9rem;
+}
+.sections-records-table th,
+.sections-records-table td {
+  padding: 12px 10px;
+  min-width: 0;
+  border-bottom: 1px solid var(--admin-border);
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.sections-records-table th { font-weight: 700; color: var(--admin-text-soft); }
+.sections-records-table td strong, .sections-records-table td small {
+  display: block;
+  max-width: 100%;
+}
+.sections-records-table td small { margin-top: 4px; color: var(--admin-text-soft); }
+.sections-row-actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.sections-table-empty { padding: 24px 10px !important; color: var(--admin-text-soft); }
+
+@media (max-width: 759px) {
+  /* Setas em colunas próprias, centralizadas na linha das abas, sem cobrir texto. */
+  .admin-tab-overflow-shell {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) 26px;
+    align-items: center;
+    column-gap: 4px;
+  }
+  .admin-tab-overflow-shell > .toolbar-actions {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+  .admin-tab-overflow-hint {
+    position: static;
+    inset: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 26px;
+    height: 100%;
+    min-height: 48px;
+    visibility: hidden;
+    background: none !important;
+    font: 700 27px/1 Arial, sans-serif;
+    text-shadow: none;
+  }
+  .admin-tab-overflow-shell.can-scroll-left .admin-tab-overflow-hint--left,
+  .admin-tab-overflow-shell.can-scroll-right .admin-tab-overflow-hint--right {
+    visibility: visible;
+  }
+  .sections-records-panel { padding: 16px; }
+  .sections-subtabs { padding-inline: 0; }
+  .sections-subtab { padding-inline: 14px; }
+  .sections-records-table,
+  .sections-records-table tbody,
+  .sections-records-table tr { display: block; }
+  .sections-records-table thead { display: none; }
+  .sections-records-table tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--admin-border);
+  }
+  .sections-records-table td {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.37fr) minmax(0, 0.63fr);
+    gap: 10px;
+    padding: 9px 2px;
+    border: 0;
+    align-items: center;
+  }
+  .sections-records-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--admin-text-soft);
+    font-size: .83rem;
+    font-weight: 700;
+  }
+  .sections-records-table td[colspan] { display: block; }
+  .hours-editor-shell {
+    inset: auto 8px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+    transform: none;
+  }
+}
+
+/* QA: controles nativos compactos em formulários administrativos.
+   Não mascarar overflow: dar largura encolhível real para inputs e containers. */
+.admin-field,
+.admin-field > input,
+.admin-field > select,
+.admin-field > textarea,
+.inline-grid > *,
+.notification-form,
+.notification-form > *,
+.notification-side-card,
+.notification-planning-grid,
+.notification-bucket,
+.notification-bucket .list-stack,
+.sections-workspace-panel,
+.sections-records-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-form input[type="datetime-local"],
+.notification-form input[type="text"],
+.notification-form select,
+#banner-form input[type="url"],
+#banner-form select,
+#banner-upload-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.notification-form input[type="datetime-local"] {
+  padding-inline: 10px;
+  font-variant-numeric: tabular-nums;
+}
+#banner-upload-input {
+  line-height: normal;
+}
+
+/* Chevron geométrico: centro visual idêntico nas duas direções, sem o
+   deslocamento de baseline dos glifos ‹ e › no Safari/iOS. */
+@media (max-width: 759px) {
+  .admin-tab-overflow-hint {
+    font-size: 0;
+    line-height: 0;
+  }
+  .admin-tab-overflow-hint::before {
+    content: "";
+    display: block;
+    flex: 0 0 11px;
+    width: 11px;
+    height: 11px;
+    border-right: 3px solid currentColor;
+    border-bottom: 3px solid currentColor;
+    border-radius: 1px;
+    transform-origin: center center;
+  }
+  .admin-tab-overflow-hint--left::before {
+    transform: rotate(135deg);
+    margin-left: 4px;
+  }
+  .admin-tab-overflow-hint--right::before {
+    transform: rotate(-45deg);
+    margin-right: 4px;
+  }
+}

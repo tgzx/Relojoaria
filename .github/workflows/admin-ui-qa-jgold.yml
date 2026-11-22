@@ -1,0 +1,43 @@
+name: QA visual contracts - J Gold admin
+
+on:
+  push:
+    branches:
+      - fix/jgold-modal-overflow-picker-2026-11-22
+    paths:
+      - js/admin.js
+      - css/admin.css
+      - tests/adminResponsiveContracts.test.mjs
+      - tests/adminSectionsAndArrows.test.mjs
+      - tests/adminVisualSmoke.mjs
+      - .github/workflows/admin-ui-qa-jgold.yml
+  workflow_dispatch:
+
+jobs:
+  static-ui-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --version
+          node --check js/admin.js
+          node --check js/app.js
+          node --check js/storeApi.js
+      - name: Check admin responsive UI regressions
+        run: |
+          node --test tests/adminResponsiveContracts.test.mjs tests/adminSectionsAndArrows.test.mjs
+      - name: Install Chromium for visual layout smoke tests
+        run: |
+          npm install --no-save --no-package-lock playwright@1.59.1
+          npx playwright install --with-deps chromium
+      - name: Render real admin component markup across viewports
+        run: node tests/adminVisualSmoke.mjs
+      - name: Save screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jgold-admin-visual-smoke-screenshots
+          path: qa-visual-artifacts/
+          if-no-files-found: ignore
