@@ -54,7 +54,14 @@ test("Rodapé mantém celular e separa extremos no tablet; PWA fica centralizado
  assert.match(publicCss,/justify-content: space-between/);
  assert.match(publicCss,/@media \(min-width: 760px\) \{\s*\.install-prompt/);
  assert.match(publicCss,/\.install-prompt__card \{\s*width: min\(420px, 100%\)/);
- assert.match(adminHtml,/admin\.css\?v=20261122-tablet-ui-final/);
+ assert.match(adminHtml,/admin\.css\?v=20261122-editor-footer-grid/);
  assert.match(adminHtml,/admin\.js\?v=20261122-tablet-ui-final/);
  assert.match(publicHtml,/styles\.css\?v=20261122-tablet-ui-final/);
+});
+
+test("Editor de produto distribui cinco ações uniformemente no tablet sem afetar mobile",()=>{
+ assert.match(css,/\.workspace-inline-product \.editor-footer-actions \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+ assert.match(css,/\.workspace-inline-product \.editor-footer-actions \.btn \{[\s\S]*?min-height: 48px/);
+ assert.match(css,/\.workspace-inline-product #editor-cancel-button \{[\s\S]*?border-color: var\(--admin-border\)/);
+ assert.match(css,/@media \(max-width: 759px\) \{[\s\S]*?\.workspace-inline-product \.editor-footer-actions \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 });
