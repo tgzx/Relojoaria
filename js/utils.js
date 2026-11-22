@@ -313,10 +313,28 @@ export function showToast(message, tone = "default") {
   toast.textContent = message;
   // Keep one current announcement: old transient feedback must not cover a new action.
   toast.setAttribute("role", tone === "danger" ? "alert" : "status");
-  root.replaceChildren(toast);
+  const activeDialog = [...document.querySelectorAll(".editor-shell[role='dialog']")]
+    .filter((dialog) => dialog.getClientRects().length > 0)
+    .at(-1);
+  const editorBody = activeDialog?.querySelector(".editor-body");
+  let destination = root;
+  if (editorBody) {
+    destination = editorBody.querySelector(":scope > .editor-inline-toast-root");
+    if (!destination) {
+      destination = document.createElement("div");
+      destination.className = "editor-inline-toast-root";
+      destination.setAttribute("aria-live", "polite");
+      destination.setAttribute("aria-atomic", "true");
+      editorBody.prepend(destination);
+    }
+    toast.classList.add("toast--inline");
+  }
+  root.replaceChildren();
+  destination.replaceChildren(toast);
 
   window.setTimeout(() => {
     toast.remove();
+    if (destination !== root && !destination.hasChildNodes()) destination.remove();
   }, 3400);
 }
 

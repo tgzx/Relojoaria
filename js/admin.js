@@ -1127,7 +1127,7 @@ function renderProducts() {
       <form id="products-filter-form" class="toolbar-filters">
         <label class="admin-field">
           <span>Buscar</span>
-          <input type="search" name="search" value="${escapeHtml(adminState.productFilters.search)}" placeholder="Nome do produto" />
+          <input type="search" name="search" value="${escapeHtml(adminState.productFilters.search)}" placeholder="Nome" />
         </label>
         <label class="admin-field">
           <span>Status</span>
