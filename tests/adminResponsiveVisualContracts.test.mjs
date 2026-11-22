@@ -28,13 +28,14 @@ test("seções: tipo de domínio também é enum e não texto arbitrário",()=>{
 test("horários: cards e inputs de time podem encolher sem vazamento",()=>{
  assert.match(css,/\.hours-editor-grid \{ grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 260px\), 1fr\)\); \}/);
  assert.match(css,/\.hours-time-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); justify-content: stretch; \}/);
- assert.match(css,/\.hours-editor-shell \.admin-field input\[type="time"\] \{[^}]*max-width: 100%/s);
+ assert.match(css,/\.hours-editor-shell \.admin-field input:is\(\[data-hours-morning-start\]/);
+ assert.match(css,/\.hours-editor-shell \.admin-field input:is\([^}]*max-width: 100%/s);
 });
 test("notificações: agenda por texto numérico não usa picker iOS e preserva scheduled_at",()=>{
  assert.match(css,/\.notification-bucket__header \{ flex-wrap: wrap;/);
  assert.match(css,/\.notification-bucket__actions \{ flex-wrap: wrap;/);
- assert.match(css,/\.notification-schedule-controls \{[\s\S]*?grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)/);
- assert.match(css,/\.notification-form \.notification-schedule-part > input \{[\s\S]*?min-inline-size: 0/);
+ assert.match(css,/\.notification-schedule-controls,\s*\.admin-date-time-controls \{[\s\S]*?grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)/);
+ assert.match(css,/\.notification-form \.notification-schedule-part > input,\s*#banner-form \.admin-date-time-part > input \{[\s\S]*?min-inline-size: 0/);
  assert.match(admin,/<input type="text" name="scheduled_date"[^>]+inputmode="numeric"/);
  assert.match(admin,/<input type="text" name="scheduled_time"[^>]+inputmode="numeric"/);
  assert.doesNotMatch(admin,/<input type="date" name="scheduled_date"/);
@@ -54,4 +55,19 @@ test("setas: colunas iguais, centro vertical e ícones SVG, sem glifos tipográf
  assert.match(css,/\.admin-tab-overflow-hint svg \{ width: 18px; height: 18px; \}/);
  assert.match(admin,/admin-tab-overflow-hint--left" aria-hidden="true"><svg/);
  assert.match(admin,/admin-tab-overflow-hint--right" aria-hidden="true"><svg/);
+});
+test("todos os controles editáveis de data e hora no painel usam máscara numérica, nunca o picker nativo",()=>{
+ assert.doesNotMatch(admin,/<input\s+type=["'](?:date|time|datetime-local|month|week)["']/);
+ for(const name of ["starts_at_date","starts_at_time","ends_at_date","ends_at_time"]) {
+  assert.match(admin,new RegExp('name="'+name+'"[^>]*inputmode="numeric"'));
+ }
+ for(const attribute of ["morning-start","morning-end","afternoon-start","afternoon-end"]) {
+  assert.match(admin,new RegExp('<input type="text" inputmode="numeric"[^>]*data-hours-'+attribute));
+ }
+ assert.match(admin,/function syncAdminDateTimePair\(form, dateName, timeName, combinedName\)/);
+ assert.match(admin,/function bindAdminDateTimePairs\(form, pairs\)/);
+ assert.match(admin,/function readBusinessHoursTime\(card, selector, dayLabel\)/);
+ assert.match(admin,/const validation = syncAdminDateTimePair\(form/);
+ assert.match(css,/\.admin-date-time-controls \{/);
+ assert.match(css,/#banner-form \.admin-date-time-part > input/);
 });

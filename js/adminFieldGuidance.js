@@ -116,8 +116,10 @@ const GUIDE = {
     target_type: ["Ex.: hero", "Categoria técnica do destino do banner."],
     sort_order: ["Ex.: 1", "Posição do banner entre os demais."],
     is_active: ["", "Define se o banner pode aparecer."],
-    starts_at: ["", "Agendamento opcional do início da exibição."],
-    ends_at: ["", "Agendamento opcional do fim da exibição."]
+    starts_at_date: ["", "Data opcional do início do banner, no formato DD/MM/AAAA. Preencha também o horário."],
+    starts_at_time: ["", "Horário do início do banner, no formato HH:mm. Preencha também a data."],
+    ends_at_date: ["", "Data opcional do fim do banner, no formato DD/MM/AAAA. Preencha também o horário."],
+    ends_at_time: ["", "Horário do fim do banner, no formato HH:mm. O fim precisa ser posterior ao início."]
   },
   "notification-form": {
     title: ["Ex.: Novidades na vitrine", "Título da notificação recebida pelo visitante."],

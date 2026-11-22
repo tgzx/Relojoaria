@@ -2273,14 +2273,34 @@ function renderAppearanceManagerLegacy() {
             </label>
           </div>
           <div class="inline-grid inline-grid--2">
-            <label class="admin-field">
-              <span>Início</span>
-              <input type="datetime-local" name="starts_at" value="${toDateTimeLocal(banner.starts_at)}" />
-            </label>
-            <label class="admin-field">
-              <span>Fim</span>
-              <input type="datetime-local" name="ends_at" value="${toDateTimeLocal(banner.ends_at)}" />
-            </label>
+            <div class="admin-field">
+              <span>Início da exibição</span>
+              <div class="admin-date-time-controls">
+                <label class="admin-field admin-date-time-part">
+                  <span>Data</span>
+                  <input type="text" name="starts_at_date" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/AAAA" value="${escapeHtml(formatAdminDateInput(banner.starts_at))}" />
+                </label>
+                <label class="admin-field admin-date-time-part">
+                  <span>Horário</span>
+                  <input type="text" name="starts_at_time" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" value="${escapeHtml(formatAdminTimeInput(banner.starts_at))}" />
+                </label>
+              </div>
+              <input type="hidden" name="starts_at" value="${escapeHtml(toDateTimeLocal(banner.starts_at))}" />
+            </div>
+            <div class="admin-field">
+              <span>Fim da exibição</span>
+              <div class="admin-date-time-controls">
+                <label class="admin-field admin-date-time-part">
+                  <span>Data</span>
+                  <input type="text" name="ends_at_date" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/AAAA" value="${escapeHtml(formatAdminDateInput(banner.ends_at))}" />
+                </label>
+                <label class="admin-field admin-date-time-part">
+                  <span>Horário</span>
+                  <input type="text" name="ends_at_time" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" value="${escapeHtml(formatAdminTimeInput(banner.ends_at))}" />
+                </label>
+              </div>
+              <input type="hidden" name="ends_at" value="${escapeHtml(toDateTimeLocal(banner.ends_at))}" />
+            </div>
           </div>
           <div class="toolbar-actions">
             <button class="btn btn-primary" type="submit">Salvar banner</button>
@@ -3592,8 +3612,13 @@ async function refreshProductOptionsData() {
 }
 
 function bindAppearanceTab() {
+  const bannerForm = qs("#banner-form");
+  bindAdminDateTimePairs(bannerForm, [
+    ["starts_at_date", "starts_at_time", "starts_at"],
+    ["ends_at_date", "ends_at_time", "ends_at"]
+  ]);
   bindDirtyFormState("#banner-form", "appearance");
-  qs("#banner-form")?.addEventListener("submit", saveBanner);
+  bannerForm?.addEventListener("submit", saveBanner);
   qs("#banner-upload-input")?.addEventListener("change", (event) => {
     adminState.pendingBannerFile = event.currentTarget.files?.[0] || null;
     markAdminFormDirty("appearance");
@@ -3625,13 +3650,22 @@ function formatScheduleDigits(value, type) {
   return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join("/");
 }
 
-function syncNotificationScheduledAt(form) {
+function formatAdminDateInput(value) {
+  const local = toDateTimeLocal(value);
+  return local ? `${local.slice(8, 10)}/${local.slice(5, 7)}/${local.slice(0, 4)}` : "";
+}
+
+function formatAdminTimeInput(value) {
+  return toDateTimeLocal(value).slice(11, 16);
+}
+
+function syncAdminDateTimePair(form, dateName, timeName, combinedName) {
   if (!form) return { incomplete: false, invalid: false };
-  const dateField = form.elements.namedItem("scheduled_date");
-  const timeField = form.elements.namedItem("scheduled_time");
+  const dateField = form.elements.namedItem(dateName);
+  const timeField = form.elements.namedItem(timeName);
   const date = String(dateField?.value || "").trim();
   const time = String(timeField?.value || "").trim();
-  const combined = form.elements.namedItem("scheduled_at");
+  const combined = form.elements.namedItem(combinedName);
   const incomplete = Boolean(date) !== Boolean(time);
   const dateMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date);
   const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
@@ -3647,6 +3681,25 @@ function syncNotificationScheduledAt(form) {
   const invalid = Boolean(date || time) && !incomplete && (!validDate || !timeMatch);
   if (combined) combined.value = !incomplete && !invalid && date && time ? `${isoDate}T${time}` : "";
   return { incomplete, invalid, invalidDate: Boolean(date) && !validDate, invalidTime: Boolean(time) && !timeMatch };
+}
+
+function syncNotificationScheduledAt(form) {
+  return syncAdminDateTimePair(form, "scheduled_date", "scheduled_time", "scheduled_at");
+}
+
+function bindAdminDateTimePairs(form, pairs) {
+  if (!form) return;
+  const editableNames = new Set(pairs.flatMap(([dateName, timeName]) => [dateName, timeName]));
+  const syncAll = () => pairs.forEach(([dateName, timeName, combinedName]) =>
+    syncAdminDateTimePair(form, dateName, timeName, combinedName));
+  form.addEventListener("input", (event) => {
+    const field = event.target;
+    if (editableNames.has(field?.name)) {
+      field.value = formatScheduleDigits(field.value, field.name.endsWith("_date") ? "date" : "time");
+    }
+    syncAll();
+  });
+  form.addEventListener("change", syncAll);
 }
 
 function bindNotificationsTab() {
@@ -5148,7 +5201,23 @@ async function removeBrand(brandId) {
 async function saveBanner(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  for (const [name, label] of [["starts_at", "início"], ["ends_at", "fim"]]) {
+    const validation = syncAdminDateTimePair(form, `${name}_date`, `${name}_time`, name);
+    if (validation.incomplete || validation.invalid) {
+      showToast(`Confira a data (DD/MM/AAAA) e o horário (HH:mm) de ${label} do banner.`, "danger");
+      form.elements.namedItem(validation.invalidDate || !form.elements.namedItem(`${name}_date`)?.value
+        ? `${name}_date` : `${name}_time`)?.focus();
+      return;
+    }
+  }
   const data = new FormData(form);
+  const startValue = String(data.get("starts_at") || "");
+  const endValue = String(data.get("ends_at") || "");
+  if (startValue && endValue && endValue <= startValue) {
+    showToast("O fim da exibição deve ocorrer depois do início.", "danger");
+    form.elements.namedItem("ends_at_date")?.focus();
+    return;
+  }
   const previousImageUrl = String(adminState.editingBanner?.image_url || "");
   let imageUrl = String(data.get("image_url") || "");
   let storagePath = adminState.editingBanner?.storage_path || null;
@@ -5906,21 +5975,21 @@ function openBusinessHoursEditor() {
                   <div class="hours-time-grid">
                     <label class="admin-field">
                       <span>Início</span>
-                      <input type="time" data-hours-morning-start value="${escapeHtml(draft.morningStart)}" ${draft.closed ? "disabled" : ""} />
+                      <input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" data-hours-morning-start value="${escapeHtml(draft.morningStart)}" ${draft.closed ? "disabled" : ""} />
                     </label>
                     <label class="admin-field">
                       <span>Fim</span>
-                      <input type="time" data-hours-morning-end value="${escapeHtml(draft.morningEnd)}" ${draft.closed ? "disabled" : ""} />
+                      <input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" data-hours-morning-end value="${escapeHtml(draft.morningEnd)}" ${draft.closed ? "disabled" : ""} />
                     </label>
                   </div>
                   <div class="hours-time-grid hours-time-grid--split">
                     <label class="admin-field">
                       <span>Retorno</span>
-                      <input type="time" data-hours-afternoon-start value="${escapeHtml(draft.afternoonStart)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                      <input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" data-hours-afternoon-start value="${escapeHtml(draft.afternoonStart)}" ${draft.closed || !draft.split ? "disabled" : ""} />
                     </label>
                     <label class="admin-field">
                       <span>Encerramento</span>
-                      <input type="time" data-hours-afternoon-end value="${escapeHtml(draft.afternoonEnd)}" ${draft.closed || !draft.split ? "disabled" : ""} />
+                      <input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:mm" data-hours-afternoon-end value="${escapeHtml(draft.afternoonEnd)}" ${draft.closed || !draft.split ? "disabled" : ""} />
                     </label>
                   </div>
                 </div>
@@ -5944,7 +6013,11 @@ function openBusinessHoursEditor() {
   qs("#cancel-hours-editor")?.addEventListener("click", () => closeBusinessHoursEditor());
   qs("#apply-hours-editor")?.addEventListener("click", applyBusinessHoursEditor);
 
-  modalRoot.addEventListener("input", () => {
+  modalRoot.addEventListener("input", (event) => {
+    const field = event.target;
+    if (field instanceof HTMLInputElement && field.matches("input[data-hours-morning-start], input[data-hours-morning-end], input[data-hours-afternoon-start], input[data-hours-afternoon-end]")) {
+      field.value = formatScheduleDigits(field.value, "time");
+    }
     adminState.businessHoursEditorDirty = true;
   });
   modalRoot.addEventListener("change", (event) => {
@@ -5979,6 +6052,17 @@ function syncBusinessHoursDayCard(card) {
   });
 }
 
+function readBusinessHoursTime(card, selector, dayLabel) {
+  const field = qs(selector, card);
+  const value = String(field?.value || "").trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    showToast(`Informe um horário válido (HH:mm) para ${dayLabel}.`, "warning");
+    field?.focus();
+    return null;
+  }
+  return value;
+}
+
 function applyBusinessHoursEditor() {
   const modalRoot = qs("#admin-hours-modal-root");
   const hoursField = qs("#settings-form textarea[name='business_hours']");
@@ -5997,8 +6081,10 @@ function applyBusinessHoursEditor() {
       continue;
     }
 
-    const morningStart = normalizeTimeValue(qs("[data-hours-morning-start]", card)?.value, "09:00");
-    const morningEnd = normalizeTimeValue(qs("[data-hours-morning-end]", card)?.value, "18:00");
+    const morningStart = readBusinessHoursTime(card, "[data-hours-morning-start]", day.label);
+    if (morningStart === null) return;
+    const morningEnd = readBusinessHoursTime(card, "[data-hours-morning-end]", day.label);
+    if (morningEnd === null) return;
 
     if (!isBusinessHoursRangeValid(morningStart, morningEnd)) {
       showToast(`Revise o primeiro turno de ${day.label}.`, "warning");
@@ -6008,8 +6094,10 @@ function applyBusinessHoursEditor() {
     const periods = [{ start: morningStart, end: morningEnd }];
 
     if (split) {
-      const afternoonStart = normalizeTimeValue(qs("[data-hours-afternoon-start]", card)?.value, "13:00");
-      const afternoonEnd = normalizeTimeValue(qs("[data-hours-afternoon-end]", card)?.value, "18:00");
+      const afternoonStart = readBusinessHoursTime(card, "[data-hours-afternoon-start]", day.label);
+      if (afternoonStart === null) return;
+      const afternoonEnd = readBusinessHoursTime(card, "[data-hours-afternoon-end]", day.label);
+      if (afternoonEnd === null) return;
 
       if (!isBusinessHoursRangeValid(afternoonStart, afternoonEnd)) {
         showToast(`Revise o segundo turno de ${day.label}.`, "warning");

@@ -1142,7 +1142,7 @@ th {
   gap: 6px;
 }
 
-.hours-editor-shell .admin-field input[type="time"] {
+.hours-editor-shell .admin-field input:is([data-hours-morning-start],[data-hours-morning-end],[data-hours-afternoon-start],[data-hours-afternoon-end]) {
   min-height: 44px;
   padding-inline: 12px;
 }
@@ -2922,7 +2922,7 @@ body { min-height: 100dvh; }
 .hours-editor-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
 .hours-day-card, .hours-day-card__body, .hours-time-grid { min-width: 0; }
 .hours-time-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
-.hours-editor-shell .admin-field input[type="time"] {
+.hours-editor-shell .admin-field input:is([data-hours-morning-start],[data-hours-morning-end],[data-hours-afternoon-start],[data-hours-afternoon-end]) {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -3678,28 +3678,31 @@ body { min-height: 100dvh; }
   }
 }
 
-/* Notificações: data e hora separadas evitam o conteúdo interno do
-   datetime-local do iOS ultrapassar a borda mesmo com width:100%. */
-.notification-schedule-controls {
+/* Data e hora numéricas sem picker nativo, compartilhadas no admin. */
+.notification-schedule-controls,
+.admin-date-time-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 12px;
   min-width: 0;
   max-width: 100%;
 }
-.notification-schedule-part {
+.notification-schedule-part,
+.admin-date-time-part {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
   max-width: 100%;
 }
-.notification-schedule-part > span {
+.notification-schedule-part > span,
+.admin-date-time-part > span {
   font-size: .82rem;
   font-weight: 600;
   color: var(--admin-text-soft);
 }
-.notification-form .notification-schedule-part > input {
+.notification-form .notification-schedule-part > input,
+#banner-form .admin-date-time-part > input {
   box-sizing: border-box;
   display: block;
   width: 100%;
