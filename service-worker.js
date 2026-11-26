@@ -1,5 +1,5 @@
-const STATIC_CACHE = "vitrinezap-static-v5.26";
-const HTML_CACHE = "vitrinezap-html-v6.22";
+const STATIC_CACHE = "vitrinezap-static-v5.27";
+const HTML_CACHE = "vitrinezap-html-v6.23";
 const OFFLINE_URL = "./offline.html";
 
 const STATIC_ASSETS = [
@@ -7,8 +7,8 @@ const STATIC_ASSETS = [
   "./index.html",
   "./offline.html",
   "./manifest.json",
-  "./css/styles.css",
-  "./js/app.js",
+  "./css/styles.css?v=20261122-catalog-nav-balance-20261125-share",
+  "./js/app.js?v=20261125-share",
   "./js/dataCache.js",
   "./js/storeApi.js",
   "./js/supabaseClient.js",
