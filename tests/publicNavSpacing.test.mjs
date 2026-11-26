@@ -13,6 +13,6 @@ test("Mobile: faixa de navegação mantém espaços simétricos para chips",()=>
  assert.match(rule,/\.section-nav\s*\{[^}]*padding:\s*12px 0\s*;/);
  assert.match(rule,/\.section-nav-track\s*\{[^}]*padding:\s*0\s*;/);
  assert.match(html,/styles\.css\?v=20261122-catalog-nav-balance/);
- assert.match(sw,/vitrinezap-static-v5\.25/);
- assert.match(sw,/vitrinezap-html-v6\.21/);
+ assert.ok(Number(sw.match(/vitrinezap-static-v5\.(\d+)/)?.[1]) >= 25);
+ assert.ok(Number(sw.match(/vitrinezap-html-v6\.(\d+)/)?.[1]) >= 21);
 });

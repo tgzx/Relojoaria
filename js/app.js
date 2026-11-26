@@ -198,6 +198,11 @@ function bindShellEvents() {
   document.body.addEventListener("click", handleBodyClick);
   document.addEventListener("keydown", handleGlobalKeydown);
 
+  window.addEventListener("hashchange", () => {
+    if (document.body.classList.contains("app-interactive") && window.location.hash.startsWith("#produto-")) {
+      handleInitialHashTarget(window.location.hash);
+    }
+  });
   window.addEventListener("resize", updateHeaderOffset);
   window.addEventListener("online", handleConnectivityChange);
   window.addEventListener("offline", handleConnectivityChange);
@@ -310,16 +315,16 @@ function revealStorefrontShell() {
   qs("#app-loading-screen")?.remove();
 }
 
-async function handleInitialHashTarget() {
-  const hash = appState.initialHash || window.location.hash;
+async function handleInitialHashTarget(hash = appState.initialHash || window.location.hash) {
+  // The current hash also supports links opened in an existing storefront.
   if (!hash) return;
 
   const targetId = hash.slice(1);
   if (targetId.startsWith("produto-")) {
-    const slug = targetId.slice("produto-".length);
+    let slug;
+    try { slug = decodeURIComponent(targetId.slice("produto-".length)); } catch { return; }
     if (slug) {
       await openProductModal(slug);
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#produto-${slug}`);
     }
     return;
   }
@@ -764,7 +769,7 @@ function setupSectionNavigation() {
         : anchor === "all-products"
           ? "#all-products-section"
           : `#section-${anchor}`;
-    window.history.replaceState(null, "", href);
+    if (!window.location.hash.startsWith("#produto-")) window.history.replaceState(null, "", href);
   };
 
   const updateActiveAnchor = () => {
@@ -1087,14 +1092,39 @@ function formatAttributeValue(value, settings = {}) {
   return String(value);
 }
 
+function productPublicUrl(product) {
+  return new URL("#produto-" + encodeURIComponent(product.slug), window.location.origin + window.location.pathname).href;
+}
+
+function renderProductActions(product) {
+  const whatsappIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.65 15.01L2 22l5.13-1.34A10 10 0 1 0 12 2Zm0 18a8 8 0 0 1-4.31-1.26l-.35-.22-2.51.66.67-2.44-.24-.38A8 8 0 1 1 12 20Zm4.46-5.93c-.24-.12-1.43-.7-1.65-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.93-1.19-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.31-.74-1.79-.2-.47-.39-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.09 3.62.57.25 1.02.4 1.37.51.58.18 1.1.16 1.51.1.46-.07 1.43-.58 1.63-1.14.2-.56.2-1.04.14-1.14-.06-.1-.22-.16-.46-.28Z"/></svg>';
+  const shareIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>';
+  const id = escapeHtml(product.id);
+  const interest = product.allow_whatsapp_cta !== false ? '<button class="btn product-interest-button" type="button" data-action="interest-product" data-product-id="' + id + '">' + whatsappIcon + '<span>Tenho interesse</span></button>' : "";
+  return '<div class="product-contact-actions' + (interest ? "" : " product-contact-actions--share-only") + '">' + interest + '<button class="btn btn-secondary product-share-button" type="button" aria-label="Compartilhar produto" title="Compartilhar produto" data-action="share-product" data-product-id="' + id + '">' + shareIcon + '</button></div>';
+}
+
+async function shareProduct(product) {
+  if (!product?.slug) return;
+  const url = productPublicUrl(product);
+  const data = { title: product.name, text: product.name, url };
+  try {
+    if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare(data))) {
+      await navigator.share(data);
+      return;
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Link do produto copiado.");
+  } catch {
+    window.prompt("Copie o link do produto:", url);
+  }
+}
 function renderProductCard(product, options = {}) {
   const settings = appState.settings || {};
-  const productUrl = `${window.location.origin}${window.location.pathname}#produto-${product.slug}`;
-  const whatsappLink = buildWhatsAppLink({
-    product,
-    storeSettings: settings,
-    pageUrl: productUrl
-  });
   const badges = productBadges(product);
   const futureCartEnabled = getFutureCartFeatureState(settings);
   const variant = options.variant || "default";
@@ -1156,16 +1186,7 @@ function renderProductCard(product, options = {}) {
         <button class="btn btn-secondary" type="button" data-action="open-product" data-product-slug="${escapeHtml(product.slug)}">
           Ver detalhes
         </button>
-        <div class="stacked-actions">
-          ${
-            product.allow_whatsapp_cta && whatsappLink !== "#"
-              ? `<a class="btn btn-primary" href="${whatsappLink}" target="_blank" rel="noreferrer" data-action="whatsapp-product" data-product-id="${escapeHtml(product.id)}">WhatsApp</a>`
-              : ""
-          }
-          <button class="btn btn-ghost" type="button" data-action="interest-product" data-product-id="${escapeHtml(product.id)}">
-            Tenho interesse
-          </button>
-        </div>
+        ${renderProductActions(product)}
         ${futureCartEnabled ? renderAddToCartButton(product) : ""}
       </div>
     </article>
@@ -1249,11 +1270,6 @@ function renderProductModal(product) {
     ? getOrderedProductImages(product)
     : [{ image_url: "./assets/placeholders/product-placeholder.svg", alt_text: product.name }];
   const mainImage = images[0];
-  const whatsappLink = buildWhatsAppLink({
-    product,
-    storeSettings: settings,
-    pageUrl: `${window.location.origin}${window.location.pathname}#produto-${product.slug}`
-  });
   const attributes = getPublicProductAttributes(product.attributes)
     .map(([key, value]) => ({
       label: humanizeAttributeKey(key),
@@ -1351,12 +1367,7 @@ function renderProductModal(product) {
             : ""
         }
         <div class="modal-actions">
-          ${
-            product.allow_whatsapp_cta && whatsappLink !== "#"
-              ? `<a class="btn btn-primary" href="${whatsappLink}" target="_blank" rel="noreferrer">Chamar no WhatsApp</a>`
-              : ""
-          }
-          <button class="btn btn-secondary" type="button" data-action="interest-product" data-product-id="${escapeHtml(product.id)}">Tenho interesse</button>
+          ${renderProductActions(product)}
           ${
             getFutureCartFeatureState(settings)
               ? renderAddToCartButton(product)
@@ -1392,6 +1403,10 @@ function closeProductModal() {
   const modal = qs("#product-modal");
   modal.classList.add("is-hidden");
   modal.setAttribute("aria-hidden", "true");
+  if (window.location.hash.startsWith("#produto-")) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+  appState.currentModalProduct = null;
   setStorefrontBackgroundInert(false);
   document.body.style.overflow = "";
   const trigger = appState.lastModalTrigger;
@@ -1645,6 +1660,11 @@ async function handleBodyClick(event) {
     return;
   }
 
+  if (action === "share-product") {
+    await shareProduct(findKnownProduct(actionElement.dataset.productId));
+    return;
+  }
+
   if (action === "interest-product") {
     const product = findKnownProduct(actionElement.dataset.productId);
     await handleProductInterest(product);
@@ -1664,12 +1684,12 @@ async function handleBodyClick(event) {
 }
 
 function handleProductInterest(product) {
-  if (!product) return;
+  if (!product || product.allow_whatsapp_cta === false) return;
 
   const link = buildWhatsAppLink({
     product,
     storeSettings: appState.settings,
-    pageUrl: window.location.origin + window.location.pathname + "#produto-" + product.slug
+    pageUrl: productPublicUrl(product)
   });
 
   if (link === "#") {
@@ -1685,6 +1705,7 @@ function handleProductInterest(product) {
   });
 }
 function findKnownProduct(productId) {
+  if (appState.currentModalProduct?.id === productId) return appState.currentModalProduct;
   return [...appState.products, ...appState.sections.flatMap((section) => section.products || [])].find(
     (product) => product.id === productId
   );
