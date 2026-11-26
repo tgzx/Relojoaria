@@ -8,6 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
+const SCHEDULED_PUSH_ENABLED = false;
+
 serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return jsonResponse({ error: "Metodo nao permitido." }, 405);
@@ -18,6 +20,11 @@ serve(async (request) => {
   }
   if (request.headers.get("x-cron-secret") !== cronSecret) {
     return jsonResponse({ error: "Cron secret invalido." }, 401);
+  }
+
+  // Fail closed until the isolated scheduling POC is approved.
+  if (!SCHEDULED_PUSH_ENABLED) {
+    return jsonResponse({ ok: true, paused: true, processed: 0, results: [] });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");

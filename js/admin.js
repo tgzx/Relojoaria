@@ -1105,7 +1105,7 @@ const OBJECT_HELP_TEXT = {
   brands: "Marcas identificam os fabricantes ou linhas dos produtos. Ex.: Orient, Casio ou Technos; podem aparecer como filtro e destaque.",
   options: "Opções definem características e escolhas reutilizáveis dos produtos. Ex.: crie um grupo Cor ou Pulseira e depois os valores Prata, Preto ou Couro.",
   appearance: "Banners são os destaques visuais da página inicial, com imagem, título, link e período de exibição. Ex.: campanha de Natal ou coleção recém-chegada.",
-  notifications: "Notificações enviam novidades a dispositivos inscritos. Ex.: avisar sobre lançamentos, promoções ou agendar uma mensagem para sexta-feira.",
+  notifications: "Notificações enviam novidades a dispositivos inscritos. Ex.: avisar sobre lançamentos e promoções. O agendamento está temporariamente desativado.",
   settings: "Configurações controlam dados e recursos públicos da loja, como nome, WhatsApp, horários de atendimento e cores da vitrine."
 };
 function renderObjectHelp(tab) {
@@ -1294,7 +1294,7 @@ function workspaceRecords(tab) {
     return groups+values;
   }
   if (tab==="notifications") return workspaceRecordTable("Todas as notificações",adminState.notifications.map(x=>({
-    name:x.title,detail:x.recurrence_rule?"Recorrente":x.scheduled_at?"Agendamento":getNotificationStatusLabel(x.status),
+    name:x.title,detail:!NOTIFICATION_SCHEDULING_ENABLED && x.status==="scheduled"?"Agendamento suspenso":x.recurrence_rule?"Recorrente":x.scheduled_at?"Agendamento":getNotificationStatusLabel(x.status),
     statusLabel:getNotificationStatusLabel(x.status),statusClass:getNotificationStatusClass(x.status),
     actions:(["draft","scheduled","failed"].includes(x.status)?workspaceEditButton("data-edit-notification",x.id):"")+
       (x.recurrence_rule?workspaceUtilityButton("data-stop-recurrence",x.id,"Encerrar recorrência"):"")+
@@ -2351,6 +2351,9 @@ function renderAppearanceManagerLegacy() {
   `;
 }
 
+// Disabled until a dedicated POC proves reliable scheduling and recurrence.
+const NOTIFICATION_SCHEDULING_ENABLED = false;
+
 function renderNotificationsLegacy() {
   const targetOptions = getNotificationTargetOptions();
   const recentNotifications = getRegularNotifications().slice(0, 5);
@@ -2367,7 +2370,7 @@ function renderNotificationsLegacy() {
   const scheduledDateValue = scheduledDateIso ? `${scheduledDateIso.slice(8, 10)}/${scheduledDateIso.slice(5, 7)}/${scheduledDateIso.slice(0, 4)}` : "";
   const scheduledTimeValue = scheduledValue.slice(11, 16);
   const recurrenceValue = editingNotification?.recurrence_rule || "";
-  const submitLabel = scheduledValue || recurrenceValue ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
+  const submitLabel = NOTIFICATION_SCHEDULING_ENABLED && (scheduledValue || recurrenceValue) ? "Agendar" : editingNotification ? "Atualizar rascunho" : "Salvar rascunho";
   return `
     <section class="settings-grid">
       <article class="panel-card">
@@ -2393,6 +2396,7 @@ function renderNotificationsLegacy() {
             </datalist>
             <p class="muted-copy">Deixe em branco para abrir a página inicial. As seções abaixo são carregadas da vitrine atual.</p>
           </label>
+          ${NOTIFICATION_SCHEDULING_ENABLED ? `
           <div class="inline-grid inline-grid--2">
             <label class="admin-field">
               <span>Agendar envio</span>
@@ -2419,6 +2423,7 @@ function renderNotificationsLegacy() {
             </label>
           </div>
           <p class="muted-copy">Sem agendamento, a notificação fica em rascunho para envio manual. Com recorrência, ela reaparece em Agendadas após cada disparo.</p>
+          ` : `<p class="muted-copy" role="note">Agendamento e recorrência temporariamente indisponíveis. Salve como rascunho e use Enviar agora na lista de notificações.</p>`}
           <div class="notification-actions">
             <button class="btn btn-primary" type="submit" id="notification-submit-button">${escapeHtml(submitLabel)}</button>
             ${
@@ -2439,10 +2444,10 @@ function renderNotificationsLegacy() {
           </div>
           <p>Dispositivos aptos a receber novidades.</p>
         </div>
-        <div class="notification-planning-grid">
+        ${NOTIFICATION_SCHEDULING_ENABLED ? `<div class="notification-planning-grid">
           ${renderNotificationBucket("Agendadas", scheduledNotifications, "Nenhum envio agendado.", "scheduled")}
           ${renderNotificationBucket("Recorrentes", recurringNotifications, "Nenhuma recorrência ativa.", "recurring")}
-        </div>
+        </div>` : `<p class="muted-copy" role="note">Envio manual disponível. Agendamento e recorrência temporariamente suspensos.</p>`}
       </article>
 
       <article class="panel-card">
@@ -2490,7 +2495,7 @@ function renderNotificationBucket(title, items, emptyMessage, type) {
 function renderNotificationListItem(item, options = {}) {
   const target = item.target_url ? `Destino: ${item.target_url}` : "Sem destino";
   const sentAt = item.sent_at ? `Enviada em ${formatDateTime(item.sent_at, adminState.settings?.locale || "pt-BR")}` : "";
-  const scheduledAt = item.scheduled_at ? `Agendada para ${formatDateTime(item.scheduled_at, adminState.settings?.locale || "pt-BR")}` : "";
+  const scheduledAt = item.scheduled_at ? `${NOTIFICATION_SCHEDULING_ENABLED ? "Agendada para" : "Agendamento anterior:"} ${formatDateTime(item.scheduled_at, adminState.settings?.locale || "pt-BR")}` : "";
   const recurrence = item.recurrence_rule ? `Recorrência: ${getNotificationRecurrenceLabel(item.recurrence_rule)}` : "";
   const meta = [target, scheduledAt || sentAt, recurrence].filter(Boolean).join(" · ");
   const canEdit = ["draft", "scheduled", "failed"].includes(item.status);
@@ -2534,7 +2539,7 @@ function renderNotificationListItem(item, options = {}) {
 function getNotificationStatusLabel(status) {
   const labels = {
     draft: "Rascunho",
-    scheduled: "Agendada",
+    scheduled: NOTIFICATION_SCHEDULING_ENABLED ? "Agendada" : "Suspensa",
     sent: "Enviada",
     failed: "Falhou"
   };
@@ -3747,9 +3752,9 @@ function bindNotificationsTab() {
     if (field?.name === "scheduled_date" || field?.name === "scheduled_time") {
       field.value = formatScheduleDigits(field.value, field.name === "scheduled_date" ? "date" : "time");
     }
-    syncNotificationScheduledAt(notificationForm);
+    if (NOTIFICATION_SCHEDULING_ENABLED) syncNotificationScheduledAt(notificationForm);
   });
-  notificationForm?.addEventListener("change", () => syncNotificationScheduledAt(notificationForm));
+  notificationForm?.addEventListener("change", () => { if (NOTIFICATION_SCHEDULING_ENABLED) syncNotificationScheduledAt(notificationForm); });
   bindDirtyFormState("#notification-form", "notifications");
   notificationForm?.addEventListener("submit", saveNotification);
   notificationForm?.addEventListener("input", updateNotificationSubmitLabel);
@@ -3796,7 +3801,7 @@ function updateNotificationSubmitLabel() {
 
   const scheduledAt = parseDateTimeLocalValue(String(new FormData(form).get("scheduled_at") || ""));
   const recurrenceRule = String(new FormData(form).get("recurrence_rule") || "");
-  if (scheduledAt || recurrenceRule) {
+  if (NOTIFICATION_SCHEDULING_ENABLED && (scheduledAt || recurrenceRule)) {
     button.textContent = "Agendar";
     return;
   }
@@ -5347,7 +5352,7 @@ async function removeBanner(bannerId) {
 async function saveNotification(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const schedule = syncNotificationScheduledAt(form);
+  const schedule = NOTIFICATION_SCHEDULING_ENABLED ? syncNotificationScheduledAt(form) : {};
   if (schedule.incomplete || schedule.invalid) {
     showToast(schedule.incomplete
       ? "Para agendar, informe tanto a data quanto o horário."
@@ -5358,8 +5363,8 @@ async function saveNotification(event) {
   }
   const data = new FormData(form);
   const targetUrl = String(data.get("target_url") || "").trim();
-  const scheduledAt = parseDateTimeLocalValue(String(data.get("scheduled_at") || ""));
-  const recurrenceRule = String(data.get("recurrence_rule") || "");
+  const scheduledAt = NOTIFICATION_SCHEDULING_ENABLED ? parseDateTimeLocalValue(String(data.get("scheduled_at") || "")) : null;
+  const recurrenceRule = NOTIFICATION_SCHEDULING_ENABLED ? String(data.get("recurrence_rule") || "") : "";
   const recurrenceNextAt = recurrenceRule ? scheduledAt || new Date().toISOString() : null;
   const status = scheduledAt || recurrenceRule ? "scheduled" : "draft";
   const isEditing = Boolean(adminState.editingNotificationId);
@@ -5385,7 +5390,7 @@ async function saveNotification(event) {
 
     const savedNotification = await adminSaveNotification(payload);
     const shouldSendNow =
-      status === "scheduled" && scheduledAt && !recurrenceRule && new Date(scheduledAt).getTime() <= Date.now();
+      NOTIFICATION_SCHEDULING_ENABLED && status === "scheduled" && scheduledAt && !recurrenceRule && new Date(scheduledAt).getTime() <= Date.now();
     let immediateSendResult = null;
     let immediateSendError = null;
     if (shouldSendNow) {
