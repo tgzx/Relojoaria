@@ -3261,7 +3261,7 @@ body { min-height: 100dvh; }
 .records-display[data-records-mode="cards"] .section-records-table tbody {
   display:grid;
   gap:12px;
-  grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 .records-display[data-records-mode="cards"] .section-records-table tr {
   display:block;
@@ -3358,7 +3358,7 @@ body { min-height: 100dvh; }
 .records-display[data-records-mode="cards"] .records-product-list thead {display:none;}
 .records-display[data-records-mode="cards"] .records-product-list tbody {
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap:12px;
 }
 .records-display[data-records-mode="cards"] .records-product-list tr {
@@ -3982,4 +3982,34 @@ body { min-height: 100dvh; }
   .workspace-inline-product #editor-next-button { grid-column: 1; grid-row: 2; }
   .workspace-inline-product #save-draft-product { grid-column: 2; grid-row: 2; }
   .workspace-inline-product #save-publish-product { grid-column: 1 / -1; grid-row: 3; }
+}
+
+/* Record cards: reserve empty tracks, never stretch a partial last row.
+   Container width is the actual panel width (including sidebar constraints). */
+.records-display[data-records-mode="cards"] .section-records-table,
+.records-display[data-records-mode="cards"] .records-product-list table {
+  container-type: inline-size;
+  container-name: admin-record-grid;
+}
+@media (min-width: 760px) {
+  @container admin-record-grid (min-width: 520px) {
+    .records-display[data-records-mode="cards"] .section-records-table tbody,
+    .records-display[data-records-mode="cards"] .records-product-list tbody {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+@media (min-width: 1120px) {
+  @container admin-record-grid (min-width: 1000px) {
+    .records-display[data-records-mode="cards"] .section-records-table tbody,
+    .records-display[data-records-mode="cards"] .records-product-list tbody {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+}
+.records-display[data-records-mode="cards"] .records-product-list .product-line__copy {
+  overflow-wrap: anywhere;
+}
+.records-display[data-records-mode="cards"] .records-product-list .product-thumb {
+  flex: 0 0 56px;
 }
